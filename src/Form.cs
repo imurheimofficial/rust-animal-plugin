@@ -16,7 +16,8 @@ namespace Oxide.Plugins
         internal void OnFormStarted(Driver d)
         {
             Vector3 at = d.Body.transform.position;
-            timer.Once(0.1f, () => FormAppear(at));                    // and the animal appears with the same effect
+            BasePlayer hearer = d.Player;
+            timer.Once(0.1f, () => FormAppear(at, hearer));            // and the animal appears with the same effect, heard by the player too
             Data.Forms.Remove(d.Player.userID);
             FormSleepers.Remove(d.Player.userID);
         }
@@ -25,12 +26,12 @@ namespace Oxide.Plugins
         {
             BasePlayer player = d.Player;
             Vector3 spot = Valid(d.Body) ? d.Body.transform.position : player.transform.position;
-            FormSmoke(spot);
+            FormSmoke(spot, player);
             if (player != null && player.IsConnected && !player.IsDead() && reason != "animal died")
             {
                 Vector3 back = GroundNear(spot, d.Body != null && !d.Body.IsDestroyed ? d.Body.bounds.extents.x * ModelScale(d.Body) + 1.2f : 1.5f);
                 player.Teleport(back);
-                FormAppear(back);
+                FormAppear(back, player);
             }
             HudSwitch(player, true);
             Data.RitualCooldown[player.userID] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + Cfg.Form.Cooldown;
@@ -140,7 +141,7 @@ namespace Oxide.Plugins
                 if (p != null && p.IsConnected && !p.IsDead())
                 {
                     p.Teleport(GroundNear(spot, 1.5f));
-                    FormAppear(p.transform.position);
+                    FormAppear(p.transform.position, p);
                     HudSwitch(p, true);
                 }
             });

@@ -341,6 +341,14 @@ namespace Oxide.Plugins
                         }
                         return;
                     }
+                    if (LeftOwnedBy(horse, player))
+                    {
+                        if (player.serverInput.IsDown(BUTTON.DUCK))
+                        {
+                            OpenFormBag(player, LeftForms[horse.net.ID.Value]);     // Ctrl + E: what the horse carried for its player
+                        }
+                        return;                                 // E: the game's own mount of the horse the player has just left
+                    }
                     HorseUse(player, horse);
                 }
                 return;
@@ -351,6 +359,10 @@ namespace Oxide.Plugins
                 if (hostDriver.Kind == ControlKind.Form)
                 {
                     TryFormHandle(player, hostDriver);        // the animal is a player: a rider, a leash
+                }
+                else
+                {
+                    TryRideBehind(player, hostDriver);        // a ridden animal with a double saddle carries a second rider
                 }
                 return;
             }
@@ -399,6 +411,36 @@ namespace Oxide.Plugins
                 return;
             }
             TryClaim(player, animal, species);
+        }
+
+        // E on an animal somebody rides: with a double saddle the player climbs on behind the rider (owner and team, like the riding rule).
+        private void TryRideBehind(BasePlayer player, Driver host)
+        {
+            if (host == null || host.Kind != ControlKind.Ride || host.Animal == null || host.Player == player)
+            {
+                return;
+            }
+            TamedRecord rec = RecordOf(host.Animal);
+            if (rec == null || rec.Gear.Saddle < 2)
+            {
+                TellRaw(player, "Only an animal with a double saddle carries a second rider.");
+                return;
+            }
+            if (!MayUse(player, rec.Owner, Cfg.Riding.Ownership) && !SameParty(player, host.Player))
+            {
+                Tell(player, "NotYours");
+                return;
+            }
+            host.PruneGuests();
+            if (host.Guests.Count > 0)
+            {
+                TellRaw(player, "There is no room left on the " + host.Species.Display.ToLowerInvariant() + ".");
+                return;
+            }
+            if (host.AddGuest(player, true))
+            {
+                TellRaw(player, "You ride behind " + host.Player.displayName + ". Press Space to get off.");
+            }
         }
 
         // ---------------------------------------------------------------- module (hooks, persistence)

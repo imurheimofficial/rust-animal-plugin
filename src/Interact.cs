@@ -143,10 +143,21 @@ namespace Oxide.Plugins
             if (lying != null && lying.item != null && lying.allowPickup)
             {
                 Item picked = lying.item;
+                string pickedName = picked.info.displayName.english;
+                Vector3 at = lying.transform.position;
                 lying.RemoveItem();
-                if (!AddToBag(player, picked))
+                if (!lying.IsDestroyed)
                 {
-                    picked.Drop(player.transform.position + Vector3.up, Vector3.up);       // the bag is full
+                    lying.Kill();                           // the item lies in the bag now, the empty world item goes away
+                }
+                if (AddToBag(player, picked))
+                {
+                    TellRaw(player, "Picked up: " + pickedName + " (it is in your animal's bag).");
+                }
+                else
+                {
+                    picked.Drop(at + Vector3.up * 0.3f, Vector3.up);       // the bag is full: it stays where it lay
+                    TellRaw(player, "Your animal's bag is full.");
                 }
             }
         }

@@ -227,21 +227,39 @@ namespace Oxide.Plugins
             }
         }
 
-        // The effect for everybody near, and sent straight to the player's own connection: he hears and sees it whatever the networking of his
-        // body is at that moment (it is hidden right after the transformation).
+        private const float EffectHearRange = 120f;
+
+        // The effect is sent straight to the connection of every player near it, and to the player it is about (the hearer) wherever he is:
+        // exactly once each. It does not depend on the network group the hidden body of the hearer is in at that moment (the body is
+        // parented to the animal and switched to the spectator view right at the transformation, which used to swallow the effect now and then).
         internal void RunEffectFor(string prefab, Vector3 position, BasePlayer hearer)
         {
             if (string.IsNullOrEmpty(prefab))
             {
                 return;
             }
-            if (hearer == null || !hearer.IsConnected || hearer.net == null || hearer.net.connection == null)
+            bool hearerDone = false;
+            foreach (BasePlayer p in BasePlayer.activePlayerList)
             {
-                Effect.server.Run(prefab, position, Vector3.up);
-                return;
+                if (p == null || !p.IsConnected || p.net == null || p.net.connection == null)
+                {
+                    continue;
+                }
+                bool isHearer = hearer != null && p == hearer;
+                if (!isHearer && Vector3.Distance(p.transform.position, position) > EffectHearRange)
+                {
+                    continue;
+                }
+                EffectNetwork.Send(new Effect(prefab, position, Vector3.up), p.net.connection);
+                if (isHearer)
+                {
+                    hearerDone = true;
+                }
             }
-            Effect.server.Run(prefab, position, Vector3.up, hearer.net.connection);
-            EffectNetwork.Send(new Effect(prefab, position, Vector3.up), hearer.net.connection);
+            if (hearer != null && !hearerDone && hearer.IsConnected && hearer.net != null && hearer.net.connection != null)
+            {
+                EffectNetwork.Send(new Effect(prefab, position, Vector3.up), hearer.net.connection);
+            }
         }
 
         // The game has a setting that switches the player's HUD off; the plugin asks the player's game to use it while the player is an animal
@@ -256,22 +274,46 @@ namespace Oxide.Plugins
 
         // ---------------------------------------------------------------- positions
 
-        // A standing spot on the ground next to a position (for returning to human form).
+        // A standing spot next to a position (for returning to human form or getting off): on the terrain, or on the floor, roof or rock the
+        // animal stands on - never under a building floor or inside a foundation.
         internal static Vector3 GroundNear(Vector3 position, float radius)
         {
-            Vector3 best = position;
+            int solid = LayerMask.GetMask("World", "Construction", "Deployed", "Tree");
+            int ground = LayerMask.GetMask("Terrain", "World", "Construction", "Deployed");
+            Vector3 best = SurfaceUnder(position, position.y + 2.2f, ground);
             for (int i = 0; i < 12; i++)
             {
                 float angle = i * 30f * Mathf.Deg2Rad;
-                Vector3 p = position + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * radius;
-                p.y = TerrainMeta.HeightMap.GetHeight(p) + 0.3f;
-                if (!Physics.CheckCapsule(p + Vector3.up * 0.6f, p + Vector3.up * 1.6f, 0.4f, LayerMask.GetMask("World", "Construction", "Deployed", "Tree"), QueryTriggerInteraction.Ignore))
+                Vector3 p = SurfaceUnder(position + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * radius, position.y + 2.2f, ground);
+                if (Mathf.Abs(p.y - position.y) > 2.5f)
+                {
+                    continue;                           // a drop or a wall top far from where the animal stood
+                }
+                if (!Physics.CheckCapsule(p + Vector3.up * 0.6f, p + Vector3.up * 1.6f, 0.4f, solid, QueryTriggerInteraction.Ignore))
                 {
                     return p;
                 }
-                best = p;
             }
             return best;
+        }
+
+        // The highest walkable surface under a point, searched from a given height down (the terrain when nothing else is there).
+        internal static Vector3 SurfaceUnder(Vector3 p, float fromY, int mask)
+        {
+            float terrain = TerrainMeta.HeightMap.GetHeight(p);
+            float y = terrain;
+            RaycastHit hit;
+            float top = Mathf.Max(fromY, terrain + 0.5f);
+            if (Physics.Raycast(new Vector3(p.x, top, p.z), Vector3.down, out hit, top - terrain + 1f, mask, QueryTriggerInteraction.Ignore) && hit.normal.y > 0.45f)
+            {
+                y = Mathf.Max(terrain, hit.point.y);
+            }
+            float water = WaterLevel.GetWaterSurface(new Vector3(p.x, y, p.z), true, true, null);
+            if (water > y + 1.2f)
+            {
+                y = water - 1.2f;                       // deep water: the human comes back swimming with the head above the surface, not on the bottom
+            }
+            return new Vector3(p.x, y + 0.1f, p.z);
         }
 
         internal static string Pretty(string text)

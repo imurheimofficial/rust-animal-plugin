@@ -58,3 +58,9 @@ Done, untested in game: horse form, 10/50-lap silent ritual, camera factors (`/b
 Eyes: two invisible narrow cinematic spot lights per boss on the eye bones (config Boss.Eyes). Coat: darkest genes for bull/ram, black horse breed.
 Inventory: a panel on the game's menu layer (visible only while the inventory is open) covers the player model and avatar with the animal: set a PNG address per species in Inventory.Images and the box offsets (ModelMin/Max, IconMin/Max) to fit your screen.
 Transport: through the game's own lead + livestock flatbed module (trust is credited to nearby players).
+
+## Version 1.1.0 (2026-10-10) - audit
+
+The whole code was reviewed against the owner's requests; 23 bugs and unfinished parts were fixed. The list with the cause and the fix of
+each one, the limits a server cannot get past and the test list are in [AUDIT.md](AUDIT.md).
+The inventory picture (the panel over the player model) described above was removed at the owner's request; its config section is gone.

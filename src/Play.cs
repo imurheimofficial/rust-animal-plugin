@@ -183,7 +183,7 @@ namespace Oxide.Plugins
                 ClearKeyHints(player);                 // the inventory view shows the game's own HUD
                 return;
             }
-            bool hasSkin = form && (d.Body is LivestockAnimal || d.Horse != null);
+            bool hasSkin = form && d.HasSkins;
             string[][] cells = form
                 ? (hasSkin
                     ? new[] { new[] { "F", "Attack" }, new[] { "Ctrl", "Brake" }, new[] { "E", "Feed" }, new[] { "R", "Skin" }, new[] { "Shift", "Sprint" }, new[] { "Space", "Jump" }, new[] { "G", "Night" }, new[] { "X", "Human" } }
@@ -337,7 +337,7 @@ namespace Oxide.Plugins
                 return;
             }
             s.HintShown = true;
-            TellRaw(player, "Beastmaster menu: /bm, or hold Ctrl and press R with empty hands. Night vision as an animal: Ctrl + G.");
+            TellRaw(player, "Beastmaster menu: /bm, or hold Ctrl and press R (empty hands, or while riding or as an animal). Night vision as an animal: G or Ctrl + G, with night vision goggles in the inventory.");
         }
 
         // The server cannot rebind keys by itself, but it can ask the player's game to: the menu on F5 and the night vision on H.
@@ -614,9 +614,9 @@ namespace Oxide.Plugins
                 {
                     return null;
                 }
-                if (Bm.DriverOf(player) == null && player.GetActiveItem() != null)
+                if (Bm.DriverOf(player) != null || player.GetActiveItem() != null)
                 {
-                    return null;
+                    return null;                       // riders and animal forms: the driver reads Ctrl + R itself
                 }
                 float last;
                 if (nextCombo.TryGetValue(player.userID, out last) && Time.time < last)

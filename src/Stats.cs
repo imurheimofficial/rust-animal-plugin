@@ -200,12 +200,8 @@ namespace Oxide.Plugins
             {
                 float dt = lastTick > 0f ? Mathf.Min(now - lastTick, 1f) : 0.25f;
                 lastTick = now;
-                if (Bm.Drivers.Count == 0)
+                if (Bm.Drivers.Count == 0 && stats.Count == 0)
                 {
-                    if (stats.Count > 0)
-                    {
-                        OnDisable();
-                    }
                     return;
                 }
                 var present = new HashSet<ulong>();
@@ -221,6 +217,10 @@ namespace Oxide.Plugins
                 foreach (ulong id in stats.Keys.Where(k => !present.Contains(k)).ToList())
                 {
                     BasePlayer gone = BasePlayer.FindByID(id);
+                    if ((gone == null || !gone.IsConnected) && Bm.Data.Forms.ContainsKey(id))
+                    {
+                        continue;           // logged out as an animal: the needs and the human's own food and water wait for the return
+                    }
                     if (gone != null && gone.IsConnected)
                     {
                         CuiHelper.DestroyUi(gone, Hud);

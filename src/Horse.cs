@@ -376,7 +376,7 @@ namespace Oxide.Plugins
                 }
                 Bm.timer.Once(1.5f, () =>
                 {
-                    if (Valid(horse) && !horse.IsForSale && horse.skinID == 0UL && horse.OwnerID == 0UL && !horse.AnyMounted())
+                    if (Valid(horse) && !horse.IsForSale && horse.skinID == 0UL && horse.OwnerID == 0UL && !horse.AnyMounted() && !HasSaddleItem(horse))
                     {
                         MakeWild(horse);
                     }
@@ -408,11 +408,12 @@ namespace Oxide.Plugins
                         Bm.Data.Horses.Remove(tag);
                     }
                 }
-                // the horses that were already in the world (saved by the game) are wild and unsaddled too
+                // the horses that were already in the world (saved by the game) are wild and unsaddled too - except a horse that carries a saddle
+                // item in its equipment slot: that one belongs to a player, who fitted the saddle, and stays as it is
                 foreach (BaseNetworkable net in BaseNetworkable.serverEntities.ToList())
                 {
                     RidableHorse old = net as RidableHorse;
-                    if (old != null && Bm.Cfg.Features.Taming && old.skinID == 0UL && old.OwnerID == 0UL && !old.IsForSale && !old.AnyMounted())
+                    if (old != null && Bm.Cfg.Features.Taming && old.skinID == 0UL && old.OwnerID == 0UL && !old.IsForSale && !old.AnyMounted() && !HasSaddleItem(old))
                     {
                         MakeWild(old);
                     }

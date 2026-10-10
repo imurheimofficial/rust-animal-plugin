@@ -163,6 +163,42 @@ namespace Oxide.Plugins
             RunEffect(FindPrefabPath("impacts/blunt/flesh/"), pos);
         }
 
+        // The voice of a species whose animations carry no sound of their own (the stag): the effect prefab named in the config, or the first
+        // prefab of this game build whose path names the species and a call (searched once, cached). Nothing plays when the game has none.
+        private readonly Dictionary<string, float> nextVoice = new Dictionary<string, float>();
+
+        internal void AnimalVoice(BaseEntity body, SpeciesDef species, string kind)
+        {
+            if (body == null || species == null || species.Id != "stag")
+            {
+                return;
+            }
+            string key = body.net != null ? body.net.ID.Value + kind : kind;
+            float until;
+            if (nextVoice.TryGetValue(key, out until) && Time.time < until)
+            {
+                return;
+            }
+            nextVoice[key] = Time.time + 1.5f;
+            if (nextVoice.Count > 200)
+            {
+                nextVoice.Clear();
+            }
+            string path = kind == "hurt" ? Cfg.Combat.StagHurtSound : Cfg.Combat.StagAttackSound;
+            if (string.IsNullOrEmpty(path) || GameManager.server.FindPrefab(path) == null)
+            {
+                path = FindPrefabPath("agents/stag/", "sound") ?? FindPrefabPath("agents/stag/", "vocal") ?? FindPrefabPath("agents/deer/", "sound");
+            }
+            if (path != null)
+            {
+                RunEffectFor(path, body.transform.position + Vector3.up * 1.2f, null);
+            }
+            else if (kind == "hurt")
+            {
+                RunEffectFor(FindPrefabPath("impacts/blunt/flesh/"), body.transform.position + Vector3.up, null);      // at least the thud of the hit
+            }
+        }
+
         // How high an animal can jump over or onto things: its own size times the species' jumping strength (config: Movement.JumpHeight).
         internal float JumpClearance(BaseCombatEntity body, SpeciesDef species)
         {
@@ -273,8 +309,15 @@ namespace Oxide.Plugins
                 BumpSound(target.transform.position + Vector3.up, "generic");
                 if (d.Animal != null)
                 {
-                    Play(d.Animal, "hurt");
+                    // the charge clip of the species (a head-butt): the old "hurt" clip was the knock-down of the cow, bull and the big cats,
+                    // which threw the charging animal to the ground every time it ran into another animal
+                    ClipRef charge = Clips(d.Animal).FirstOrDefault(c => (Has(c, "charge") || Has(c, "headbutt")) && !Has(c, "death") && !Has(c, "knock"));
+                    if (charge != null)
+                    {
+                        PlayClip(d.Animal, charge);
+                    }
                 }
+                AnimalVoice(d.Body, d.Species, "attack");
             }
             if (chargeHits.Count > 200)
             {

@@ -135,7 +135,8 @@ namespace Oxide.Plugins
                         return;
                     case "debug":
                         if (!admin) { reply(L("NoPermission")); return; }
-                        Cfg.General.LogLevel = args.Length > 0 ? Mathf.Clamp(int.Parse(args[0]), 0, 3) : 3;
+                        int level;
+                        Cfg.General.LogLevel = args.Length > 0 && int.TryParse(args[0], out level) ? Mathf.Clamp(level, 0, 3) : 3;
                         reply("Log level " + Cfg.General.LogLevel);
                         return;
                     case "grant":
@@ -252,7 +253,12 @@ namespace Oxide.Plugins
                         return;
                     case "clear":
                         if (!server && !HasMenuAccess(player)) { reply(L("NoPermission")); return; }
-                        reply(L("Cleared", null, ClearSpawned(player, args.Length > 0 ? float.Parse(args[0]) : 0f)));
+                        float radius;
+                        if (args.Length == 0 || !float.TryParse(args[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out radius))
+                        {
+                            radius = 0f;
+                        }
+                        reply(L("Cleared", null, ClearSpawned(player, radius)));
                         return;
                 }
                 if (player == null)
@@ -419,15 +425,17 @@ namespace Oxide.Plugins
 
         private string KeysText()
         {
-            return "Keys while riding or in animal form: W/A/S/D move, Shift faster, Ctrl brake (hold A/D for the stop-and-turn), S while running = 180 turn, Space jump, "
-                + "F attack (look backwards first = rear attack), G or R change view, B gestures (lie down, sit, roar, look around), E use, H night vision at night, X get off / back to human. "
-                + "F5 opens the menu, H switches the night vision: the server asks your game to bind them when you join; if yours refuses, type bind f5 bm.menu and bind h bm.nv in the F1 console.";
+            return "As an animal: W/A/S/D move, Shift faster, Ctrl brake, S while running = 180 turn, Space jump (onto raised surfaces too), "
+                + "F attack (camera behind the animal = rear attack), E eat / drink / pick up / open, R another skin (cow, bull, sheep, ram, horse), G or Ctrl + G night vision (goggles in the inventory), "
+                + "B gestures (or /bm lie, sit, roar, look, stand), X back to human (X at the animal you left = become it again, E at it = ride it, Ctrl + E at it = its bag). "
+                + "Riding: the same keys, G or R switch first / third person, X get off. "
+                + "Ctrl + R opens the menu (empty hands, riding or as an animal), also /bm. F5 and H work after a one-time bind f5 bm.menu and bind h bm.nv in the F1 console.";
         }
 
         private string HelpText()
         {
-            return "Beastmaster " + Version + "\n" + KeysText() + "\nCommands: /bm menu, species, view, preset, revert, cmd follow|wait|guard|attack|release, ride, form"
-                + (Cfg.Features.Spawning ? ", spawn <species> [count] [tamed|wild]" : string.Empty) + "\nAdmin: bm.enable, bm.disable, bm.grant, bm.revoke, bm.access, bm.grantgroup, bm.revokegroup, bm.clear, bm.reload, bm.selftest, bm.debug.";
+            return "Beastmaster " + Version + "\n" + KeysText() + "\nCommands: /bm menu, species, keys, view, preset, cam, seat, revert, cmd follow|wait|guard|attack|release, ride, form, name, breed, give, feed, nv"
+                + (Cfg.Features.Spawning ? ", spawn <species> [count] [tamed|wild] (also /sp)" : string.Empty) + "\nAdmin: bm.enable, bm.disable, bm.grant, bm.revoke, bm.access, bm.grantgroup, bm.revokegroup, bm.clear, bm.reload, bm.selftest, bm.debug, bm.boss, bm.horses, bm.run.";
         }
 
         // ---------------------------------------------------------------- spawning

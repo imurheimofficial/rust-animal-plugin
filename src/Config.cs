@@ -23,7 +23,6 @@ namespace Oxide.Plugins
             [JsonProperty("Transformation ritual")] public RitualCfg Ritual = new RitualCfg();
             [JsonProperty("Lead")] public LeadCfg Lead = new LeadCfg();
             [JsonProperty("Controls (key binds)")] public ControlsCfg Controls = new ControlsCfg();
-            [JsonProperty("Inventory of an animal form")] public InventoryCfg Inventory = new InventoryCfg();
             [JsonProperty("Horse")] public HorseCfg Horse = new HorseCfg();
             [JsonProperty("Wild behaviour")] public WildCfg Wild = new WildCfg();
             [JsonProperty("Relations between animals")] public RelationCfg Relations = new RelationCfg();
@@ -99,25 +98,6 @@ namespace Oxide.Plugins
             [JsonProperty("Seat of the hidden body when the first person mode is seat")] public string FirstPersonSeat = "assets/bundled/prefabs/static/chair.invisible.static.prefab";
         }
 
-        internal partial class InventoryCfg
-        {
-            [JsonProperty("The inventory shows the animal instead of the player (a picture over the player's model and avatar)")] public bool ShowAnimal = true;
-            [JsonProperty("Picture of each species (species id -> image address, a PNG on your web space). Without one the animal's name is shown.", ObjectCreationHandling = ObjectCreationHandling.Replace)]
-            public Dictionary<string, string> Images = new Dictionary<string, string>();
-            [JsonProperty("The game's own item whose icon stands for each species when there is no picture above (species id -> item shortname)", ObjectCreationHandling = ObjectCreationHandling.Replace)]
-            public Dictionary<string, string> Items = new Dictionary<string, string>
-            {
-                { "horse", "hat.horsemask" }, { "cow", "hat.oxmask" }, { "bull", "hat.oxmask" }, { "calf", "beefmeat" }, { "sheep", "muttonmeat" }, { "ram", "muttonmeat" }, { "lamb", "muttonmeat" },
-                { "stag", "deer.skull.mask" }, { "boar", "meat.boar" }, { "bear", "bearmeat" }, { "polarbear", "bearmeat" }, { "wolf", "hat.wolf" }, { "panther", "bigcatmeat" },
-                { "tiger", "hat.tigermask" }, { "crocodile", "crocodilemeat" }, { "chicken", "chicken.costume" }, { "rabbit", "hat.rabbitmask" }, { "squirrel", "skull" },
-                { "frog", "skull" }, { "crab", "skull" }
-            };
-            [JsonProperty("Where the model of the player is in the inventory (pixels from the screen's centre: left bottom, right top)")] public string ModelMin = "-690 -230";
-            public string ModelMax = "-360 300";
-            [JsonProperty("Where the avatar icon is")] public string IconMin = "-690 305";
-            public string IconMax = "-630 365";
-        }
-
         internal partial class ControlsCfg
         {
             [JsonProperty("Ask the player's game to bind the keys below when they join (the server cannot rebind keys, but it can ask the game to)")] public bool AutoBind = true;
@@ -163,6 +143,8 @@ namespace Oxide.Plugins
             [JsonProperty("Never hit team members and friends")] public bool SparePartyMembers = true;
             [JsonProperty("Never hit anything in a safe zone")] public bool SparesSafeZone = true;
             [JsonProperty("Damage of running into a player or an animal at a run (bull, ram, cow, sheep, stag, boar, horse)")] public float ChargeDamage = 22f;
+            [JsonProperty("Stag: effect prefab of its call when it attacks (empty = search the game for a stag sound)")] public string StagAttackSound = string.Empty;
+            [JsonProperty("Stag: effect prefab of its call when it is hurt (empty = search the game for a stag sound, else the thud of the hit)")] public string StagHurtSound = string.Empty;
         }
 
         internal partial class FormCfg

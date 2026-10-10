@@ -521,8 +521,7 @@ namespace Oxide.Plugins
             player.health = Mathf.Max(1f, player.health * (1f - Cfg.Ritual.HealthCost));
             player.metabolism.bleeding.value = Mathf.Max(player.metabolism.bleeding.value, Cfg.Ritual.Bleeding);
             player.metabolism.isDirty = true;
-            FormSmoke(rc.Position);
-            // the animal of the same kind and look, at the body
+            // the animal of the same kind and look, at the body (the human vanishes and the animal appears with the effects of the form itself)
             Vector3 pos = rc.Position;
             pos.y = Mathf.Max(pos.y, TerrainMeta.HeightMap.GetHeight(pos)) + 0.2f;
             BaseCombatEntity animal = GameManager.server.CreateEntity(rc.Species.Prefab, pos, rc.Rotation) as BaseCombatEntity;
@@ -571,7 +570,7 @@ namespace Oxide.Plugins
                 rc.Corpse.Kill();
             }
             SpeciesDef species = rc.Species;
-            // the agent needs a moment to settle on the navigation mesh
+            // the agent needs a moment to settle on the navigation mesh (a few physics frames - not felt as a delay)
             timer.Once(0.25f, () =>
             {
                 if (!Valid(animal) || player == null || !player.IsConnected || player.IsDead())

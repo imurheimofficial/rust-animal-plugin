@@ -20,7 +20,7 @@ using UnityEngine;
 namespace Oxide.Plugins
 {
     // ======================================== Beastmaster.cs
-    [Info("Beastmaster", "Claude", "1.0.0")]
+    [Info("Beastmaster", "Claude", "1.1.0")]
     [Description("Ride, tame, command and become animals: horses, livestock, predators and small creatures.")]
     public partial class Beastmaster : RustPlugin
     {
@@ -2781,7 +2781,8 @@ namespace Oxide.Plugins
                         return;
                     case "debug":
                         if (!admin) { reply(L("NoPermission")); return; }
-                        Cfg.General.LogLevel = args.Length > 0 ? Mathf.Clamp(int.Parse(args[0]), 0, 3) : 3;
+                        int level;
+                        Cfg.General.LogLevel = args.Length > 0 && int.TryParse(args[0], out level) ? Mathf.Clamp(level, 0, 3) : 3;
                         reply("Log level " + Cfg.General.LogLevel);
                         return;
                     case "grant":
@@ -2898,7 +2899,12 @@ namespace Oxide.Plugins
                         return;
                     case "clear":
                         if (!server && !HasMenuAccess(player)) { reply(L("NoPermission")); return; }
-                        reply(L("Cleared", null, ClearSpawned(player, args.Length > 0 ? float.Parse(args[0]) : 0f)));
+                        float radius;
+                        if (args.Length == 0 || !float.TryParse(args[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out radius))
+                        {
+                            radius = 0f;
+                        }
+                        reply(L("Cleared", null, ClearSpawned(player, radius)));
                         return;
                 }
                 if (player == null)
@@ -3065,15 +3071,17 @@ namespace Oxide.Plugins
 
         private string KeysText()
         {
-            return "Keys while riding or in animal form: W/A/S/D move, Shift faster, Ctrl brake (hold A/D for the stop-and-turn), S while running = 180 turn, Space jump, "
-                + "F attack (look backwards first = rear attack), G or R change view, B gestures (lie down, sit, roar, look around), E use, H night vision at night, X get off / back to human. "
-                + "F5 opens the menu, H switches the night vision: the server asks your game to bind them when you join; if yours refuses, type bind f5 bm.menu and bind h bm.nv in the F1 console.";
+            return "As an animal: W/A/S/D move, Shift faster, Ctrl brake, S while running = 180 turn, Space jump (onto raised surfaces too), "
+                + "F attack (camera behind the animal = rear attack), E eat / drink / pick up / open, R another skin (cow, bull, sheep, ram, horse), G or Ctrl + G night vision (goggles in the inventory), "
+                + "B gestures (or /bm lie, sit, roar, look, stand), X back to human (X at the animal you left = become it again, E at it = ride it, Ctrl + E at it = its bag). "
+                + "Riding: the same keys, G or R switch first / third person, X get off. "
+                + "Ctrl + R opens the menu (empty hands, riding or as an animal), also /bm. F5 and H work after a one-time bind f5 bm.menu and bind h bm.nv in the F1 console.";
         }
 
         private string HelpText()
         {
-            return "Beastmaster " + Version + "\n" + KeysText() + "\nCommands: /bm menu, species, view, preset, revert, cmd follow|wait|guard|attack|release, ride, form"
-                + (Cfg.Features.Spawning ? ", spawn <species> [count] [tamed|wild]" : string.Empty) + "\nAdmin: bm.enable, bm.disable, bm.grant, bm.revoke, bm.access, bm.grantgroup, bm.revokegroup, bm.clear, bm.reload, bm.selftest, bm.debug.";
+            return "Beastmaster " + Version + "\n" + KeysText() + "\nCommands: /bm menu, species, keys, view, preset, cam, seat, revert, cmd follow|wait|guard|attack|release, ride, form, name, breed, give, feed, nv"
+                + (Cfg.Features.Spawning ? ", spawn <species> [count] [tamed|wild] (also /sp)" : string.Empty) + "\nAdmin: bm.enable, bm.disable, bm.grant, bm.revoke, bm.access, bm.grantgroup, bm.revokegroup, bm.clear, bm.reload, bm.selftest, bm.debug, bm.boss, bm.horses, bm.run.";
         }
 
         // ---------------------------------------------------------------- spawning
@@ -3345,7 +3353,6 @@ namespace Oxide.Plugins
             [JsonProperty("Transformation ritual")] public RitualCfg Ritual = new RitualCfg();
             [JsonProperty("Lead")] public LeadCfg Lead = new LeadCfg();
             [JsonProperty("Controls (key binds)")] public ControlsCfg Controls = new ControlsCfg();
-            [JsonProperty("Inventory of an animal form")] public InventoryCfg Inventory = new InventoryCfg();
             [JsonProperty("Horse")] public HorseCfg Horse = new HorseCfg();
             [JsonProperty("Wild behaviour")] public WildCfg Wild = new WildCfg();
             [JsonProperty("Relations between animals")] public RelationCfg Relations = new RelationCfg();
@@ -3421,25 +3428,6 @@ namespace Oxide.Plugins
             [JsonProperty("Seat of the hidden body when the first person mode is seat")] public string FirstPersonSeat = "assets/bundled/prefabs/static/chair.invisible.static.prefab";
         }
 
-        internal partial class InventoryCfg
-        {
-            [JsonProperty("The inventory shows the animal instead of the player (a picture over the player's model and avatar)")] public bool ShowAnimal = true;
-            [JsonProperty("Picture of each species (species id -> image address, a PNG on your web space). Without one the animal's name is shown.", ObjectCreationHandling = ObjectCreationHandling.Replace)]
-            public Dictionary<string, string> Images = new Dictionary<string, string>();
-            [JsonProperty("The game's own item whose icon stands for each species when there is no picture above (species id -> item shortname)", ObjectCreationHandling = ObjectCreationHandling.Replace)]
-            public Dictionary<string, string> Items = new Dictionary<string, string>
-            {
-                { "horse", "hat.horsemask" }, { "cow", "hat.oxmask" }, { "bull", "hat.oxmask" }, { "calf", "beefmeat" }, { "sheep", "muttonmeat" }, { "ram", "muttonmeat" }, { "lamb", "muttonmeat" },
-                { "stag", "deer.skull.mask" }, { "boar", "meat.boar" }, { "bear", "bearmeat" }, { "polarbear", "bearmeat" }, { "wolf", "hat.wolf" }, { "panther", "bigcatmeat" },
-                { "tiger", "hat.tigermask" }, { "crocodile", "crocodilemeat" }, { "chicken", "chicken.costume" }, { "rabbit", "hat.rabbitmask" }, { "squirrel", "skull" },
-                { "frog", "skull" }, { "crab", "skull" }
-            };
-            [JsonProperty("Where the model of the player is in the inventory (pixels from the screen's centre: left bottom, right top)")] public string ModelMin = "-690 -230";
-            public string ModelMax = "-360 300";
-            [JsonProperty("Where the avatar icon is")] public string IconMin = "-690 305";
-            public string IconMax = "-630 365";
-        }
-
         internal partial class ControlsCfg
         {
             [JsonProperty("Ask the player's game to bind the keys below when they join (the server cannot rebind keys, but it can ask the game to)")] public bool AutoBind = true;
@@ -3485,6 +3473,8 @@ namespace Oxide.Plugins
             [JsonProperty("Never hit team members and friends")] public bool SparePartyMembers = true;
             [JsonProperty("Never hit anything in a safe zone")] public bool SparesSafeZone = true;
             [JsonProperty("Damage of running into a player or an animal at a run (bull, ram, cow, sheep, stag, boar, horse)")] public float ChargeDamage = 22f;
+            [JsonProperty("Stag: effect prefab of its call when it attacks (empty = search the game for a stag sound)")] public string StagAttackSound = string.Empty;
+            [JsonProperty("Stag: effect prefab of its call when it is hurt (empty = search the game for a stag sound, else the thud of the hit)")] public string StagHurtSound = string.Empty;
         }
 
         internal partial class FormCfg
@@ -3985,7 +3975,7 @@ namespace Oxide.Plugins
                 Driver d;
                 if (Bm.Drivers.TryGetValue(player.userID, out d) && d != null && d.Alive)
                 {
-                    d.ReadInput(input);
+                    d.ReadInput(input);                    // reads the raw keys (with its own edge detection) before anything is taken away
                     if (d.Spectating)
                     {
                         // jump and duck would make the game cycle the spectated player
@@ -4051,6 +4041,21 @@ namespace Oxide.Plugins
                 if (player != null && Bm.Cfg.Form.Invulnerable && Bm.IsFormPlayer(player))
                 {
                     return true;
+                }
+                BaseNPC2 animal = entity as BaseNPC2;
+                if (animal != null && info != null && Bm.Drivers.Count > 0)
+                {
+                    Driver d = Bm.DriverOfAnimal(animal);
+                    if (d != null && info.damageTypes.Total() > 0.5f)
+                    {
+                        Bm.NextTick(() =>
+                        {
+                            if (d.Alive && Valid(animal) && !animal.IsDead())
+                            {
+                                d.OnHurt();                // the light hit reaction of the species and its voice
+                            }
+                        });
+                    }
                 }
                 return null;
             }
@@ -4228,22 +4233,21 @@ namespace Oxide.Plugins
                 lookDir = body.transform.forward;
                 lastMouseTime = Time.time;
                 PlayerSettings settings = plugin.SettingsOf(player.userID);
-                string view = kind == ControlKind.Ride
-                    ? plugin.Cfg.Camera.DefaultRideView
-                    : string.IsNullOrEmpty(settings.View) ? plugin.Cfg.Camera.DefaultView : settings.View;
+                // riding keeps the view the player chose last time (G / R or the Controls page); an animal form is always third person
+                string view = string.IsNullOrEmpty(settings.View) ? plugin.Cfg.Camera.DefaultRideView : settings.View;
                 View = kind == ControlKind.Form ? ViewKind.Third : (view == "first" || !plugin.Cfg.Features.ThirdPerson ? ViewKind.First : ViewKind.Third);
             }
 
             public bool Begin()
             {
-                if (Kind == ControlKind.Form)
-                {
-                    bm.FormSmoke(Player.transform.position, Player);          // the human vanishes in the game's effect, at once
-                }
                 if (agent == null && Horse == null)
                 {
                     bm.TellRaw(Player, "This creature cannot be controlled.");
                     return false;
+                }
+                if (Kind == ControlKind.Form)
+                {
+                    bm.FormSmoke(Player.transform.position, Player);          // the human vanishes in the game's effect, at once
                 }
                 if (Animal != null)
                 {
@@ -4300,6 +4304,10 @@ namespace Oxide.Plugins
             // D = first person from the animal's eyes (spectator camera at the head with the game's eyes view flag).
             private string CurrentPreset()
             {
+                if (Kind == ControlKind.Form)
+                {
+                    return bm.PresetOf(Player) == "B" ? "B" : "A";       // an animal form is played in third person only
+                }
                 return View == ViewKind.First ? "D" : bm.PresetOf(Player);
             }
 
@@ -4352,6 +4360,8 @@ namespace Oxide.Plugins
                 {
                     tpFlagSet = !Player.HasPlayerFlag(BasePlayer.PlayerFlags.ThirdPersonViewmode);
                     SetThirdPersonFlag(Player, tpFlagSet);
+                    View = tpFlagSet ? ViewKind.Third : ViewKind.First;
+                    bm.SettingsOf(Player.userID).View = tpFlagSet ? "third" : "first";      // the next ride starts in this view
                     bm.Tell(Player, tpFlagSet ? "ViewThird" : "ViewFirst", bm.PresetOf(Player));
                     return;
                 }
@@ -4360,6 +4370,11 @@ namespace Oxide.Plugins
 
             public void SetView(ViewKind view)
             {
+                if (Kind == ControlKind.Form && view == ViewKind.First)
+                {
+                    bm.TellRaw(Player, "An animal form is played in third person only. Riding an animal has both views.");
+                    return;
+                }
                 if (view == View && (Seat != null || Spectating))
                 {
                     return;
@@ -4397,6 +4412,17 @@ namespace Oxide.Plugins
 
             public void SetPreset(string preset)
             {
+                if (Kind == ControlKind.Form && preset != "A" && preset != "B")
+                {
+                    bm.TellRaw(Player, "An animal form uses the third person cameras A and B only.");
+                    return;
+                }
+                if (Kind == ControlKind.Ride)
+                {
+                    bm.SettingsOf(Player.userID).Preset = preset;
+                    SetView(preset == "D" || preset == "C" ? ViewKind.First : ViewKind.Third);     // riding: the presets choose first or third person
+                    return;
+                }
                 if (preset == "D")
                 {
                     View = ViewKind.First;
@@ -4570,10 +4596,10 @@ namespace Oxide.Plugins
             private void EndSpectate()
             {
                 SetViewFlag(Player, BasePlayer.PlayerFlags.EyesViewmode, false);
+                // next to the animal on whatever it stands on (a floor, a roof, the terrain) - never under a building
                 Vector3 drop = Body != null && !Body.IsDestroyed
-                    ? Body.transform.position + Body.transform.right * (Body.bounds.extents.x + 1f)
+                    ? GroundNear(Body.transform.position, Body.bounds.extents.x * ModelScale(Body) + 1f)
                     : Player.transform.position;
-                drop.y = TerrainMeta.HeightMap.GetHeight(drop) + 0.3f;
                 Player.SetParent(null, true, true);
                 SendSpectateTarget(Player, default(NetworkableId));
                 Player.SetPlayerFlag(BasePlayer.PlayerFlags.Spectating, false);
@@ -4635,47 +4661,68 @@ namespace Oxide.Plugins
 
             // ------------------------------------------------------------ input
 
+            // The buttons of the last input, as the player pressed them. The game's own "just pressed" cannot be used: jump and duck are taken out
+            // of a spectator's input after it is read, so the game would see a held Space or Ctrl as pressed again and again (a held Space jumped
+            // over and over, and Ctrl + R never reached the menu).
+            private int lastButtons;
+            private bool inputSeen;
+
+            private static bool IsSet(int buttons, BUTTON b)
+            {
+                return (buttons & (int)b) != 0;
+            }
+
             public void ReadInput(InputState input)
             {
-                fwd = input.IsDown(BUTTON.FORWARD);
-                back = input.IsDown(BUTTON.BACKWARD);
-                left = input.IsDown(BUTTON.LEFT);
-                right = input.IsDown(BUTTON.RIGHT);
-                jumpDown = input.IsDown(BUTTON.JUMP);
+                int now = input.current.buttons;
+                int prev = inputSeen ? lastButtons : now;      // a key still held from before the control began is no new press
+                inputSeen = true;
+                lastButtons = now;
+                Func<BUTTON, bool> pressed = b => IsSet(now, b) && !IsSet(prev, b);
+                fwd = IsSet(now, BUTTON.FORWARD);
+                back = IsSet(now, BUTTON.BACKWARD);
+                left = IsSet(now, BUTTON.LEFT);
+                right = IsSet(now, BUTTON.RIGHT);
+                bool duck = IsSet(now, BUTTON.DUCK);
                 if (fwd || back || left || right)
                 {
                     InterruptClip();                       // walking or running takes over from the idle animation
                 }
-                if (PoseName != null && (fwd || back || left || right || input.WasJustPressed(BUTTON.JUMP) || input.WasJustPressed(BUTTON.FIRE_THIRD)))
+                if (PoseName != null && (fwd || back || left || right || pressed(BUTTON.JUMP) || pressed(BUTTON.FIRE_THIRD)))
                 {
                     ClearPose();
                 }
-                if (input.WasJustPressed(BUTTON.SPRINT))
+                if (pressed(BUTTON.RELOAD) && duck)
+                {
+                    bm.OpenMenu(Player, "home");          // Ctrl + R: the menu, also while riding or as an animal
+                    return;
+                }
+                if (pressed(BUTTON.SPRINT))
                 {
                     braking = false;
                     SetGait(Mathf.Max(Gait, 1) + 1);
                 }
-                if (input.WasJustPressed(BUTTON.DUCK))
+                if (pressed(BUTTON.DUCK))
                 {
                     Brake();
                 }
-                if (input.WasJustPressed(BUTTON.BACKWARD) && currentSpeed > GaitSpeed(3) * 0.9f)
+                if (pressed(BUTTON.BACKWARD) && currentSpeed > GaitSpeed(3) * 0.9f)
                 {
                     TurnAbout();
                 }
-                if (input.WasJustPressed(BUTTON.JUMP))
+                if (pressed(BUTTON.JUMP))
                 {
                     Jump();
                 }
-                if (input.WasJustPressed(BUTTON.FIRE_THIRD))
+                if (pressed(BUTTON.FIRE_THIRD))
                 {
                     Attack();
                 }
-                if (input.WasJustPressed(BUTTON.RELOAD) && !input.IsDown(BUTTON.DUCK))
+                if (pressed(BUTTON.RELOAD) && !duck)
                 {
                     if (Kind == ControlKind.Form)
                     {
-                        if (Body is LivestockAnimal || Horse != null)
+                        if (HasSkins)
                         {
                             bm.ReskinForm(this);            // R: another skin of the animal (only animals that have skins)
                         }
@@ -4685,11 +4732,14 @@ namespace Oxide.Plugins
                         CycleView();
                     }
                 }
-                if (Kind == ControlKind.Form && Spectating && input.WasJustPressed(BUTTON.USE))
+                if (Kind == ControlKind.Form && Spectating && pressed(BUTTON.USE))
                 {
                     bm.InteractFrom(this);
                 }
             }
+
+            // The animals whose look can be changed with R: livestock (coat and pattern) and the horse (breed).
+            public bool HasSkins => Body is LivestockAnimal || Horse != null;
 
             public void SetGait(int gait)
             {
@@ -4978,6 +5028,7 @@ namespace Oxide.Plugins
                     Body.transform.rotation = Quaternion.Euler(0f, moveYaw + yawOffset, 0f);
                 }
                 PlayClip(Animal, clip);
+                bm.AnimalVoice(Body, Species, "attack");          // the stag's clips carry no sound of their own
                 bm.StatsSpend(this, 4f);
                 nextAttack = Time.time + Mathf.Max(bm.Cfg.Combat.Cooldown, p.Delay + 0.4f);
                 float heading = moveYaw;
@@ -4997,6 +5048,24 @@ namespace Oxide.Plugins
             public void OnGesture(string gesture)
             {
                 bm.PerformGesture(this, gesture);
+            }
+
+            // Hurt: the light hit reaction of the species (never its knock-down, which would throw the animal to the ground) and its voice.
+            private float nextHurt;
+
+            public void OnHurt()
+            {
+                if (released || Animal == null || jumping || Time.time < nextHurt || Time.time < fallenUntil)
+                {
+                    return;
+                }
+                nextHurt = Time.time + 1.2f;
+                ClipRef hit = bm.Clips(Animal).FirstOrDefault(c => c.Field.StartsWith("WeakHit", StringComparison.OrdinalIgnoreCase) && !Has(c, "knock") && !Has(c, "death"));
+                if (hit != null && idleState == null && Time.time >= nextAttack - 0.2f)
+                {
+                    PlayClip(Animal, hit);
+                }
+                bm.AnimalVoice(Body, Species, "hurt");
             }
 
             public int NextGestureIndex()
@@ -5112,13 +5181,15 @@ namespace Oxide.Plugins
                 }
             }
 
-            public bool AddGuest(BasePlayer guest)
+            // behindDriver: the animal already carries its own rider (a double saddle) - the guest sits behind him.
+            public bool AddGuest(BasePlayer guest, bool behindDriver = false)
             {
                 if (Animal == null)
                 {
                     return false;
                 }
-                string prefab = Guests.Count == 0 ? bm.Cfg.Riding.SeatPrefab : bm.Cfg.Riding.RearSeatPrefab;
+                bool rear = behindDriver || Guests.Count > 0;
+                string prefab = rear ? bm.Cfg.Riding.RearSeatPrefab : bm.Cfg.Riding.SeatPrefab;
                 BaseEntity entity = GameManager.server.CreateEntity(prefab, Body.transform.position, Body.transform.rotation);
                 BaseMountable seat = entity as BaseMountable;
                 if (seat == null)
@@ -5140,7 +5211,7 @@ namespace Oxide.Plugins
                 }
                 seat.transform.localRotation = rotation;
                 Vector3 place = BackPoint(Animal) - anchor + Vector3.up * bm.SeatLiftOf(Species);
-                if (Guests.Count > 0)
+                if (rear)
                 {
                     place += rotation * Vector3.back * Mathf.Max(0.55f, Body.bounds.extents.z * 0.5f);
                 }
@@ -5226,8 +5297,6 @@ namespace Oxide.Plugins
             // ------------------------------------------------------------ jumping and falling
 
             private float nextWallCrash;
-            private bool jumpDown;
-            private float jumpHold;
             private bool platformLanding;
             private bool offMesh;
             private float nextMeshCheck;
@@ -5247,9 +5316,9 @@ namespace Oxide.Plugins
                     return;
                 }
                 InterruptClip();
+                ClearPose();
                 float k = ModelScale(Body);
                 float distance = bm.Cfg.Movement.JumpDistance * Mathf.Clamp(Body.bounds.size.z / 2.4f, 0.45f, 1.6f) * k;
-                float landProbeClear = bm.JumpClearance(Body, Species);
                 float height = bm.Cfg.Movement.JumpHeight * Mathf.Clamp(Body.bounds.size.y / 1.5f, 0.4f, 1.3f) * k;
                 if (Species.Id == "panther")
                 {
@@ -5264,7 +5333,6 @@ namespace Oxide.Plugins
                 jumpFrom = Body.transform.position;
                 jumpCollision = false;
                 platformLanding = false;
-                jumpHold = 0f;
                 float radius = Mathf.Clamp(Mathf.Min(Body.bounds.extents.x, Body.bounds.extents.z) * 0.6f * k, 0.15f, 0.7f);
                 Vector3 origin = jumpFrom + Vector3.up * (radius + 0.25f * k);
                 RaycastHit hit;
@@ -5319,8 +5387,8 @@ namespace Oxide.Plugins
                     // something to stand on where the jump ends (a low floor, a crate, a rock the sphere sailed over)?
                     RaycastHit stand;
                     float ground = TerrainMeta.HeightMap.GetHeight(to);
-                    if (Physics.Raycast(to + Vector3.up * (landProbeClear + 2f), Vector3.down, out stand, landProbeClear + 5f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore)
-                        && stand.normal.y >= 0.35f && stand.point.y > ground + 0.12f && stand.point.y <= jumpFrom.y + landProbeClear + 0.1f
+                    if (Physics.Raycast(to + Vector3.up * (clear + 2f), Vector3.down, out stand, clear + 5f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore)
+                        && stand.normal.y >= 0.35f && stand.point.y > ground + 0.12f && stand.point.y <= jumpFrom.y + clear + 0.1f
                         && !Physics.CheckCapsule(stand.point + Vector3.up * 0.5f, stand.point + Vector3.up * Mathf.Max(0.9f, Body.bounds.size.y * k * 0.6f), 0.3f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore))
                     {
                         to = stand.point + Vector3.up * 0.05f;
@@ -5566,6 +5634,38 @@ namespace Oxide.Plugins
                 nextWallCrash = Mathf.Max(nextWallCrash, Time.time + seconds);
             }
 
+            // Is there an object surface (a floor, a step, a crate) right under the animal that is higher than the navigation mesh found nearby?
+            private bool StandsAbove(Vector3 here, float navY)
+            {
+                RaycastHit g;
+                return Physics.Raycast(here + Vector3.up * 0.6f, Vector3.down, out g, 1.6f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore)
+                    && g.normal.y > 0.3f && g.point.y > navY + 0.2f;
+            }
+
+            // The animal stands where the plugin moved it, without the navigation mesh under it (a platform, a jump): the agent takes the body
+            // again at the nearest point of the mesh, so that the animal's own AI does not stay frozen with a switched-off agent.
+            private void RestoreAgent()
+            {
+                if (agent == null || Animal == null || Body == null || Body.IsDestroyed)
+                {
+                    return;
+                }
+                bool wasOff = offMesh || jumping || !agent.updatePosition;
+                offMesh = false;
+                jumping = false;
+                agent.IsJumping = false;
+                agent.updatePosition = true;
+                if (!wasOff || Body.IsDead())
+                {
+                    return;
+                }
+                Vector3 onNav;
+                if (Animal.TrySampleNavmesh(Body.transform.position, 4f, out onNav))
+                {
+                    agent.WarpToWorldPosition(onNav);
+                }
+            }
+
             // Walking on a surface without a navigation mesh (the top of a wall, a crate, a floor): the animal follows the ground under it.
             private void OffMeshMove(Vector3 next, float dt)
             {
@@ -5654,7 +5754,10 @@ namespace Oxide.Plugins
                     nextMeshCheck = Time.time + 0.3f;
                     Vector3 onNav;
                     Vector3 here = Body.transform.position;
-                    if (Animal.TrySampleNavmesh(here, 0.8f, out onNav) && new Vector2(onNav.x - here.x, onNav.z - here.z).magnitude < 0.5f && Mathf.Abs(onNav.y - here.y) < 0.7f)
+                    // back onto the navigation mesh only where the animal really stands on that ground: next to a low platform the mesh of the
+                    // ground beside it is close too, and stepping onto it there pulled the animal down through the platform
+                    if (Animal.TrySampleNavmesh(here, 0.8f, out onNav) && new Vector2(onNav.x - here.x, onNav.z - here.z).magnitude < 0.5f && Mathf.Abs(onNav.y - here.y) < 0.7f
+                        && !StandsAbove(here, onNav.y))
                     {
                         agent.updatePosition = true;
                         if (agent.WarpToWorldPosition(onNav))
@@ -5937,7 +6040,7 @@ namespace Oxide.Plugins
                 }
                 if (Body != null && !Body.IsDestroyed && agent != null)
                 {
-                    agent.IsJumping = false;
+                    RestoreAgent();
                     agent.Unpause(this);
                 }
                 if (Body != null && !Body.IsDestroyed)
@@ -5977,6 +6080,11 @@ namespace Oxide.Plugins
                         Rust.Ai.SimpleAIMemory.PlayerIgnoreList.Remove(Player);
                     }
                     ClearView();
+                    if (!form && Player.IsConnected && !Player.IsDead() && Valid(Body))
+                    {
+                        // the rider gets off beside the animal, standing on what the animal stands on
+                        Player.Teleport(GroundNear(Body.transform.position, Body.bounds.extents.x * ModelScale(Body) + 0.9f));
+                    }
                     Player.SendNetworkUpdateImmediate();
                     bm.Drivers.Remove(Player.userID);
                 }
@@ -5984,7 +6092,7 @@ namespace Oxide.Plugins
                 {
                     if (agent != null)
                     {
-                        agent.IsJumping = false;
+                        RestoreAgent();
                         if (swimSet)
                         {
                             agent.IsSwimming = false;
@@ -6468,7 +6576,8 @@ namespace Oxide.Plugins
         internal void OnFormStarted(Driver d)
         {
             Vector3 at = d.Body.transform.position;
-            timer.Once(0.1f, () => FormAppear(at));                    // and the animal appears with the same effect
+            BasePlayer hearer = d.Player;
+            timer.Once(0.1f, () => FormAppear(at, hearer));            // and the animal appears with the same effect, heard by the player too
             Data.Forms.Remove(d.Player.userID);
             FormSleepers.Remove(d.Player.userID);
         }
@@ -6477,12 +6586,12 @@ namespace Oxide.Plugins
         {
             BasePlayer player = d.Player;
             Vector3 spot = Valid(d.Body) ? d.Body.transform.position : player.transform.position;
-            FormSmoke(spot);
+            FormSmoke(spot, player);
             if (player != null && player.IsConnected && !player.IsDead() && reason != "animal died")
             {
                 Vector3 back = GroundNear(spot, d.Body != null && !d.Body.IsDestroyed ? d.Body.bounds.extents.x * ModelScale(d.Body) + 1.2f : 1.5f);
                 player.Teleport(back);
-                FormAppear(back);
+                FormAppear(back, player);
             }
             HudSwitch(player, true);
             Data.RitualCooldown[player.userID] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + Cfg.Form.Cooldown;
@@ -6592,7 +6701,7 @@ namespace Oxide.Plugins
                 if (p != null && p.IsConnected && !p.IsDead())
                 {
                     p.Teleport(GroundNear(spot, 1.5f));
-                    FormAppear(p.transform.position);
+                    FormAppear(p.transform.position, p);
                     HudSwitch(p, true);
                 }
             });
@@ -7607,11 +7716,11 @@ namespace Oxide.Plugins
                 return;
             }
             RunEffect(FindPrefabPath("fx", "heart") ?? FindPrefabPath("fx", "sparkle"), female.transform.position + Vector3.up * 1.5f);
-            reply("The " + (female == me ? "you are" : "she is") + " pregnant now. A young one will be born in time.");
+            reply(female == me ? "You are pregnant now. A young one will be born in time." : "She is pregnant now. A young one will be born in time.");
             Driver other2 = DriverOfAnimal(partner);
             if (other2 != null)
             {
-                TellRaw(other2.Player, "Your mate " + (female == partner ? "is" : "makes you") + " pregnant.");
+                TellRaw(other2.Player, female == partner ? "You are pregnant now. A young one will be born in time." : "Your mate is pregnant now.");
             }
         }
 
@@ -8073,7 +8182,7 @@ namespace Oxide.Plugins
                 }
                 Bm.timer.Once(1.5f, () =>
                 {
-                    if (Valid(horse) && !horse.IsForSale && horse.skinID == 0UL && horse.OwnerID == 0UL && !horse.AnyMounted())
+                    if (Valid(horse) && !horse.IsForSale && horse.skinID == 0UL && horse.OwnerID == 0UL && !horse.AnyMounted() && !HasSaddleItem(horse))
                     {
                         MakeWild(horse);
                     }
@@ -8105,11 +8214,12 @@ namespace Oxide.Plugins
                         Bm.Data.Horses.Remove(tag);
                     }
                 }
-                // the horses that were already in the world (saved by the game) are wild and unsaddled too
+                // the horses that were already in the world (saved by the game) are wild and unsaddled too - except a horse that carries a saddle
+                // item in its equipment slot: that one belongs to a player, who fitted the saddle, and stays as it is
                 foreach (BaseNetworkable net in BaseNetworkable.serverEntities.ToList())
                 {
                     RidableHorse old = net as RidableHorse;
-                    if (old != null && Bm.Cfg.Features.Taming && old.skinID == 0UL && old.OwnerID == 0UL && !old.IsForSale && !old.AnyMounted())
+                    if (old != null && Bm.Cfg.Features.Taming && old.skinID == 0UL && old.OwnerID == 0UL && !old.IsForSale && !old.AnyMounted() && !HasSaddleItem(old))
                     {
                         MakeWild(old);
                     }
@@ -9331,10 +9441,21 @@ namespace Oxide.Plugins
             if (lying != null && lying.item != null && lying.allowPickup)
             {
                 Item picked = lying.item;
+                string pickedName = picked.info.displayName.english;
+                Vector3 at = lying.transform.position;
                 lying.RemoveItem();
-                if (!AddToBag(player, picked))
+                if (!lying.IsDestroyed)
                 {
-                    picked.Drop(player.transform.position + Vector3.up, Vector3.up);       // the bag is full
+                    lying.Kill();                           // the item lies in the bag now, the empty world item goes away
+                }
+                if (AddToBag(player, picked))
+                {
+                    TellRaw(player, "Picked up: " + pickedName + " (it is in your animal's bag).");
+                }
+                else
+                {
+                    picked.Drop(at + Vector3.up * 0.3f, Vector3.up);       // the bag is full: it stays where it lay
+                    TellRaw(player, "Your animal's bag is full.");
                 }
             }
         }
@@ -9408,10 +9529,10 @@ namespace Oxide.Plugins
                 ["NotYours"] = "This animal belongs to someone else.",
                 ["AlreadyControlling"] = "You are already riding or in animal form. Press X first.",
                 ["Riding"] = "Riding the {0}. W/A/S/D move, Shift faster, Ctrl brake, Space jump, F attack, G view, X get off.",
-                ["Form"] = "You are now a {0}. W/A/S/D move, Shift faster, Ctrl brake, Space jump, F attack, G view, B animal sounds, X back to human.",
+                ["Form"] = "You are now a {0}. W/A/S/D move, Shift faster, Ctrl brake, Space jump, F attack, E eat / use, R skin, G night vision, X back to human.",
                 ["Released"] = "You are free again.",
-                ["ViewThird"] = "View: third person (preset {0}). Move the mouse to look around: the camera stays where you leave it and turns with the animal.",
-                ["ViewFirst"] = "View: first person. Your inventory opens in this view; G changes the view.",
+                ["ViewThird"] = "View: third person. Move the mouse to look around; G or R changes the view.",
+                ["ViewFirst"] = "View: first person. G or R changes the view.",
                 ["Brake"] = "Brake.",
                 ["Stop"] = "Stop.",
                 ["NoAttack"] = "This animal has no attack.",
@@ -10010,7 +10131,7 @@ namespace Oxide.Plugins
             sb.Append("Beastmaster is ").Append(OnOff(Active)).Append(".\n");
             sb.Append(d == null ? "You are on foot." : d.Kind == ControlKind.Ride ? "You are riding a " + d.Species.Display + "." : "You are in the form of a " + d.Species.Display + ".").Append('\n');
             sb.Append("Your animals: ").Append(OwnedCount(player.userID)).Append(" of ").Append(Cfg.Taming.MaxOwned).Append(".\n");
-            sb.Append("Menu layer: ").Append(HasMenuAccess(player) ? "player + control (Admin, Spawn, Aim tools, Players)" : "player").Append("   |   open it with F5 or /bm\n\n");
+            sb.Append("Menu layer: ").Append(HasMenuAccess(player) ? "player + control (Admin, Spawn, Aim tools, Players)" : "player").Append("   |   open it with Ctrl + R or /bm\n\n");
             sb.Append("<b>Features on this server</b>\n").Append(FeatureLine()).Append("\n\n");
             sb.Append("<b>Where to start</b>\n");
             sb.Append("Help / Guide explains everything, generated from this server's settings.\n");
@@ -10053,7 +10174,7 @@ namespace Oxide.Plugins
             add("combat", "Combat and rear attacks", HelpCombat);
             add("ritual", "Transformation ritual", HelpRitual);
             add("camera", "Third person", HelpCamera);
-            add("nightvision", "Night vision", p => "Night vision goggles worn by your human body keep their vision effect while you are an animal: the effect belongs to the human body, which is only hidden, not removed.\n\nBelt items, clothes and the backpack stay available in animal form - open the inventory as usual. Held items are never visible on the animal.");
+            add("nightvision", "Night vision", p => "<b>Night vision</b>\n\nThe game's own Night Vision Goggles give the vision. Carry a pair in your inventory: as an animal G (or Ctrl + G) puts them on your hidden human head and takes them off again; the Night button on the Controls page does the same, and H after a one-time bind h bm.nv in the F1 console.\n\nWithout goggles in the inventory nothing happens and you get a short message. The goggles need the head slot: take your helmet or hat off first.");
             add("spray", "Spray can", HelpSpray);
             add("relations", "Animal relations", HelpRelations);
             add("species", "Species cards", p =>
@@ -10074,7 +10195,7 @@ namespace Oxide.Plugins
                 + "<b>Quick start</b>\n"
                 + "1. Tame an animal (Help - Taming).\n"
                 + "2. Press E on it: the gear panel opens. Put a saddle into slot 1 and close the panel.\n"
-                + "3. Press E again to mount. W/A/S/D move, Shift faster, F attack, G changes the view, X gets you off.\n"
+                + "3. Press E again to mount. W/A/S/D move, Shift faster, F attack, G or R switch first / third person, X gets you off.\n"
                 + "4. Command it: /bm cmd follow | wait | guard | attack | release.\n\n"
                 + "<b>Switched on here</b>\n" + FeatureLine() + "\n\n"
                 + "Open this menu any time with /bm.";
@@ -10082,20 +10203,20 @@ namespace Oxide.Plugins
 
         private string HelpControls(BasePlayer p)
         {
-            return "<b>Keys while riding or in animal form</b>\n"
-                + "W/A/S/D  move (turning follows the camera when you look around)\n"
-                + "Shift  go faster - each press of the gait key climbs one step: walk, jog, run, sprint, full sprint\n"
-                + "Ctrl  brake (hold with A or D for the stop-and-turn)\n"
+            return "<b>Keys as an animal (third person) and while riding</b>\n"
+                + "W/A/S/D  move\n"
+                + "Shift  go faster - each press climbs one gait: walk, jog, run, sprint, full sprint\n"
+                + "Ctrl  brake (with A or D at a run: the stop-and-turn)\n"
                 + "S while running  turn around 180 degrees (a slide for bulls and rams)\n"
-                + "Space  jump (" + Cfg.Movement.JumpDistance + " m far, " + Cfg.Movement.JumpHeight + " m high, cooldown " + Cfg.Movement.JumpCooldown + " s)\n"
-                + "F  attack - look backwards first for the rear attack\n"
-                + "G or R  change view (third / first person)\n"
-                + "B  gesture wheel: lie down (thumbs down, surrender), sit (ok, clap), roar (wave, victory, thumbs up), look around (shrug and the rest) - /bm lie, sit, roar, look, stand do the same\n"
-                + "E  use: open doors, loot containers, eat what lies in front of you, drink from fresh water, lead tamed animals\n"
-                + "Ctrl + G  night vision (put goggles from your inventory on / off) - also the Night button in Controls\n"
-                + "Ctrl + R  this menu (empty hands), also F5 and H after the one-time bind\n"
-                + "X  get off the animal / return to human form\n\n"
-                + "<color=#9aa58f>The server cannot rebind keys by itself; it asks your game to bind F5 and H when you join. If yours refuses, type bind f5 bm.menu and bind h bm.nv in the F1 console.</color>";
+                + "Space  jump - over fences and onto raised surfaces: floors, roofs, crates, rocks (cooldown " + Cfg.Movement.JumpCooldown + " s)\n"
+                + "F  attack - turn the camera behind the animal for the rear attack (kicks)\n"
+                + "E  as an animal: eat food on the ground, drink fresh water, graze, pick things up into the animal's bag, open doors and containers, lead your tamed animals\n"
+                + "R  as an animal: another skin (cow, bull, sheep, ram, horse) - while riding: first / third person\n"
+                + "G  as an animal: night vision (goggles from your inventory) - while riding: first / third person\n"
+                + "B  gesture wheel: lie down, sit, roar, look around - /bm lie, sit, roar, look, stand do the same\n"
+                + "X  back to human / get off. X at the animal you have left: become it again. E at it: ride it. Ctrl + E at it: its bag\n"
+                + "Ctrl + R  this menu (empty hands, riding or as an animal), also /bm\n\n"
+                + "<color=#9aa58f>F5 and H need a one-time bind in the F1 console: bind f5 bm.menu and bind h bm.nv (the game keeps them).</color>";
         }
 
         private string HelpRiding(BasePlayer p)
@@ -10186,13 +10307,13 @@ namespace Oxide.Plugins
 
         private string HelpCamera(BasePlayer p)
         {
-            return "<b>Third person</b> " + OnOff(Cfg.Features.ThirdPerson) + "\n\n"
-                + "Default: " + Cfg.Camera.DefaultView + " person as an animal, " + Cfg.Camera.DefaultRideView + " person when riding. G (or R) switches.\n"
-                + "Look around with the mouse; the camera stays where you put it and turns with the animal.\n"
-                + "Turn the camera behind you to see the animal from the front.\n\n"
-                + "<b>Presets</b> (Controls page, or /bm preset a|b|c|d)\n"
-                + "A  spectator camera around the animal (default)\nB  A plus the game's own third-person flag\nC  camera at the animal's head\nD  first person from the animal's head\n\n"
-                + "In third person, interactions (doors, loot) start from the animal's head; in first person they start from the crosshair.";
+            return "<b>Camera</b> " + OnOff(Cfg.Features.ThirdPerson) + "\n\n"
+                + "As an animal you play in third person only. Riding has both views: " + Cfg.Camera.DefaultRideView + " person at first, G or R switches and the choice is kept.\n"
+                + "Look around with the mouse; the camera stays where you put it and turns with the animal. Turn it behind the animal for the rear attack.\n\n"
+                + "<b>Animal camera</b> (Controls page, or /bm preset a|b)\n"
+                + "A  spectator camera around the animal (default)\nB  A plus the game's own third-person flag\n"
+                + "Height: /bm cam up | down | reset (yours), an admin keeps it for everybody with /bm cam save.\n\n"
+                + "As an animal, interactions (doors, loot, food) start from the animal's head.";
         }
 
         private string HelpSpray(BasePlayer p)
@@ -10237,10 +10358,11 @@ namespace Oxide.Plugins
             return "<b>FAQ / troubleshooting</b>\n\n"
                 + "<b>I cannot mount.</b> The animal must be tamed, fitted with a saddle and within " + Cfg.Riding.MountDistance + " m; you need the permission beastmaster.ride.\n\n"
                 + "<b>The animal does not follow.</b> Its state may be wait or guard: /bm cmd follow. Followers further than " + (Cfg.Taming.TeleportDistance > 0f ? Cfg.Taming.TeleportDistance + " m are moved next to you." : "that stay behind.") + "\n\n"
-                + "<b>The camera feels wrong.</b> Try another preset: /bm preset b (or c, d). G switches between third and first person.\n\n"
+                + "<b>The camera feels wrong.</b> As an animal: /bm cam up or down, or the other preset (/bm preset b). Riding: G or R switches between first and third person.\n\n"
+                + "<b>The rider sits too high or too low.</b> An admin sits on that species and types /bm seat up or /bm seat down (10 cm per step, kept for the species).\n\n"
                 + "<b>The animal has no attack.</b> Rabbits, squirrels, frogs and crabs have no attack; F plays their call.\n\n"
                 + "<b>How do I get back?</b> X returns you to human form. If you logged out as an animal, you wake up as the animal.\n\n"
-                + "<b>F5 does nothing.</b> The server asks your game to bind F5 when you join. If it refused, type bind f5 bm.menu once in the F1 console, or use /bm.\n\n"
+                + "<b>F5 does nothing.</b> A server cannot bind keys in your game. Use Ctrl + R or /bm, or type bind f5 bm.menu once in the F1 console (the game keeps it).\n\n"
                 + "<b>Something is broken.</b> Tell an admin: they can run bm.selftest and send you the result.";
         }
 
@@ -10490,26 +10612,32 @@ namespace Oxide.Plugins
             Driver d = DriverOf(player);
             UiLabel(c, parent, "<size=18><b>Controls and camera</b></size>", 14, 0.02f, 0.91f, 0.7f, 0.99f, TextAnchor.MiddleLeft);
             UiLabel(c, parent, HelpControls(player).Split(new[] { "\n\n" }, StringSplitOptions.None)[0], 13, 0.03f, 0.43f, 0.97f, 0.90f);
-            string view = string.IsNullOrEmpty(s.View) ? Cfg.Camera.DefaultView : s.View;
-            string preset = PresetOf(player);
-            UiLabel(c, parent, "View as an animal:", 13, 0.03f, 0.34f, 0.28f, 0.41f, TextAnchor.MiddleLeft);
+            string view = string.IsNullOrEmpty(s.View) ? Cfg.Camera.DefaultRideView : s.View;
+            string preset = PresetOf(player) == "B" ? "B" : "A";
+            UiLabel(c, parent, "View when riding:", 13, 0.03f, 0.34f, 0.28f, 0.41f, TextAnchor.MiddleLeft);
             UiButton(c, parent, "third person", "bm.ui view third", 0.29f, 0.35f, 0.47f, 0.41f, view == "third" ? ColNavOn : ColBtn);
             UiButton(c, parent, "first person", "bm.ui view first", 0.48f, 0.35f, 0.66f, 0.41f, view == "first" ? ColNavOn : ColBtn);
-            UiLabel(c, parent, "Third person camera:", 13, 0.03f, 0.26f, 0.28f, 0.33f, TextAnchor.MiddleLeft);
-            string[] presets = { "A", "B", "C", "D" };
+            if (d != null && d.Kind == ControlKind.Ride && IsAdmin(player))
+            {
+                UiButton(c, parent, "Seat up", "bm.ui seat up", 0.68f, 0.35f, 0.82f, 0.41f, ColBtn, 12);
+                UiButton(c, parent, "Seat down", "bm.ui seat down", 0.83f, 0.35f, 0.985f, 0.41f, ColBtn, 12);
+            }
+            UiLabel(c, parent, "Animal camera:", 13, 0.03f, 0.26f, 0.28f, 0.33f, TextAnchor.MiddleLeft);
+            string[] presets = { "A", "B" };
             for (int i = 0; i < presets.Length; i++)
             {
                 UiButton(c, parent, "preset " + presets[i], "bm.ui preset " + presets[i], 0.29f + i * 0.13f, 0.27f, 0.405f + i * 0.13f, 0.33f, preset == presets[i] ? ColNavOn : ColBtn);
             }
-            UiButton(c, parent, "Cam up", "bm.ui cam up", 0.82f, 0.27f, 0.895f, 0.33f, ColBtn, 12);
-            UiButton(c, parent, "Cam down", "bm.ui cam down", 0.90f, 0.27f, 0.985f, 0.33f, ColBtn, 12);
-            UiLabel(c, parent, "<size=11><color=#9aa58f>A = spectator camera around the animal | B = A + third-person flag | C = camera at the head | D = first person from the head</color></size>", 11, 0.03f, 0.20f, 0.97f, 0.26f);
+            UiButton(c, parent, "Cam up", "bm.ui cam up", 0.58f, 0.27f, 0.70f, 0.33f, ColBtn, 12);
+            UiButton(c, parent, "Cam down", "bm.ui cam down", 0.71f, 0.27f, 0.83f, 0.33f, ColBtn, 12);
+            UiButton(c, parent, "Cam reset", "bm.ui cam reset", 0.84f, 0.27f, 0.985f, 0.33f, ColBtn, 12);
+            UiLabel(c, parent, "<size=11><color=#9aa58f>An animal is played in third person: A = spectator camera around the animal | B = A + the game's third-person flag. Riding has both views (G or R).</color></size>", 11, 0.03f, 0.20f, 0.97f, 0.26f);
             UiButton(c, parent, (s.RefuseSaddle ? "[x] " : "[  ] ") + "Refuse saddles from others while I am an animal", "bm.ui setting refuse", 0.03f, 0.12f, 0.55f, 0.19f, s.RefuseSaddle ? ColOn : ColBtn, 12);
-            UiButton(c, parent, (s.ShowHud ? "[x] " : "[  ] ") + "Show the animal HUD", "bm.ui setting hud", 0.57f, 0.12f, 0.97f, 0.19f, s.ShowHud ? ColOn : ColBtn, 12);
+            UiButton(c, parent, (s.ShowHud ? "[x] " : "[  ] ") + "Show the key hints", "bm.ui setting hud", 0.57f, 0.12f, 0.97f, 0.19f, s.ShowHud ? ColOn : ColBtn, 12);
             if (d != null)
             {
                 UiButton(c, parent, d.Kind == ControlKind.Ride ? "Get off" : "Back to human", "bm.ui revert", 0.03f, 0.03f, 0.27f, 0.10f, ColWarn);
-                string[][] actions = { new[] { "Lie", "lie" }, new[] { "Sit", "sit" }, new[] { "Roar", "roar" }, new[] { "Look", "look" }, new[] { "Stand", "stand" }, new[] { "Night (H)", "nv" }, new[] { "Breed", "breed" } };
+                string[][] actions = { new[] { "Lie", "lie" }, new[] { "Sit", "sit" }, new[] { "Roar", "roar" }, new[] { "Look", "look" }, new[] { "Stand", "stand" }, new[] { "Night (G)", "nv" }, new[] { "Breed", "breed" } };
                 for (int a = 0; a < actions.Length; a++)
                 {
                     string command = actions[a][1] == "nv" || actions[a][1] == "breed" ? "bm.ui " + actions[a][1] : "bm.ui gesture " + actions[a][1];
@@ -10786,9 +10914,10 @@ namespace Oxide.Plugins
                     break;
                 case "view":
                     {
+                        // the view of riding (an animal form is third person only)
                         SettingsOf(player.userID).View = arg1 == "first" ? "first" : "third";
                         Driver d = DriverOf(player);
-                        if (d != null)
+                        if (d != null && d.Kind == ControlKind.Ride)
                         {
                             d.SetView(arg1 == "first" ? ViewKind.First : ViewKind.Third);
                         }
@@ -10797,10 +10926,10 @@ namespace Oxide.Plugins
                 case "preset":
                     {
                         string preset = arg1.ToUpperInvariant();
-                        if (preset == "A" || preset == "B" || preset == "C" || preset == "D")
+                        if (preset == "A" || preset == "B")
                         {
                             Driver d = DriverOf(player);
-                            if (d != null) d.SetPreset(preset); else SettingsOf(player.userID).Preset = preset;
+                            if (d != null && d.Kind == ControlKind.Form) d.SetPreset(preset);
                             SettingsOf(player.userID).Preset = preset;
                         }
                         break;
@@ -10809,9 +10938,19 @@ namespace Oxide.Plugins
                     {
                         PlayerSettings s = SettingsOf(player.userID);
                         if (arg1 == "refuse") s.RefuseSaddle = !s.RefuseSaddle;
-                        else if (arg1 == "hud") s.ShowHud = !s.ShowHud;
+                        else if (arg1 == "hud")
+                        {
+                            s.ShowHud = !s.ShowHud;
+                            if (s.ShowHud) DrawKeyHints(player); else ClearKeyHints(player);       // at once, not at the next redraw
+                        }
                         break;
                     }
+                case "seat":
+                    if (arg1 == "up" || arg1 == "down")
+                    {
+                        SeatCommand(player, new[] { arg1 }, text => TellRaw(player, text));
+                    }
+                    break;
                 case "revert":
                     StopControl(player, "menu");
                     break;
@@ -11003,7 +11142,7 @@ namespace Oxide.Plugins
         {
             "close", "noop", "page", "topic", "species", "tpage", "list", "search", "clearsearch", "lookhelp", "animal", "all", "view", "preset", "setting",
             "revert", "plugin", "feature", "species_toggle", "spawnspecies", "spawncount", "spawnmode", "spawnsaddle", "spawn", "spawnclear", "grant", "revoke",
-            "bossmini", "spawnboss", "aim", "gesture", "cam", "nv", "breed", "rename", "renameset"
+            "bossmini", "spawnboss", "aim", "gesture", "cam", "nv", "breed", "rename", "renameset", "seat"
         };
 
         // Builds every page and every Help topic for a stand-in player, checks the JSON and that every button names a known action.
@@ -11260,6 +11399,42 @@ namespace Oxide.Plugins
             RunEffect(FindPrefabPath("impacts/blunt/flesh/"), pos);
         }
 
+        // The voice of a species whose animations carry no sound of their own (the stag): the effect prefab named in the config, or the first
+        // prefab of this game build whose path names the species and a call (searched once, cached). Nothing plays when the game has none.
+        private readonly Dictionary<string, float> nextVoice = new Dictionary<string, float>();
+
+        internal void AnimalVoice(BaseEntity body, SpeciesDef species, string kind)
+        {
+            if (body == null || species == null || species.Id != "stag")
+            {
+                return;
+            }
+            string key = body.net != null ? body.net.ID.Value + kind : kind;
+            float until;
+            if (nextVoice.TryGetValue(key, out until) && Time.time < until)
+            {
+                return;
+            }
+            nextVoice[key] = Time.time + 1.5f;
+            if (nextVoice.Count > 200)
+            {
+                nextVoice.Clear();
+            }
+            string path = kind == "hurt" ? Cfg.Combat.StagHurtSound : Cfg.Combat.StagAttackSound;
+            if (string.IsNullOrEmpty(path) || GameManager.server.FindPrefab(path) == null)
+            {
+                path = FindPrefabPath("agents/stag/", "sound") ?? FindPrefabPath("agents/stag/", "vocal") ?? FindPrefabPath("agents/deer/", "sound");
+            }
+            if (path != null)
+            {
+                RunEffectFor(path, body.transform.position + Vector3.up * 1.2f, null);
+            }
+            else if (kind == "hurt")
+            {
+                RunEffectFor(FindPrefabPath("impacts/blunt/flesh/"), body.transform.position + Vector3.up, null);      // at least the thud of the hit
+            }
+        }
+
         // How high an animal can jump over or onto things: its own size times the species' jumping strength (config: Movement.JumpHeight).
         internal float JumpClearance(BaseCombatEntity body, SpeciesDef species)
         {
@@ -11370,8 +11545,15 @@ namespace Oxide.Plugins
                 BumpSound(target.transform.position + Vector3.up, "generic");
                 if (d.Animal != null)
                 {
-                    Play(d.Animal, "hurt");
+                    // the charge clip of the species (a head-butt): the old "hurt" clip was the knock-down of the cow, bull and the big cats,
+                    // which threw the charging animal to the ground every time it ran into another animal
+                    ClipRef charge = Clips(d.Animal).FirstOrDefault(c => (Has(c, "charge") || Has(c, "headbutt")) && !Has(c, "death") && !Has(c, "knock"));
+                    if (charge != null)
+                    {
+                        PlayClip(d.Animal, charge);
+                    }
                 }
+                AnimalVoice(d.Body, d.Species, "attack");
             }
             if (chargeHits.Count > 200)
             {
@@ -11604,7 +11786,7 @@ namespace Oxide.Plugins
                 ClearKeyHints(player);                 // the inventory view shows the game's own HUD
                 return;
             }
-            bool hasSkin = form && (d.Body is LivestockAnimal || d.Horse != null);
+            bool hasSkin = form && d.HasSkins;
             string[][] cells = form
                 ? (hasSkin
                     ? new[] { new[] { "F", "Attack" }, new[] { "Ctrl", "Brake" }, new[] { "E", "Feed" }, new[] { "R", "Skin" }, new[] { "Shift", "Sprint" }, new[] { "Space", "Jump" }, new[] { "G", "Night" }, new[] { "X", "Human" } }
@@ -11758,7 +11940,7 @@ namespace Oxide.Plugins
                 return;
             }
             s.HintShown = true;
-            TellRaw(player, "Beastmaster menu: /bm, or hold Ctrl and press R with empty hands. Night vision as an animal: Ctrl + G.");
+            TellRaw(player, "Beastmaster menu: /bm, or hold Ctrl and press R (empty hands, or while riding or as an animal). Night vision as an animal: G or Ctrl + G, with night vision goggles in the inventory.");
         }
 
         // The server cannot rebind keys by itself, but it can ask the player's game to: the menu on F5 and the night vision on H.
@@ -12035,9 +12217,9 @@ namespace Oxide.Plugins
                 {
                     return null;
                 }
-                if (Bm.DriverOf(player) == null && player.GetActiveItem() != null)
+                if (Bm.DriverOf(player) != null || player.GetActiveItem() != null)
                 {
-                    return null;
+                    return null;                       // riders and animal forms: the driver reads Ctrl + R itself
                 }
                 float last;
                 if (nextCombo.TryGetValue(player.userID, out last) && Time.time < last)
@@ -12618,8 +12800,7 @@ namespace Oxide.Plugins
             player.health = Mathf.Max(1f, player.health * (1f - Cfg.Ritual.HealthCost));
             player.metabolism.bleeding.value = Mathf.Max(player.metabolism.bleeding.value, Cfg.Ritual.Bleeding);
             player.metabolism.isDirty = true;
-            FormSmoke(rc.Position);
-            // the animal of the same kind and look, at the body
+            // the animal of the same kind and look, at the body (the human vanishes and the animal appears with the effects of the form itself)
             Vector3 pos = rc.Position;
             pos.y = Mathf.Max(pos.y, TerrainMeta.HeightMap.GetHeight(pos)) + 0.2f;
             BaseCombatEntity animal = GameManager.server.CreateEntity(rc.Species.Prefab, pos, rc.Rotation) as BaseCombatEntity;
@@ -12668,7 +12849,7 @@ namespace Oxide.Plugins
                 rc.Corpse.Kill();
             }
             SpeciesDef species = rc.Species;
-            // the agent needs a moment to settle on the navigation mesh
+            // the agent needs a moment to settle on the navigation mesh (a few physics frames - not felt as a delay)
             timer.Once(0.25f, () =>
             {
                 if (!Valid(animal) || player == null || !player.IsConnected || player.IsDead())
@@ -13389,12 +13570,8 @@ namespace Oxide.Plugins
             {
                 float dt = lastTick > 0f ? Mathf.Min(now - lastTick, 1f) : 0.25f;
                 lastTick = now;
-                if (Bm.Drivers.Count == 0)
+                if (Bm.Drivers.Count == 0 && stats.Count == 0)
                 {
-                    if (stats.Count > 0)
-                    {
-                        OnDisable();
-                    }
                     return;
                 }
                 var present = new HashSet<ulong>();
@@ -13410,6 +13587,10 @@ namespace Oxide.Plugins
                 foreach (ulong id in stats.Keys.Where(k => !present.Contains(k)).ToList())
                 {
                     BasePlayer gone = BasePlayer.FindByID(id);
+                    if ((gone == null || !gone.IsConnected) && Bm.Data.Forms.ContainsKey(id))
+                    {
+                        continue;           // logged out as an animal: the needs and the human's own food and water wait for the return
+                    }
                     if (gone != null && gone.IsConnected)
                     {
                         CuiHelper.DestroyUi(gone, Hud);
@@ -14142,6 +14323,14 @@ namespace Oxide.Plugins
                         }
                         return;
                     }
+                    if (LeftOwnedBy(horse, player))
+                    {
+                        if (player.serverInput.IsDown(BUTTON.DUCK))
+                        {
+                            OpenFormBag(player, LeftForms[horse.net.ID.Value]);     // Ctrl + E: what the horse carried for its player
+                        }
+                        return;                                 // E: the game's own mount of the horse the player has just left
+                    }
                     HorseUse(player, horse);
                 }
                 return;
@@ -14152,6 +14341,10 @@ namespace Oxide.Plugins
                 if (hostDriver.Kind == ControlKind.Form)
                 {
                     TryFormHandle(player, hostDriver);        // the animal is a player: a rider, a leash
+                }
+                else
+                {
+                    TryRideBehind(player, hostDriver);        // a ridden animal with a double saddle carries a second rider
                 }
                 return;
             }
@@ -14200,6 +14393,36 @@ namespace Oxide.Plugins
                 return;
             }
             TryClaim(player, animal, species);
+        }
+
+        // E on an animal somebody rides: with a double saddle the player climbs on behind the rider (owner and team, like the riding rule).
+        private void TryRideBehind(BasePlayer player, Driver host)
+        {
+            if (host == null || host.Kind != ControlKind.Ride || host.Animal == null || host.Player == player)
+            {
+                return;
+            }
+            TamedRecord rec = RecordOf(host.Animal);
+            if (rec == null || rec.Gear.Saddle < 2)
+            {
+                TellRaw(player, "Only an animal with a double saddle carries a second rider.");
+                return;
+            }
+            if (!MayUse(player, rec.Owner, Cfg.Riding.Ownership) && !SameParty(player, host.Player))
+            {
+                Tell(player, "NotYours");
+                return;
+            }
+            host.PruneGuests();
+            if (host.Guests.Count > 0)
+            {
+                TellRaw(player, "There is no room left on the " + host.Species.Display.ToLowerInvariant() + ".");
+                return;
+            }
+            if (host.AddGuest(player, true))
+            {
+                TellRaw(player, "You ride behind " + host.Player.displayName + ". Press Space to get off.");
+            }
         }
 
         // ---------------------------------------------------------------- module (hooks, persistence)
@@ -15431,21 +15654,39 @@ namespace Oxide.Plugins
             }
         }
 
-        // The effect for everybody near, and sent straight to the player's own connection: he hears and sees it whatever the networking of his
-        // body is at that moment (it is hidden right after the transformation).
+        private const float EffectHearRange = 120f;
+
+        // The effect is sent straight to the connection of every player near it, and to the player it is about (the hearer) wherever he is:
+        // exactly once each. It does not depend on the network group the hidden body of the hearer is in at that moment (the body is
+        // parented to the animal and switched to the spectator view right at the transformation, which used to swallow the effect now and then).
         internal void RunEffectFor(string prefab, Vector3 position, BasePlayer hearer)
         {
             if (string.IsNullOrEmpty(prefab))
             {
                 return;
             }
-            if (hearer == null || !hearer.IsConnected || hearer.net == null || hearer.net.connection == null)
+            bool hearerDone = false;
+            foreach (BasePlayer p in BasePlayer.activePlayerList)
             {
-                Effect.server.Run(prefab, position, Vector3.up);
-                return;
+                if (p == null || !p.IsConnected || p.net == null || p.net.connection == null)
+                {
+                    continue;
+                }
+                bool isHearer = hearer != null && p == hearer;
+                if (!isHearer && Vector3.Distance(p.transform.position, position) > EffectHearRange)
+                {
+                    continue;
+                }
+                EffectNetwork.Send(new Effect(prefab, position, Vector3.up), p.net.connection);
+                if (isHearer)
+                {
+                    hearerDone = true;
+                }
             }
-            Effect.server.Run(prefab, position, Vector3.up, hearer.net.connection);
-            EffectNetwork.Send(new Effect(prefab, position, Vector3.up), hearer.net.connection);
+            if (hearer != null && !hearerDone && hearer.IsConnected && hearer.net != null && hearer.net.connection != null)
+            {
+                EffectNetwork.Send(new Effect(prefab, position, Vector3.up), hearer.net.connection);
+            }
         }
 
         // The game has a setting that switches the player's HUD off; the plugin asks the player's game to use it while the player is an animal
@@ -15460,22 +15701,46 @@ namespace Oxide.Plugins
 
         // ---------------------------------------------------------------- positions
 
-        // A standing spot on the ground next to a position (for returning to human form).
+        // A standing spot next to a position (for returning to human form or getting off): on the terrain, or on the floor, roof or rock the
+        // animal stands on - never under a building floor or inside a foundation.
         internal static Vector3 GroundNear(Vector3 position, float radius)
         {
-            Vector3 best = position;
+            int solid = LayerMask.GetMask("World", "Construction", "Deployed", "Tree");
+            int ground = LayerMask.GetMask("Terrain", "World", "Construction", "Deployed");
+            Vector3 best = SurfaceUnder(position, position.y + 2.2f, ground);
             for (int i = 0; i < 12; i++)
             {
                 float angle = i * 30f * Mathf.Deg2Rad;
-                Vector3 p = position + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * radius;
-                p.y = TerrainMeta.HeightMap.GetHeight(p) + 0.3f;
-                if (!Physics.CheckCapsule(p + Vector3.up * 0.6f, p + Vector3.up * 1.6f, 0.4f, LayerMask.GetMask("World", "Construction", "Deployed", "Tree"), QueryTriggerInteraction.Ignore))
+                Vector3 p = SurfaceUnder(position + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * radius, position.y + 2.2f, ground);
+                if (Mathf.Abs(p.y - position.y) > 2.5f)
+                {
+                    continue;                           // a drop or a wall top far from where the animal stood
+                }
+                if (!Physics.CheckCapsule(p + Vector3.up * 0.6f, p + Vector3.up * 1.6f, 0.4f, solid, QueryTriggerInteraction.Ignore))
                 {
                     return p;
                 }
-                best = p;
             }
             return best;
+        }
+
+        // The highest walkable surface under a point, searched from a given height down (the terrain when nothing else is there).
+        internal static Vector3 SurfaceUnder(Vector3 p, float fromY, int mask)
+        {
+            float terrain = TerrainMeta.HeightMap.GetHeight(p);
+            float y = terrain;
+            RaycastHit hit;
+            float top = Mathf.Max(fromY, terrain + 0.5f);
+            if (Physics.Raycast(new Vector3(p.x, top, p.z), Vector3.down, out hit, top - terrain + 1f, mask, QueryTriggerInteraction.Ignore) && hit.normal.y > 0.45f)
+            {
+                y = Mathf.Max(terrain, hit.point.y);
+            }
+            float water = WaterLevel.GetWaterSurface(new Vector3(p.x, y, p.z), true, true, null);
+            if (water > y + 1.2f)
+            {
+                y = water - 1.2f;                       // deep water: the human comes back swimming with the head above the surface, not on the bottom
+            }
+            return new Vector3(p.x, y + 0.1f, p.z);
         }
 
         internal static string Pretty(string text)

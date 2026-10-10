@@ -269,7 +269,7 @@ namespace Oxide.Plugins
                 Driver d;
                 if (Bm.Drivers.TryGetValue(player.userID, out d) && d != null && d.Alive)
                 {
-                    d.ReadInput(input);
+                    d.ReadInput(input);                    // reads the raw keys (with its own edge detection) before anything is taken away
                     if (d.Spectating)
                     {
                         // jump and duck would make the game cycle the spectated player
@@ -335,6 +335,21 @@ namespace Oxide.Plugins
                 if (player != null && Bm.Cfg.Form.Invulnerable && Bm.IsFormPlayer(player))
                 {
                     return true;
+                }
+                BaseNPC2 animal = entity as BaseNPC2;
+                if (animal != null && info != null && Bm.Drivers.Count > 0)
+                {
+                    Driver d = Bm.DriverOfAnimal(animal);
+                    if (d != null && info.damageTypes.Total() > 0.5f)
+                    {
+                        Bm.NextTick(() =>
+                        {
+                            if (d.Alive && Valid(animal) && !animal.IsDead())
+                            {
+                                d.OnHurt();                // the light hit reaction of the species and its voice
+                            }
+                        });
+                    }
                 }
                 return null;
             }
@@ -512,22 +527,21 @@ namespace Oxide.Plugins
                 lookDir = body.transform.forward;
                 lastMouseTime = Time.time;
                 PlayerSettings settings = plugin.SettingsOf(player.userID);
-                string view = kind == ControlKind.Ride
-                    ? plugin.Cfg.Camera.DefaultRideView
-                    : string.IsNullOrEmpty(settings.View) ? plugin.Cfg.Camera.DefaultView : settings.View;
+                // riding keeps the view the player chose last time (G / R or the Controls page); an animal form is always third person
+                string view = string.IsNullOrEmpty(settings.View) ? plugin.Cfg.Camera.DefaultRideView : settings.View;
                 View = kind == ControlKind.Form ? ViewKind.Third : (view == "first" || !plugin.Cfg.Features.ThirdPerson ? ViewKind.First : ViewKind.Third);
             }
 
             public bool Begin()
             {
-                if (Kind == ControlKind.Form)
-                {
-                    bm.FormSmoke(Player.transform.position, Player);          // the human vanishes in the game's effect, at once
-                }
                 if (agent == null && Horse == null)
                 {
                     bm.TellRaw(Player, "This creature cannot be controlled.");
                     return false;
+                }
+                if (Kind == ControlKind.Form)
+                {
+                    bm.FormSmoke(Player.transform.position, Player);          // the human vanishes in the game's effect, at once
                 }
                 if (Animal != null)
                 {
@@ -584,6 +598,10 @@ namespace Oxide.Plugins
             // D = first person from the animal's eyes (spectator camera at the head with the game's eyes view flag).
             private string CurrentPreset()
             {
+                if (Kind == ControlKind.Form)
+                {
+                    return bm.PresetOf(Player) == "B" ? "B" : "A";       // an animal form is played in third person only
+                }
                 return View == ViewKind.First ? "D" : bm.PresetOf(Player);
             }
 
@@ -636,6 +654,8 @@ namespace Oxide.Plugins
                 {
                     tpFlagSet = !Player.HasPlayerFlag(BasePlayer.PlayerFlags.ThirdPersonViewmode);
                     SetThirdPersonFlag(Player, tpFlagSet);
+                    View = tpFlagSet ? ViewKind.Third : ViewKind.First;
+                    bm.SettingsOf(Player.userID).View = tpFlagSet ? "third" : "first";      // the next ride starts in this view
                     bm.Tell(Player, tpFlagSet ? "ViewThird" : "ViewFirst", bm.PresetOf(Player));
                     return;
                 }
@@ -644,6 +664,11 @@ namespace Oxide.Plugins
 
             public void SetView(ViewKind view)
             {
+                if (Kind == ControlKind.Form && view == ViewKind.First)
+                {
+                    bm.TellRaw(Player, "An animal form is played in third person only. Riding an animal has both views.");
+                    return;
+                }
                 if (view == View && (Seat != null || Spectating))
                 {
                     return;
@@ -681,6 +706,17 @@ namespace Oxide.Plugins
 
             public void SetPreset(string preset)
             {
+                if (Kind == ControlKind.Form && preset != "A" && preset != "B")
+                {
+                    bm.TellRaw(Player, "An animal form uses the third person cameras A and B only.");
+                    return;
+                }
+                if (Kind == ControlKind.Ride)
+                {
+                    bm.SettingsOf(Player.userID).Preset = preset;
+                    SetView(preset == "D" || preset == "C" ? ViewKind.First : ViewKind.Third);     // riding: the presets choose first or third person
+                    return;
+                }
                 if (preset == "D")
                 {
                     View = ViewKind.First;
@@ -854,10 +890,10 @@ namespace Oxide.Plugins
             private void EndSpectate()
             {
                 SetViewFlag(Player, BasePlayer.PlayerFlags.EyesViewmode, false);
+                // next to the animal on whatever it stands on (a floor, a roof, the terrain) - never under a building
                 Vector3 drop = Body != null && !Body.IsDestroyed
-                    ? Body.transform.position + Body.transform.right * (Body.bounds.extents.x + 1f)
+                    ? GroundNear(Body.transform.position, Body.bounds.extents.x * ModelScale(Body) + 1f)
                     : Player.transform.position;
-                drop.y = TerrainMeta.HeightMap.GetHeight(drop) + 0.3f;
                 Player.SetParent(null, true, true);
                 SendSpectateTarget(Player, default(NetworkableId));
                 Player.SetPlayerFlag(BasePlayer.PlayerFlags.Spectating, false);
@@ -919,47 +955,68 @@ namespace Oxide.Plugins
 
             // ------------------------------------------------------------ input
 
+            // The buttons of the last input, as the player pressed them. The game's own "just pressed" cannot be used: jump and duck are taken out
+            // of a spectator's input after it is read, so the game would see a held Space or Ctrl as pressed again and again (a held Space jumped
+            // over and over, and Ctrl + R never reached the menu).
+            private int lastButtons;
+            private bool inputSeen;
+
+            private static bool IsSet(int buttons, BUTTON b)
+            {
+                return (buttons & (int)b) != 0;
+            }
+
             public void ReadInput(InputState input)
             {
-                fwd = input.IsDown(BUTTON.FORWARD);
-                back = input.IsDown(BUTTON.BACKWARD);
-                left = input.IsDown(BUTTON.LEFT);
-                right = input.IsDown(BUTTON.RIGHT);
-                jumpDown = input.IsDown(BUTTON.JUMP);
+                int now = input.current.buttons;
+                int prev = inputSeen ? lastButtons : now;      // a key still held from before the control began is no new press
+                inputSeen = true;
+                lastButtons = now;
+                Func<BUTTON, bool> pressed = b => IsSet(now, b) && !IsSet(prev, b);
+                fwd = IsSet(now, BUTTON.FORWARD);
+                back = IsSet(now, BUTTON.BACKWARD);
+                left = IsSet(now, BUTTON.LEFT);
+                right = IsSet(now, BUTTON.RIGHT);
+                bool duck = IsSet(now, BUTTON.DUCK);
                 if (fwd || back || left || right)
                 {
                     InterruptClip();                       // walking or running takes over from the idle animation
                 }
-                if (PoseName != null && (fwd || back || left || right || input.WasJustPressed(BUTTON.JUMP) || input.WasJustPressed(BUTTON.FIRE_THIRD)))
+                if (PoseName != null && (fwd || back || left || right || pressed(BUTTON.JUMP) || pressed(BUTTON.FIRE_THIRD)))
                 {
                     ClearPose();
                 }
-                if (input.WasJustPressed(BUTTON.SPRINT))
+                if (pressed(BUTTON.RELOAD) && duck)
+                {
+                    bm.OpenMenu(Player, "home");          // Ctrl + R: the menu, also while riding or as an animal
+                    return;
+                }
+                if (pressed(BUTTON.SPRINT))
                 {
                     braking = false;
                     SetGait(Mathf.Max(Gait, 1) + 1);
                 }
-                if (input.WasJustPressed(BUTTON.DUCK))
+                if (pressed(BUTTON.DUCK))
                 {
                     Brake();
                 }
-                if (input.WasJustPressed(BUTTON.BACKWARD) && currentSpeed > GaitSpeed(3) * 0.9f)
+                if (pressed(BUTTON.BACKWARD) && currentSpeed > GaitSpeed(3) * 0.9f)
                 {
                     TurnAbout();
                 }
-                if (input.WasJustPressed(BUTTON.JUMP))
+                if (pressed(BUTTON.JUMP))
                 {
                     Jump();
                 }
-                if (input.WasJustPressed(BUTTON.FIRE_THIRD))
+                if (pressed(BUTTON.FIRE_THIRD))
                 {
                     Attack();
                 }
-                if (input.WasJustPressed(BUTTON.RELOAD) && !input.IsDown(BUTTON.DUCK))
+                if (pressed(BUTTON.RELOAD) && !duck)
                 {
                     if (Kind == ControlKind.Form)
                     {
-                        if (Body is LivestockAnimal || Horse != null)
+                        if (HasSkins)
                         {
                             bm.ReskinForm(this);            // R: another skin of the animal (only animals that have skins)
                         }
@@ -969,11 +1026,14 @@ namespace Oxide.Plugins
                         CycleView();
                     }
                 }
-                if (Kind == ControlKind.Form && Spectating && input.WasJustPressed(BUTTON.USE))
+                if (Kind == ControlKind.Form && Spectating && pressed(BUTTON.USE))
                 {
                     bm.InteractFrom(this);
                 }
             }
+
+            // The animals whose look can be changed with R: livestock (coat and pattern) and the horse (breed).
+            public bool HasSkins => Body is LivestockAnimal || Horse != null;
 
             public void SetGait(int gait)
             {
@@ -1262,6 +1322,7 @@ namespace Oxide.Plugins
                     Body.transform.rotation = Quaternion.Euler(0f, moveYaw + yawOffset, 0f);
                 }
                 PlayClip(Animal, clip);
+                bm.AnimalVoice(Body, Species, "attack");          // the stag's clips carry no sound of their own
                 bm.StatsSpend(this, 4f);
                 nextAttack = Time.time + Mathf.Max(bm.Cfg.Combat.Cooldown, p.Delay + 0.4f);
                 float heading = moveYaw;
@@ -1281,6 +1342,24 @@ namespace Oxide.Plugins
             public void OnGesture(string gesture)
             {
                 bm.PerformGesture(this, gesture);
+            }
+
+            // Hurt: the light hit reaction of the species (never its knock-down, which would throw the animal to the ground) and its voice.
+            private float nextHurt;
+
+            public void OnHurt()
+            {
+                if (released || Animal == null || jumping || Time.time < nextHurt || Time.time < fallenUntil)
+                {
+                    return;
+                }
+                nextHurt = Time.time + 1.2f;
+                ClipRef hit = bm.Clips(Animal).FirstOrDefault(c => c.Field.StartsWith("WeakHit", StringComparison.OrdinalIgnoreCase) && !Has(c, "knock") && !Has(c, "death"));
+                if (hit != null && idleState == null && Time.time >= nextAttack - 0.2f)
+                {
+                    PlayClip(Animal, hit);
+                }
+                bm.AnimalVoice(Body, Species, "hurt");
             }
 
             public int NextGestureIndex()
@@ -1396,13 +1475,15 @@ namespace Oxide.Plugins
                 }
             }
 
-            public bool AddGuest(BasePlayer guest)
+            // behindDriver: the animal already carries its own rider (a double saddle) - the guest sits behind him.
+            public bool AddGuest(BasePlayer guest, bool behindDriver = false)
             {
                 if (Animal == null)
                 {
                     return false;
                 }
-                string prefab = Guests.Count == 0 ? bm.Cfg.Riding.SeatPrefab : bm.Cfg.Riding.RearSeatPrefab;
+                bool rear = behindDriver || Guests.Count > 0;
+                string prefab = rear ? bm.Cfg.Riding.RearSeatPrefab : bm.Cfg.Riding.SeatPrefab;
                 BaseEntity entity = GameManager.server.CreateEntity(prefab, Body.transform.position, Body.transform.rotation);
                 BaseMountable seat = entity as BaseMountable;
                 if (seat == null)
@@ -1424,7 +1505,7 @@ namespace Oxide.Plugins
                 }
                 seat.transform.localRotation = rotation;
                 Vector3 place = BackPoint(Animal) - anchor + Vector3.up * bm.SeatLiftOf(Species);
-                if (Guests.Count > 0)
+                if (rear)
                 {
                     place += rotation * Vector3.back * Mathf.Max(0.55f, Body.bounds.extents.z * 0.5f);
                 }
@@ -1510,8 +1591,6 @@ namespace Oxide.Plugins
             // ------------------------------------------------------------ jumping and falling
 
             private float nextWallCrash;
-            private bool jumpDown;
-            private float jumpHold;
             private bool platformLanding;
             private bool offMesh;
             private float nextMeshCheck;
@@ -1531,9 +1610,9 @@ namespace Oxide.Plugins
                     return;
                 }
                 InterruptClip();
+                ClearPose();
                 float k = ModelScale(Body);
                 float distance = bm.Cfg.Movement.JumpDistance * Mathf.Clamp(Body.bounds.size.z / 2.4f, 0.45f, 1.6f) * k;
-                float landProbeClear = bm.JumpClearance(Body, Species);
                 float height = bm.Cfg.Movement.JumpHeight * Mathf.Clamp(Body.bounds.size.y / 1.5f, 0.4f, 1.3f) * k;
                 if (Species.Id == "panther")
                 {
@@ -1548,7 +1627,6 @@ namespace Oxide.Plugins
                 jumpFrom = Body.transform.position;
                 jumpCollision = false;
                 platformLanding = false;
-                jumpHold = 0f;
                 float radius = Mathf.Clamp(Mathf.Min(Body.bounds.extents.x, Body.bounds.extents.z) * 0.6f * k, 0.15f, 0.7f);
                 Vector3 origin = jumpFrom + Vector3.up * (radius + 0.25f * k);
                 RaycastHit hit;
@@ -1603,8 +1681,8 @@ namespace Oxide.Plugins
                     // something to stand on where the jump ends (a low floor, a crate, a rock the sphere sailed over)?
                     RaycastHit stand;
                     float ground = TerrainMeta.HeightMap.GetHeight(to);
-                    if (Physics.Raycast(to + Vector3.up * (landProbeClear + 2f), Vector3.down, out stand, landProbeClear + 5f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore)
-                        && stand.normal.y >= 0.35f && stand.point.y > ground + 0.12f && stand.point.y <= jumpFrom.y + landProbeClear + 0.1f
+                    if (Physics.Raycast(to + Vector3.up * (clear + 2f), Vector3.down, out stand, clear + 5f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore)
+                        && stand.normal.y >= 0.35f && stand.point.y > ground + 0.12f && stand.point.y <= jumpFrom.y + clear + 0.1f
                         && !Physics.CheckCapsule(stand.point + Vector3.up * 0.5f, stand.point + Vector3.up * Mathf.Max(0.9f, Body.bounds.size.y * k * 0.6f), 0.3f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore))
                     {
                         to = stand.point + Vector3.up * 0.05f;
@@ -1850,6 +1928,38 @@ namespace Oxide.Plugins
                 nextWallCrash = Mathf.Max(nextWallCrash, Time.time + seconds);
             }
 
+            // Is there an object surface (a floor, a step, a crate) right under the animal that is higher than the navigation mesh found nearby?
+            private bool StandsAbove(Vector3 here, float navY)
+            {
+                RaycastHit g;
+                return Physics.Raycast(here + Vector3.up * 0.6f, Vector3.down, out g, 1.6f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore)
+                    && g.normal.y > 0.3f && g.point.y > navY + 0.2f;
+            }
+
+            // The animal stands where the plugin moved it, without the navigation mesh under it (a platform, a jump): the agent takes the body
+            // again at the nearest point of the mesh, so that the animal's own AI does not stay frozen with a switched-off agent.
+            private void RestoreAgent()
+            {
+                if (agent == null || Animal == null || Body == null || Body.IsDestroyed)
+                {
+                    return;
+                }
+                bool wasOff = offMesh || jumping || !agent.updatePosition;
+                offMesh = false;
+                jumping = false;
+                agent.IsJumping = false;
+                agent.updatePosition = true;
+                if (!wasOff || Body.IsDead())
+                {
+                    return;
+                }
+                Vector3 onNav;
+                if (Animal.TrySampleNavmesh(Body.transform.position, 4f, out onNav))
+                {
+                    agent.WarpToWorldPosition(onNav);
+                }
+            }
+
             // Walking on a surface without a navigation mesh (the top of a wall, a crate, a floor): the animal follows the ground under it.
             private void OffMeshMove(Vector3 next, float dt)
             {
@@ -1938,7 +2048,10 @@ namespace Oxide.Plugins
                     nextMeshCheck = Time.time + 0.3f;
                     Vector3 onNav;
                     Vector3 here = Body.transform.position;
-                    if (Animal.TrySampleNavmesh(here, 0.8f, out onNav) && new Vector2(onNav.x - here.x, onNav.z - here.z).magnitude < 0.5f && Mathf.Abs(onNav.y - here.y) < 0.7f)
+                    // back onto the navigation mesh only where the animal really stands on that ground: next to a low platform the mesh of the
+                    // ground beside it is close too, and stepping onto it there pulled the animal down through the platform
+                    if (Animal.TrySampleNavmesh(here, 0.8f, out onNav) && new Vector2(onNav.x - here.x, onNav.z - here.z).magnitude < 0.5f && Mathf.Abs(onNav.y - here.y) < 0.7f
+                        && !StandsAbove(here, onNav.y))
                     {
                         agent.updatePosition = true;
                         if (agent.WarpToWorldPosition(onNav))
@@ -2221,7 +2334,7 @@ namespace Oxide.Plugins
                 }
                 if (Body != null && !Body.IsDestroyed && agent != null)
                 {
-                    agent.IsJumping = false;
+                    RestoreAgent();
                     agent.Unpause(this);
                 }
                 if (Body != null && !Body.IsDestroyed)
@@ -2261,6 +2374,11 @@ namespace Oxide.Plugins
                         Rust.Ai.SimpleAIMemory.PlayerIgnoreList.Remove(Player);
                     }
                     ClearView();
+                    if (!form && Player.IsConnected && !Player.IsDead() && Valid(Body))
+                    {
+                        // the rider gets off beside the animal, standing on what the animal stands on
+                        Player.Teleport(GroundNear(Body.transform.position, Body.bounds.extents.x * ModelScale(Body) + 0.9f));
+                    }
                     Player.SendNetworkUpdateImmediate();
                     bm.Drivers.Remove(Player.userID);
                 }
@@ -2268,7 +2386,7 @@ namespace Oxide.Plugins
                 {
                     if (agent != null)
                     {
-                        agent.IsJumping = false;
+                        RestoreAgent();
                         if (swimSet)
                         {
                             agent.IsSwimming = false;

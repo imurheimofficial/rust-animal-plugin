@@ -306,11 +306,11 @@ namespace Oxide.Plugins
                 return;
             }
             RunEffect(FindPrefabPath("fx", "heart") ?? FindPrefabPath("fx", "sparkle"), female.transform.position + Vector3.up * 1.5f);
-            reply("The " + (female == me ? "you are" : "she is") + " pregnant now. A young one will be born in time.");
+            reply(female == me ? "You are pregnant now. A young one will be born in time." : "She is pregnant now. A young one will be born in time.");
             Driver other2 = DriverOfAnimal(partner);
             if (other2 != null)
             {
-                TellRaw(other2.Player, "Your mate " + (female == partner ? "is" : "makes you") + " pregnant.");
+                TellRaw(other2.Player, female == partner ? "You are pregnant now. A young one will be born in time." : "Your mate is pregnant now.");
             }
         }
 

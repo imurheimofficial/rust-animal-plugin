@@ -273,7 +273,7 @@ namespace Oxide.Plugins
             sb.Append("Beastmaster is ").Append(OnOff(Active)).Append(".\n");
             sb.Append(d == null ? "You are on foot." : d.Kind == ControlKind.Ride ? "You are riding a " + d.Species.Display + "." : "You are in the form of a " + d.Species.Display + ".").Append('\n');
             sb.Append("Your animals: ").Append(OwnedCount(player.userID)).Append(" of ").Append(Cfg.Taming.MaxOwned).Append(".\n");
-            sb.Append("Menu layer: ").Append(HasMenuAccess(player) ? "player + control (Admin, Spawn, Aim tools, Players)" : "player").Append("   |   open it with F5 or /bm\n\n");
+            sb.Append("Menu layer: ").Append(HasMenuAccess(player) ? "player + control (Admin, Spawn, Aim tools, Players)" : "player").Append("   |   open it with Ctrl + R or /bm\n\n");
             sb.Append("<b>Features on this server</b>\n").Append(FeatureLine()).Append("\n\n");
             sb.Append("<b>Where to start</b>\n");
             sb.Append("Help / Guide explains everything, generated from this server's settings.\n");
@@ -316,7 +316,7 @@ namespace Oxide.Plugins
             add("combat", "Combat and rear attacks", HelpCombat);
             add("ritual", "Transformation ritual", HelpRitual);
             add("camera", "Third person", HelpCamera);
-            add("nightvision", "Night vision", p => "Night vision goggles worn by your human body keep their vision effect while you are an animal: the effect belongs to the human body, which is only hidden, not removed.\n\nBelt items, clothes and the backpack stay available in animal form - open the inventory as usual. Held items are never visible on the animal.");
+            add("nightvision", "Night vision", p => "<b>Night vision</b>\n\nThe game's own Night Vision Goggles give the vision. Carry a pair in your inventory: as an animal G (or Ctrl + G) puts them on your hidden human head and takes them off again; the Night button on the Controls page does the same, and H after a one-time bind h bm.nv in the F1 console.\n\nWithout goggles in the inventory nothing happens and you get a short message. The goggles need the head slot: take your helmet or hat off first.");
             add("spray", "Spray can", HelpSpray);
             add("relations", "Animal relations", HelpRelations);
             add("species", "Species cards", p =>
@@ -337,7 +337,7 @@ namespace Oxide.Plugins
                 + "<b>Quick start</b>\n"
                 + "1. Tame an animal (Help - Taming).\n"
                 + "2. Press E on it: the gear panel opens. Put a saddle into slot 1 and close the panel.\n"
-                + "3. Press E again to mount. W/A/S/D move, Shift faster, F attack, G changes the view, X gets you off.\n"
+                + "3. Press E again to mount. W/A/S/D move, Shift faster, F attack, G or R switch first / third person, X gets you off.\n"
                 + "4. Command it: /bm cmd follow | wait | guard | attack | release.\n\n"
                 + "<b>Switched on here</b>\n" + FeatureLine() + "\n\n"
                 + "Open this menu any time with /bm.";
@@ -345,20 +345,20 @@ namespace Oxide.Plugins
 
         private string HelpControls(BasePlayer p)
         {
-            return "<b>Keys while riding or in animal form</b>\n"
-                + "W/A/S/D  move (turning follows the camera when you look around)\n"
-                + "Shift  go faster - each press of the gait key climbs one step: walk, jog, run, sprint, full sprint\n"
-                + "Ctrl  brake (hold with A or D for the stop-and-turn)\n"
+            return "<b>Keys as an animal (third person) and while riding</b>\n"
+                + "W/A/S/D  move\n"
+                + "Shift  go faster - each press climbs one gait: walk, jog, run, sprint, full sprint\n"
+                + "Ctrl  brake (with A or D at a run: the stop-and-turn)\n"
                 + "S while running  turn around 180 degrees (a slide for bulls and rams)\n"
-                + "Space  jump (" + Cfg.Movement.JumpDistance + " m far, " + Cfg.Movement.JumpHeight + " m high, cooldown " + Cfg.Movement.JumpCooldown + " s)\n"
-                + "F  attack - look backwards first for the rear attack\n"
-                + "G or R  change view (third / first person)\n"
-                + "B  gesture wheel: lie down (thumbs down, surrender), sit (ok, clap), roar (wave, victory, thumbs up), look around (shrug and the rest) - /bm lie, sit, roar, look, stand do the same\n"
-                + "E  use: open doors, loot containers, eat what lies in front of you, drink from fresh water, lead tamed animals\n"
-                + "Ctrl + G  night vision (put goggles from your inventory on / off) - also the Night button in Controls\n"
-                + "Ctrl + R  this menu (empty hands), also F5 and H after the one-time bind\n"
-                + "X  get off the animal / return to human form\n\n"
-                + "<color=#9aa58f>The server cannot rebind keys by itself; it asks your game to bind F5 and H when you join. If yours refuses, type bind f5 bm.menu and bind h bm.nv in the F1 console.</color>";
+                + "Space  jump - over fences and onto raised surfaces: floors, roofs, crates, rocks (cooldown " + Cfg.Movement.JumpCooldown + " s)\n"
+                + "F  attack - turn the camera behind the animal for the rear attack (kicks)\n"
+                + "E  as an animal: eat food on the ground, drink fresh water, graze, pick things up into the animal's bag, open doors and containers, lead your tamed animals\n"
+                + "R  as an animal: another skin (cow, bull, sheep, ram, horse) - while riding: first / third person\n"
+                + "G  as an animal: night vision (goggles from your inventory) - while riding: first / third person\n"
+                + "B  gesture wheel: lie down, sit, roar, look around - /bm lie, sit, roar, look, stand do the same\n"
+                + "X  back to human / get off. X at the animal you have left: become it again. E at it: ride it. Ctrl + E at it: its bag\n"
+                + "Ctrl + R  this menu (empty hands, riding or as an animal), also /bm\n\n"
+                + "<color=#9aa58f>F5 and H need a one-time bind in the F1 console: bind f5 bm.menu and bind h bm.nv (the game keeps them).</color>";
         }
 
         private string HelpRiding(BasePlayer p)
@@ -449,13 +449,13 @@ namespace Oxide.Plugins
 
         private string HelpCamera(BasePlayer p)
         {
-            return "<b>Third person</b> " + OnOff(Cfg.Features.ThirdPerson) + "\n\n"
-                + "Default: " + Cfg.Camera.DefaultView + " person as an animal, " + Cfg.Camera.DefaultRideView + " person when riding. G (or R) switches.\n"
-                + "Look around with the mouse; the camera stays where you put it and turns with the animal.\n"
-                + "Turn the camera behind you to see the animal from the front.\n\n"
-                + "<b>Presets</b> (Controls page, or /bm preset a|b|c|d)\n"
-                + "A  spectator camera around the animal (default)\nB  A plus the game's own third-person flag\nC  camera at the animal's head\nD  first person from the animal's head\n\n"
-                + "In third person, interactions (doors, loot) start from the animal's head; in first person they start from the crosshair.";
+            return "<b>Camera</b> " + OnOff(Cfg.Features.ThirdPerson) + "\n\n"
+                + "As an animal you play in third person only. Riding has both views: " + Cfg.Camera.DefaultRideView + " person at first, G or R switches and the choice is kept.\n"
+                + "Look around with the mouse; the camera stays where you put it and turns with the animal. Turn it behind the animal for the rear attack.\n\n"
+                + "<b>Animal camera</b> (Controls page, or /bm preset a|b)\n"
+                + "A  spectator camera around the animal (default)\nB  A plus the game's own third-person flag\n"
+                + "Height: /bm cam up | down | reset (yours), an admin keeps it for everybody with /bm cam save.\n\n"
+                + "As an animal, interactions (doors, loot, food) start from the animal's head.";
         }
 
         private string HelpSpray(BasePlayer p)
@@ -500,10 +500,11 @@ namespace Oxide.Plugins
             return "<b>FAQ / troubleshooting</b>\n\n"
                 + "<b>I cannot mount.</b> The animal must be tamed, fitted with a saddle and within " + Cfg.Riding.MountDistance + " m; you need the permission beastmaster.ride.\n\n"
                 + "<b>The animal does not follow.</b> Its state may be wait or guard: /bm cmd follow. Followers further than " + (Cfg.Taming.TeleportDistance > 0f ? Cfg.Taming.TeleportDistance + " m are moved next to you." : "that stay behind.") + "\n\n"
-                + "<b>The camera feels wrong.</b> Try another preset: /bm preset b (or c, d). G switches between third and first person.\n\n"
+                + "<b>The camera feels wrong.</b> As an animal: /bm cam up or down, or the other preset (/bm preset b). Riding: G or R switches between first and third person.\n\n"
+                + "<b>The rider sits too high or too low.</b> An admin sits on that species and types /bm seat up or /bm seat down (10 cm per step, kept for the species).\n\n"
                 + "<b>The animal has no attack.</b> Rabbits, squirrels, frogs and crabs have no attack; F plays their call.\n\n"
                 + "<b>How do I get back?</b> X returns you to human form. If you logged out as an animal, you wake up as the animal.\n\n"
-                + "<b>F5 does nothing.</b> The server asks your game to bind F5 when you join. If it refused, type bind f5 bm.menu once in the F1 console, or use /bm.\n\n"
+                + "<b>F5 does nothing.</b> A server cannot bind keys in your game. Use Ctrl + R or /bm, or type bind f5 bm.menu once in the F1 console (the game keeps it).\n\n"
                 + "<b>Something is broken.</b> Tell an admin: they can run bm.selftest and send you the result.";
         }
 
@@ -753,26 +754,32 @@ namespace Oxide.Plugins
             Driver d = DriverOf(player);
             UiLabel(c, parent, "<size=18><b>Controls and camera</b></size>", 14, 0.02f, 0.91f, 0.7f, 0.99f, TextAnchor.MiddleLeft);
             UiLabel(c, parent, HelpControls(player).Split(new[] { "\n\n" }, StringSplitOptions.None)[0], 13, 0.03f, 0.43f, 0.97f, 0.90f);
-            string view = string.IsNullOrEmpty(s.View) ? Cfg.Camera.DefaultView : s.View;
-            string preset = PresetOf(player);
-            UiLabel(c, parent, "View as an animal:", 13, 0.03f, 0.34f, 0.28f, 0.41f, TextAnchor.MiddleLeft);
+            string view = string.IsNullOrEmpty(s.View) ? Cfg.Camera.DefaultRideView : s.View;
+            string preset = PresetOf(player) == "B" ? "B" : "A";
+            UiLabel(c, parent, "View when riding:", 13, 0.03f, 0.34f, 0.28f, 0.41f, TextAnchor.MiddleLeft);
             UiButton(c, parent, "third person", "bm.ui view third", 0.29f, 0.35f, 0.47f, 0.41f, view == "third" ? ColNavOn : ColBtn);
             UiButton(c, parent, "first person", "bm.ui view first", 0.48f, 0.35f, 0.66f, 0.41f, view == "first" ? ColNavOn : ColBtn);
-            UiLabel(c, parent, "Third person camera:", 13, 0.03f, 0.26f, 0.28f, 0.33f, TextAnchor.MiddleLeft);
-            string[] presets = { "A", "B", "C", "D" };
+            if (d != null && d.Kind == ControlKind.Ride && IsAdmin(player))
+            {
+                UiButton(c, parent, "Seat up", "bm.ui seat up", 0.68f, 0.35f, 0.82f, 0.41f, ColBtn, 12);
+                UiButton(c, parent, "Seat down", "bm.ui seat down", 0.83f, 0.35f, 0.985f, 0.41f, ColBtn, 12);
+            }
+            UiLabel(c, parent, "Animal camera:", 13, 0.03f, 0.26f, 0.28f, 0.33f, TextAnchor.MiddleLeft);
+            string[] presets = { "A", "B" };
             for (int i = 0; i < presets.Length; i++)
             {
                 UiButton(c, parent, "preset " + presets[i], "bm.ui preset " + presets[i], 0.29f + i * 0.13f, 0.27f, 0.405f + i * 0.13f, 0.33f, preset == presets[i] ? ColNavOn : ColBtn);
             }
-            UiButton(c, parent, "Cam up", "bm.ui cam up", 0.82f, 0.27f, 0.895f, 0.33f, ColBtn, 12);
-            UiButton(c, parent, "Cam down", "bm.ui cam down", 0.90f, 0.27f, 0.985f, 0.33f, ColBtn, 12);
-            UiLabel(c, parent, "<size=11><color=#9aa58f>A = spectator camera around the animal | B = A + third-person flag | C = camera at the head | D = first person from the head</color></size>", 11, 0.03f, 0.20f, 0.97f, 0.26f);
+            UiButton(c, parent, "Cam up", "bm.ui cam up", 0.58f, 0.27f, 0.70f, 0.33f, ColBtn, 12);
+            UiButton(c, parent, "Cam down", "bm.ui cam down", 0.71f, 0.27f, 0.83f, 0.33f, ColBtn, 12);
+            UiButton(c, parent, "Cam reset", "bm.ui cam reset", 0.84f, 0.27f, 0.985f, 0.33f, ColBtn, 12);
+            UiLabel(c, parent, "<size=11><color=#9aa58f>An animal is played in third person: A = spectator camera around the animal | B = A + the game's third-person flag. Riding has both views (G or R).</color></size>", 11, 0.03f, 0.20f, 0.97f, 0.26f);
             UiButton(c, parent, (s.RefuseSaddle ? "[x] " : "[  ] ") + "Refuse saddles from others while I am an animal", "bm.ui setting refuse", 0.03f, 0.12f, 0.55f, 0.19f, s.RefuseSaddle ? ColOn : ColBtn, 12);
-            UiButton(c, parent, (s.ShowHud ? "[x] " : "[  ] ") + "Show the animal HUD", "bm.ui setting hud", 0.57f, 0.12f, 0.97f, 0.19f, s.ShowHud ? ColOn : ColBtn, 12);
+            UiButton(c, parent, (s.ShowHud ? "[x] " : "[  ] ") + "Show the key hints", "bm.ui setting hud", 0.57f, 0.12f, 0.97f, 0.19f, s.ShowHud ? ColOn : ColBtn, 12);
             if (d != null)
             {
                 UiButton(c, parent, d.Kind == ControlKind.Ride ? "Get off" : "Back to human", "bm.ui revert", 0.03f, 0.03f, 0.27f, 0.10f, ColWarn);
-                string[][] actions = { new[] { "Lie", "lie" }, new[] { "Sit", "sit" }, new[] { "Roar", "roar" }, new[] { "Look", "look" }, new[] { "Stand", "stand" }, new[] { "Night (H)", "nv" }, new[] { "Breed", "breed" } };
+                string[][] actions = { new[] { "Lie", "lie" }, new[] { "Sit", "sit" }, new[] { "Roar", "roar" }, new[] { "Look", "look" }, new[] { "Stand", "stand" }, new[] { "Night (G)", "nv" }, new[] { "Breed", "breed" } };
                 for (int a = 0; a < actions.Length; a++)
                 {
                     string command = actions[a][1] == "nv" || actions[a][1] == "breed" ? "bm.ui " + actions[a][1] : "bm.ui gesture " + actions[a][1];
@@ -1049,9 +1056,10 @@ namespace Oxide.Plugins
                     break;
                 case "view":
                     {
+                        // the view of riding (an animal form is third person only)
                         SettingsOf(player.userID).View = arg1 == "first" ? "first" : "third";
                         Driver d = DriverOf(player);
-                        if (d != null)
+                        if (d != null && d.Kind == ControlKind.Ride)
                         {
                             d.SetView(arg1 == "first" ? ViewKind.First : ViewKind.Third);
                         }
@@ -1060,10 +1068,10 @@ namespace Oxide.Plugins
                 case "preset":
                     {
                         string preset = arg1.ToUpperInvariant();
-                        if (preset == "A" || preset == "B" || preset == "C" || preset == "D")
+                        if (preset == "A" || preset == "B")
                         {
                             Driver d = DriverOf(player);
-                            if (d != null) d.SetPreset(preset); else SettingsOf(player.userID).Preset = preset;
+                            if (d != null && d.Kind == ControlKind.Form) d.SetPreset(preset);
                             SettingsOf(player.userID).Preset = preset;
                         }
                         break;
@@ -1072,9 +1080,19 @@ namespace Oxide.Plugins
                     {
                         PlayerSettings s = SettingsOf(player.userID);
                         if (arg1 == "refuse") s.RefuseSaddle = !s.RefuseSaddle;
-                        else if (arg1 == "hud") s.ShowHud = !s.ShowHud;
+                        else if (arg1 == "hud")
+                        {
+                            s.ShowHud = !s.ShowHud;
+                            if (s.ShowHud) DrawKeyHints(player); else ClearKeyHints(player);       // at once, not at the next redraw
+                        }
                         break;
                     }
+                case "seat":
+                    if (arg1 == "up" || arg1 == "down")
+                    {
+                        SeatCommand(player, new[] { arg1 }, text => TellRaw(player, text));
+                    }
+                    break;
                 case "revert":
                     StopControl(player, "menu");
                     break;
@@ -1266,7 +1284,7 @@ namespace Oxide.Plugins
         {
             "close", "noop", "page", "topic", "species", "tpage", "list", "search", "clearsearch", "lookhelp", "animal", "all", "view", "preset", "setting",
             "revert", "plugin", "feature", "species_toggle", "spawnspecies", "spawncount", "spawnmode", "spawnsaddle", "spawn", "spawnclear", "grant", "revoke",
-            "bossmini", "spawnboss", "aim", "gesture", "cam", "nv", "breed", "rename", "renameset"
+            "bossmini", "spawnboss", "aim", "gesture", "cam", "nv", "breed", "rename", "renameset", "seat"
         };
 
         // Builds every page and every Help topic for a stand-in player, checks the JSON and that every button names a known action.
