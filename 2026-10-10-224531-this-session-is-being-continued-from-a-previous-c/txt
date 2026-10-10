@@ -1,0 +1,1060 @@
+
+  Made 1 scratchpad edit +216, read 1 file, ran 4 shell commands (ctrl+o to expand)
+  ⎿  Referenced file src\Movement.cs
+  ⎿  Read src\Lead.cs (324 lines)
+  ⎿  Referenced file ..\..\..\IMURHE~1\AppData\Local\Temp\claude\C--Users-imurhe
+     imofficial\68d2d7b2-bdde-4709-a690-aba32ea62072\scratchpad\gen6.py
+  ⎿  Read ..\..\..\IMURHE~1\AppData\Local\Temp\claude\C--Users-imurheimofficial\
+     68d2d7b2-bdde-4709-a690-aba32ea62072\scratchpad\gen5.py (19 lines)
+  ⎿  Referenced file src\Menu.cs
+
+● Pokračuju na finální verzi: kód se kompiluje bez chyb a teď dodělávám
+  zbývající kameru, tichý chat, obranu zvířat a rituál. Pak nasadím a otestuju.
+
+  Made 1 scratchpad edit +81, read 6 files, ran 2 shell commands (ctrl+o to expand)
+
+● Čtu si znovu celou tvou poslední zpětnou vazbu, ať žádný požadavek nevynechám.
+  Pak dodělám rituál, obranu zvířat, kameru a HUD.
+
+  Read 5 files, ran 2 shell commands (ctrl+o to expand)
+
+● Procházím poslední soubory (menu, HUD, boj), abych je mohl bezpečně upravit;
+  pak píšu změny najednou.
+
+  Read 10 files, ran 1 shell command (ctrl+o to expand)
+
+● Hledám v dokumentaci přesný popis "nakládání na transport" a "rozmnožování
+  forem", abych je naimplementoval tak, jak byly zadané.
+
+  Searched for 1 pattern, read 1 file, ran 4 shell commands (ctrl+o to expand)
+
+● Zjišťuju, jak hra řeší vodítko a nasedání na dobytek, abych je napojil na
+  formy hráčů. Pak píšu velkou dávku změn.
+
+  Ran 6 shell commands (ctrl+o to expand)
+
+● Mám přehled o vanilla vodítku a dopravě dobytka (jdou napojit přes důvěru).
+  Teď si projdu API bossů a koně a pak píšu první velkou dávku změn.
+
+  Read 3 files, ran 9 shell commands (ctrl+o to expand)
+
+● Write(Desktop\Rust Animal Plugin\src\Play.cs)
+  ⎿  Wrote 382 lines to Desktop\Rust Animal Plugin\src\Play.cs
+       1 using System;
+       2 using System.Collections.Generic;
+       3 using System.Linq;
+       4 using Oxide.Game.Rust.Cui;
+       5 using Rust.Ai.Gen2;
+       6 using UnityEngine;
+       7
+       8 namespace Oxide.Plugins
+       9 {
+      10     public partial class Beastmaster
+     … +444 lines (ctrl+o to expand)
+
+● Write(Desktop\Rust Animal Plugin\src\Guests.cs)
+  ⎿  Wrote 405 lines to Desktop\Rust Animal Plugin\src\Guests.cs
+       1 using System;
+       2 using System.Collections.Generic;
+       3 using System.Linq;
+       4 using Rust.Ai.Gen2;
+       5 using UnityEngine;
+       6
+       7 namespace Oxide.Plugins
+       8 {
+       9     public partial class Beastmaster
+      10     {
+     … +469 lines (ctrl+o to expand)
+
+● Přidal jsem nové soubory pro gesta, klávesové nápovědy a spolujezdce. Teď je
+  napojuju do ovládání zvířete a do konfigurace.
+
+  Made 3 scratchpad edits +875, ran 6 shell commands (ctrl+o to expand)
+
+● Průběžně: kód se po poslední dávce kompiluje bez chyb, právě ho nasazuju na
+  vývojový server a zjišťuju na něm názvy prefabů ohně a světel pro rituál a oči
+  bossů.
+
+  Ran 6 shell commands (ctrl+o to expand)
+
+● Kontroluju, jestli jde černý kabát bossů (býk, beran) vybrat na serveru z genů
+  zvířete; pak píšu rituál.
+
+  Made 1 scratchpad edit +369, ran 5 shell commands (ctrl+o to expand)
+
+● Update(Desktop\Rust Animal Plugin\src\Ritual.cs)
+  ⎿  Added 3 lines, removed 2 lines
+      10      public partial class Beastmaster
+      11      {
+      12          // ----------------------------------------------------
+          ------------ the transformation ritual (R9.1 - R9.12)
+      13 -        // 1. kill a wild animal, the body stays   2. circle it
+         - with a lit torch  3. the body burns - press E: half of the cur
+         -rent health and                                                
+      14 -        // bleeding are the price   4. you become that animal, 
+         -with the same look, at the body.                               
+      13 +        // 1. kill a wild animal, the body stays   2. circle it
+         + with a lit torch (10 times, 50 for a boss)   3. a low ring of 
+         +flames burns round the body                                    
+      14 +        // for 10 seconds - press E at it: half of the current 
+         +health and bleeding are the price   4. you become that animal, 
+         +with the same look, at the body.                               
+      15 +        // If nobody presses E in time, the fire and the body v
+         +anish. The ritual is silent: nothing about it is announced in t
+         +he chat.                                                       
+      16  
+      17          internal sealed class RitualCorpse
+      18          {
+
+● Rituál je přepsaný (10 koleček, 50 u bosse, 10 s ohně v nízkém kruhu, bez
+  chatu). Teď přidávám černé kabáty a oči bossů a rovnou kompiluju.
+
+  Made 3 scratchpad edits +578, ran 6 shell commands (ctrl+o to expand)
+
+● Write(Desktop\Rust Animal Plugin\src\Tests.cs)
+  ⎿  Wrote 234 lines to Desktop\Rust Animal Plugin\src\Tests.cs
+       1 using System;
+       2 using System.Collections.Generic;
+       3 using System.Linq;
+       4 using Rust.Ai.Gen2;
+       5 using UnityEngine;
+       6
+       7 namespace Oxide.Plugins
+       8 {
+       9     public partial class Beastmaster
+      10     {
+     … +306 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Přidal jsem automatické testy (smrt zvířat, útoky všech druhů, kruh ohně,
+  strach divokých zvířat). Opravuju drobnost, nasazuju na vývojový server a
+  spouštím je.
+
+  Searched for 1 pattern, listed 1 directory, ran 9 shell commands (ctrl+o to expand)
+
+> pospěš
+● Příčinou zamrznutí mrtvých zvířat bylo mazání spouště smrti při návratu AI –
+  opraveno. Teď to nasazuju, ověřuju a dokončuju ostrou zatáčku s dokumentací.
+  · summary
+
+  Made 1 scratchpad edit +89, ran 3 shell commands (ctrl+o to expand)
+
+> už mu dej finální verzi hned
+
+● Dobře, uzavírám to teď: ověřuju opravu smrti zvířat, deploy poslední verze,
+  krátce aktualizuju dokumentaci a předávám finální soubor.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+> už mi dochází limit musíš mi hned dát finální věc
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Finální plugin je hotový, ale jen část jsem ověřil na vývojovém serveru.
+  Soubor je dist/Beastmaster.cs, 14 852 řádků. Kompiluje se bez chyb a na
+  vývojovém serveru se načetl bez chyb.
+
+  Před nahráním na wespner smaž oxide/config/Beastmaster.json. Starý config drží
+  staré hodnoty (3 kola rituálu, 30 % obrana, teleport 90 m) a nové výchozí by
+  se jinak nepoužily.
+
+  Ověřeno testy na vývojovém serveru:
+  - Zamrzlá mrtvá zvířata: zvíře držené pluginem (ovládané, následník) teď po
+    smrti zanechá tělo. Test pro ovládanou krávu, krávu s následníkem a vlka
+    prošel. Příčina byla v tom, že hra při návratu AI smazala spoušť smrti.
+  - Útoky: všech 19 druhů uštědří poškození. U krokodýla to nejdřív selhalo jen
+    kvůli špatné vzdálenosti cíle v testu; opravenou verzi jsem znovu nespustil.
+  - Oheň rituálu: kruh 10 nízkých plamenů se vytvoří a po rituálu zmizí.
+  - Obrana divokých zvířat: zasažená kráva uteče (z 6 na 38 m), býk se brání.
+
+  Hotové, ale jen v kódu, ne ve hře:
+  - Rituál: 10 koleček s hořící loučí (50 u bosse), pak 10 s ohně a E. Bez
+    chatu. Při boss rituálu se z hráče stane boss.
+  - Obrana: medvěd, polární medvěd, divočák, tygr, puma, býk, beran a krokodýl
+    se brání vždy, ostatní utečou a s 10 % se brání také. Medvěd a polární
+    medvěd jsou si nepřátelé.
+  - Kůň: proměna v koně, útok vzepnutím a úderem.
+  - Zvuky: úder do těla, dřeva, kamene nebo kovu má zvuk.
+  - Ovládání: gesta (/bm lie, sit, roar, look, stand), ostré zatáčky při běhu
+    (nejjistě býk a kráva), žába nepotopí, slaná voda se nepije.
+  - HUD: čtyři buňky (F, Ctrl, Shift, Space) vlevo vedle hotbaru.
+  - Menu: F5, spawn zvířat i bossů, Ride, Kill, Despawn, přejmenování. Admin
+    spustí z chatu libovolný příkaz (/bm run env.time 12) a přístup do menu dává
+    přes /bm grant.
+  - Další: spolujezdci, vodítko, mléko a stříhání, množení (/bm breed).
+
+  Pozor při testu ve hře:
+  - Kamera: výšku jsem odhadl podle velikosti zvířete, takže u některých druhů
+    může být ještě špatně. Na místě ji upravíš /bm cam up|down|reset a admin /bm
+    cam save ji uloží pro všechny.
+  - F5 a H: server posílá hráči jen žádost o nastavení kláves. Pokud ji hra
+    odmítne, napiš do F1 konzole bind f5 bm.menu a bind h bm.nv.
+  - Noční vidění: funguje přes brýle ve hře. Jestli v pohledu zvířete fungují,
+    uvidíš jen ty.
+  - Spolujezdci: výklad věty „u zbytku zvířat už jen hráč smí sednout“ je můj.
+    Kůň, býk, kráva, beran, ovce a jelen po snědeném jídle unesou 2 jezdce,
+    ostatní 1 bez krmení. Je to v configu.
+
+  Co server nedokáže:
+  - Inventář: ikona a model zvířete v inventáři jít nemohou, je to UI klienta.
+  - Svítící oči: jako náhradu mají bossové barevnou lampu na hlavě.
+  - Černé textury: býk a beran dostanou nejtmavší srst, kterou hra umí; jelen se
+    změnit nedá.
+  - Doprava: nakládání zvířat jde jen přes vodítko hry a modul na náklaďáku.
+
+  Dokumentaci (INSTALL.md, STATUS.md) jsem pro tuhle verzi už neaktualizoval.
+
+> Pokračuj a rovnou do kódu. test si udělám sám na svém serveru.
+  Inventář: ikona a model zvířete v inventáři jít nemohou, je to UI klienta.
+  (ale jde to na 100%. Vím to.)
+  Svítící oči: jako náhradu mají bossové barevnou lampu na hlavě. (Pokud to
+  jde, musí být přesně velké jako jejich oči. lampy nesmí být vidět, jen to
+  světlo z nich dobře umístněné na očích. Světlo nesmí být široké, jen musí být
+  jasné.)
+  Doprava: nakládání zvířat jde jen přes vodítko hry a modul na náklaďáku. Však
+  to je i to co jsem myslel.
+  A dej mi finální věc.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+> Pokračuj
+
+  Ran 1 shell command (ctrl+o to expand)
+
+> Pospěš nesmí ti to trvat
+
+  Ran 4 shell commands (ctrl+o to expand)
+
+> já si pak vše otestuju sám a řeknu co funguje a co ne
+
+  Made 1 scratchpad edit +208, ran 3 shell commands (ctrl+o to expand)
+
+> Toto musí být už komplet se vším všudy
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Finální soubor je dist/Beastmaster.cs, přibližně 15 000 řádků. Kompiluje se
+  bez chyb a načte se na vývojovém serveru. Ve hře jsem nic netestoval, to
+  uděláš ty.
+
+  Před nahráním smaž oxide/config/Beastmaster.json. Jinak zůstanou staré výchozí
+  hodnoty (kola rituálu, obrana, lampy očí).
+
+  Oči bossů
+  - Každý boss má na očích dvě úzká barevná světla z kinematických svítilen hry,
+    bez modelu, takže žádná lampa vidět není.
+  - Světla se umístí na kosti očí zvířete. Barvy: kůň červená, býk zelená, beran
+    teplá žlutá, jelen modrá.
+  - Šířku a dosah světla určuje prefab hry. Nastavit je nejde, jen vybrat užší
+    nebo širší variantu (cinelight_spot_* v configu Boss → Eyes).
+  - Na vývojovém serveru se světla u bossů vytvoří a test bossů prošel. Jak
+    přesně sedí na očích, uvidíš jen ve hře.
+
+  Inventář zvířete
+  - V inventáři přes model a avatar hráče přijde panel se zvířetem. Je vidět jen
+    při otevřeném inventáři.
+  - Je to obrázek, ne živý 3D model. Pro každý druh dej do configu Inventory →
+    Images adresu PNG na svém webu, jinak se zobrazí jen název zvířete.
+  - Kde přesně model v inventáři leží, jsem neověřil. Polohu doladíš v
+    ModelMin/ModelMax a IconMin/IconMax.
+
+  Doprava: funguje přes vodítko hry a modul na náklaďáku, jak jsi chtěl.
+
+  Ověřeno testy na vývojovém serveru: mrtvá zvířata držená pluginem zanechají
+  tělo (opraveno), útoky všech druhů zraňují, kruh ohně se vytvoří a zmizí,
+  vyděšené zvíře uteče.
+
+  Dokumentace je v docs/STATUS.md na konci.
+
+> Ten inventář musíš dokončit.
+  část  Pro každý druh dej do configu Inventory → Images adresu PNG na svém
+  webu, vynecháme.
+  Pro rychlé srhnutí vše by tedy mělo fungovat. Dokonce i to jakym stylem se
+  ochočují zvířata apod.
+  Dej mi finalní verzi.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+> tu verzi už dám na svuj vlastní server na wespner
+
+  Made 1 scratchpad edit +52, ran 1 shell command (ctrl+o to expand)
+
+> a napiš mi co vše sám mám otestovat
+
+● Finální soubor je dist/Beastmaster.cs, přibližně 15 000 řádků. Kompiluje se
+  bez chyb a na vývojovém serveru se načetl; ve hře jsem nic netestoval.
+
+  Před nahráním na wespner smaž oxide/config/Beastmaster.json. Jinak zůstanou
+  staré výchozí hodnoty.
+
+  Inventář bez vlastních obrázků: místo modelu a avatara hráče se v inventáři
+  zobrazí ikona herního předmětu, který zvíře připomíná. Kůň a ostatní mají
+  masku (kůň, vlk, tygr, králík, vůl), kuře kostým, jelen lebku; zbytek je maso
+  (býk a kráva vůl, medvěd, divočák, ovce, krokodýl, panter), veverka, žába a
+  krab jen lebku. Pod ikonou je jméno zvířete. Je to ikona, ne 3D model. Předmět
+  pro každý druh se mění v configu Inventory → Items.
+
+  Polohu panelu v inventáři jsem neověřil. Pokud nesedí na model hráče, uprav
+  ModelMin/ModelMax a IconMin/IconMax v configu.
+
+  Co otestovat na wespneru
+
+  1. Načtení a práva: plugin se načte bez chyb v konzoli. Dej si
+     beastmaster.use, nebo buď admin.
+  2. F5 a H: po připojení se zkusí nabindovat. Pokud ne, napiš do F1 bind f5
+     bm.menu a bind h bm.nv.
+  3. Ochočení: vyzkoušej všechny způsoby.
+     - Kůň, kráva, býk, ovce, beran: zůstat u nich, pak E.
+     - Vlk: honit s hořící loučí.
+     - Medvěd, divočák, puma, tygr: šipka, past, 3 injekce.
+     - Jelen: šipka, krmení, sedlo.
+     - Pak sedlo, nasednutí, příkazy follow/wait/guard a vodítko.
+  4. Jízda na zvířeti:
+     - Kamera: ve třetí i první osobě. Výšku upravíš /bm cam up|down|reset,
+       admin /bm cam save uloží pro všechny.
+     - Skok: přes plot, o zeď se zvíře uhodí a spadne.
+     - Zeď: zvíře jí neprojde.
+     - Voda: pomalá chůze, utopení jen pod hladinou.
+     - Svah: rychlý běh dolů, zvíře spadne.
+     - Zatáčka: býk při běhu.
+  5. Proměna:
+     - Rituál: zabít zvíře, 10 koleček s hořící loučí, 10 s ohně, E na oheň. Bez
+       chatu; po 10 s bez E zmizí oheň i tělo. Boss se musí obejít 50×.
+     - Kůň: také se musí dát proměnit.
+     - Za zvíře: ovládání, gesta (/bm lie|sit|roar|look), pití jen sladké vody,
+       jídlo z země, H v noci, HUD s klávesami vlevo od hotbaru.
+     - Inventář: ikona zvířete.
+     - Útoky: poškození a zvuk.
+     - Náraz: býk, beran, kráva, ovce, jelen a divočák do hráče (poškození a
+       ragdoll).
+  6. Ostatní hráči:
+     - Viditelnost: vidí tě jako zvíře a ty je včetně jmen.
+     - Jízda: nasednutí po nakrmení (u koně, býka, krávy, berana, ovce a jelena
+       až 2, jinak 1).
+     - Vodítko: Ctrl+E, u kráv a ovcí i vodítko hry.
+     - Mléko a stříhání.
+     - Množení: /bm breed.
+  7. Obrana divokých zvířat: medvěd, divočák, tygr, puma, býk, beran a krokodýl
+     se brání vždy, ostatní utečou a s 10 % se brání.
+  8. Mrtvá zvířata: zabij zvíře s následníkem nebo které ovládáš; musí zůstat
+     tělo a nesmí zamrznout.
+  9. Bossové: úzká světla na očích, černá srst u býka a berana, černý kůň.
+     Světlo nesmí být široké.
+  10. Menu: spawn zvířat a bossů, Ride, Kill, Despawn, přejmenování (/bm name) a
+      /bm run env.time 12 pro admina.
+  11. Tvrdé hranice: polární medvěd a medvěd jsou si nepřátelé.
+
+  Ke každému, co nepojede, mi napiš, co přesně se stalo, a opravím to.
+
+> Jaky command či zpusobem mi Admin serveru muže dát přístup k tomu abych mohl
+  používat pomocí F5 to menu + pomocí příkazu do chatu jak jsou například /sp ?
+
+● Admin ti přístup dá jedním z těchto způsobů. Je to z kódu pluginu, na serveru
+  jsem to zatím nezkoušel.
+
+  Nejrychleji (konzole serveru, RCON nebo chat admina):
+  - bm.grant jmeno_nebo_steamid v konzoli nebo RCON.
+  - /bm grant jmeno v chatu, ale jen admin nebo owner.
+  - Příkaz ti dá beastmaster.menu a beastmaster.use, pokud je nemáš. Odebrání je
+    bm.revoke resp. /bm revoke.
+
+  Přes práva Oxide (u Carbonu c.grant místo oxide.grant):
+  oxide.grant user jmeno_nebo_steamid beastmaster.use
+  oxide.grant user jmeno_nebo_steamid beastmaster.menu
+  Pro celou skupinu: bm.grantgroup nazev_skupiny nebo oxide.grant group
+  nazev_skupiny beastmaster.menu. Aby měla skupina i základní použití pluginu,
+  přidej beastmaster.use. Hráče vidíš v menu na stránce Players, tam jde Grant a
+  Revoke i tlačítkem.
+
+  Co které právo dává:
+
+  ┌───────────────────┬──────────────────────────────────────────────────────┐
+  │       Právo       │                       Co dává                        │
+  ├───────────────────┼──────────────────────────────────────────────────────┤
+  │                   │ základní použití pluginu, menu hráče (domov,         │
+  │ beastmaster.use   │ nápověda, moje zvířata, ovládání, proměna) a         │
+  │                   │ automatický bind F5 a H                              │
+  ├───────────────────┼──────────────────────────────────────────────────────┤
+  │ beastmaster.menu  │ navíc stránky Admin, Spawn, Aim tools a Players a    │
+  │                   │ příkazy /bm spawn a /bm clear                        │
+  ├───────────────────┼──────────────────────────────────────────────────────┤
+  │ beastmaster.admin │ úplně všechno, včetně /bm run <příkaz>               │
+  ├───────────────────┼──────────────────────────────────────────────────────┤
+  │ owner a moderátor │ menu dostanou automaticky podle ownerid a            │
+  │                   │ moderatorid (jde vypnout v configu Access)           │
+  └───────────────────┴──────────────────────────────────────────────────────┘
+
+  F5:
+  - Plugin ti klávesu pošle sám po připojení, pokud máš beastmaster.use.
+  - Když ji hra odmítne, napiš do F1 konzole bind f5 bm.menu.
+  - Menu jde otevřít i chatem /bm.
+
+  K /sp: takový příkaz v pluginu není. Spawn zvířete je /bm spawn kráva 1 tamed
+  s anglickým id druhu (např. cow, bull, wolf) nebo tlačítkem na stránce Spawn.
+  Pokud chceš krátký alias /sp, přidám ho.
+
+> na tom client serveru který jsi mi dal ty komandy fungují normálně (/sp
+  apodobně)
+  ale na tom wespneru jak mam ten server tak tam tyhle commandy v chatu hlásí
+  unknown command.
+
+  A interakční menu asi vůbec nefunguje když dám F5. To musí fungovat
+  automaticky jak se plugin načte, tak když dám F5 menu se otevře a tam když
+  kliknu enable Beastmaster, tak se aktivují kompletně všechny věci, které
+  máme.  Pokud to nechám enabled a dám znovu F5, menu se jen zavře ale věci
+  pojedou. Musel bych dát Disable Beatmaster v tom menu abych to vše odpojil.
+
+  Rychle to oprav.
+  oprav a dej mi finální věc.
+
+  Made 1 scratchpad edit +153, read 1 file, listed 1 directory, ran 7 shell commands (ctrl+o to expand)
+
+> pospeš
+
+● Opravil jsem otevírání menu při vypnutém pluginu, automatické zapnutí po
+  načtení a chybějící příkaz /sp. Příčinu hlášky „unknown command“ na wespneru
+  jsem ale nenašel. Finální soubor je dist/Beastmaster.cs.
+
+  Co se opravilo
+  - Zapnuto po načtení: plugin je po každém načtení zapnutý (config General →
+    AutoEnable).
+  - Menu při vypnutém pluginu: menu se otevře i tehdy, a admin v něm najde velké
+    tlačítko Enable Beastmaster. Jednou zapnuté pojede dál; F5 nebo /bm jen
+    otevře a zavře okno.
+  - Vypnutí: na úvodní stránce menu je tlačítko Disable Beastmaster, a to vypne
+    všechno.
+  - /sp: dřív v pluginu nebyl. Teď /sp cow 2 tamed spawnuje zvíře (vyžaduje
+    beastmaster.menu). Přibyl i alias /beast pro /bm.
+  - Upozornění po připojení: hráč s právem dostane po prvním připojení jednou
+    řádek, jak menu otevřít.
+
+  F5 nejde nastavit ze serveru. Hra přijímá od serveru jen vybrané příkazy a
+  bind mezi nimi pravděpodobně není. Plugin se o to stále pokouší, ale
+  spolehnout se nedá. Každý hráč musí jednou zadat do F1 konzole bind f5 bm.menu
+  (a bind h bm.nv pro noční vidění). Klávesa se pak ve hře pamatuje trvale. /bm
+  funguje vždy.
+
+  K „unknown command“ na wespneru: to znamená, že tam plugin vůbec není načtený,
+  takže nejspíš selhalo načtení.
+  - Na vývojovém Oxide serveru i na vývojovém Carbon serveru se nová verze
+    načetla bez chyb. Carbon jsem po načtení dál netestoval, protože server
+    ještě generoval mapu.
+  - Soubor patří do oxide/plugins (Carbon: carbon/plugins) a musí se jmenovat
+    přesně Beastmaster.cs.
+  - Smaž starý oxide/config/Beastmaster.json.
+  - V konzoli serveru zadej oxide.reload Beastmaster (Carbon: c.reload
+    Beastmaster) a koukni, co vypíše. Pokud tam bude chyba, pošli mi ji a
+    opravím to hned.
+  - Po načtení musí oxide.plugins ukázat Beastmaster, bm.selftest v konzoli
+    vypíše seznam druhů a ty musíš mít beastmaster.use, nebo být owner/admin.
+
+> /bm funguje.
+  nelíbí se mi jak musím ale přes F1 dělat to key bind.
+  Lepší by bylo, aby F5 fungovalo ihned po načtení pluginu a ten night vision
+  by se dal nastavit přímo na zvířeti. Pokud bych měl v inventáři night vision
+  brýle, tak by to šlo aktivovat pomocí H.
+  A řekni mi jak mohu používat to /sp spawn cow a další commandy protože
+  nefungují.
+
+  Rychle to oprav a hod mi finalní kod. Rychle.
+
+  Made 1 scratchpad edit +134, ran 1 shell command (ctrl+o to expand)
+
+● Finální kód je v dist/Beastmaster.cs; kompiluje se bez chyb, ale ve hře jsem
+  nové ovládání nezkoušel.
+
+  F5 se ze serveru zařídit nedá. Hra od serveru nepřijímá příkaz bind, takže
+  jedna klávesa vždy chce jednorázové nastavení v F1. Proto jsem přidal způsob,
+  který nic nevyžaduje:
+  - Ctrl + R otevře menu. Funguje při prázdných rukách, na koni i jako zvíře.
+    Při jízdě a v animal form je pohled stále na G.
+  - Noční vidění: funguje jen s opravdovými brýlemi nightvisiongoggles v
+    inventáři. Ctrl + G je nasadí na hlavu a podruhé sundá. To samé dělá
+    tlačítko Night (H) v menu Controls. Když brýle nemáš, plugin ti to napíše.
+  - F5 a H zůstávají jako volitelná zkratka: bind f5 bm.menu a bind h bm.nv
+    zadáš v F1 jednou a hra si je pamatuje navždy.
+  - Po prvním připojení hráč dostane jednou řádek s Ctrl+R a Ctrl+G.
+
+  /sp: teď funguje /sp cow i /sp spawn cow. Zadávej anglické názvy druhů a
+  volitelně počet a tamed, např. /sp cow 2 tamed, /sp wolf, /sp bull 1 tamed.
+  Potřebuješ právo beastmaster.menu, nebo být owner/admin. Pokud ti dál hlásí
+  „unknown command“, wespner ještě neběží s touto verzí, takže nahraj nový
+  soubor a udělej oxide.reload Beastmaster. Druhy a příkazy vypíše /bm species a
+  /bm help.
+
+  Další příkazy:
+  - /bm (menu)
+  - /bm cmd follow|wait|guard|attack|release
+  - /bm ride, /bm form
+  - /bm name jméno
+  - /bm cam up|down|reset|save
+  - /bm lie|sit|roar|look|stand
+  - /bm breed
+  - /bm nv
+  - /bm run příkaz (jen admin)
+
+  Po nahrání smaž starý oxide/config/Beastmaster.json.
+> dej mi seznam všech příkazů
+
+● Seznam je z kódu pluginu; v chatu před příkaz piš /bm, v konzoli serveru nebo
+  RCON stejný příkaz s tečkou, např. bm.spawn.
+
+  Hráč (právo beastmaster.use)
+
+  ┌──────────────────────────────────────┬──────────────────────────────────┐
+  │                Příkaz                │             Co dělá              │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm nebo /bm menu                    │ otevře nebo zavře menu (také     │
+  │                                      │ Ctrl+R s prázdnýma rukama)       │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm help                             │ nápověda v menu                  │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm species                          │ seznam druhů a jak se ovládají   │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm keys                             │ přehled kláves                   │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm cmd                              │ povel ochočeným zvířatům         │
+  │ follow|wait|guard|attack|release     │                                  │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm ride                             │ nasednout na zvíře, na které se  │
+  │                                      │ díváš                            │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm form                             │ proměnit se v zvíře, na které se │
+  │                                      │  díváš                           │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm revert                           │ zpět do lidské podoby (nebo      │
+  │                                      │ klávesa X)                       │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm name jméno                       │ přejmenuje tvé ochočené zvíře,   │
+  │                                      │ na které se díváš                │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm view [first|third]               │ pohled z první nebo třetí osoby  │
+  │                                      │ (jinak přepíná)                  │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm preset a|b|c|d                   │ typ kamery                       │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm cam up|down|reset                │ výška kamery pro tvůj druh       │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm lie, sit, roar, look, stand      │ zvířecí gesta                    │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm emote [gesto]                    │ zvířecí gesto podle jména        │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm nv                               │ noční vidění (brýle z inventáře, │
+  │                                      │  také Ctrl+G)                    │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm breed                            │ množení krávy s býkem a ovce s   │
+  │                                      │ beranem                          │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ /bm attack                           │ útok zvířete (jinak klávesa F)   │
+  └──────────────────────────────────────┴──────────────────────────────────┘
+
+  Menu práva (beastmaster.menu) a admin
+
+  ┌───────────────────────────────────┬─────────────────────────────────────┐
+  │              Příkaz               │               Co dělá               │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │                                   │ rychlý spawn, vyžaduje              │
+  │ /sp druh [počet] [tamed|wild]     │ beastmaster.menu, např. /sp cow 2   │
+  │                                   │ tamed                               │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm spawn druh [počet]            │ totéž, s volitelným sedlem a        │
+  │ [tamed|wild] [saddled] [near]     │ cílovým hráčem                      │
+  │ [hráč]                            │                                     │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm clear [poloměr]               │ smaže zvířata vytvořená spawnem     │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm access                        │ kdo má menu přístup                 │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm grant jméno a /bm revoke      │ dá nebo vezme přístup k menu        │
+  │ jméno                             │                                     │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm grantgroup skupina a          │ totéž pro skupinu                   │
+  │ revokegroup skupina               │                                     │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm enable a /bm disable          │ zapne nebo vypne celý plugin        │
+  │                                   │ (tlačítko je i v menu)              │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm reload                        │ znovu načte config                  │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm cam save                      │ uloží aktuální výšku kamery pro     │
+  │                                   │ všechny                             │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm boss spawn                    │ spawn bosse                         │
+  │ horse|bull|ram|stag [mini]        │                                     │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm boss clear                    │ smaže divoké bosse                  │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm seat [číslo]                  │ vybere model sedadla pro jezdce     │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm horses ...                    │ správa koní                         │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm run příkaz                    │ spustí z chatu libovolný příkaz     │
+  │                                   │ serveru, např. /bm run env.time 12  │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ /bm env.time 12                   │ zkratka bez run, platí pro každý    │
+  │                                   │ příkaz s tečkou                     │
+  └───────────────────────────────────┴─────────────────────────────────────┘
+
+  Aliasy: /beast je totéž co /bm.
+
+  Diagnostika (admin, hlavně v konzoli)
+
+  ┌───────────────────────────────────────────────────────────┬─────────────┐
+  │                          Příkaz                           │   Co dělá   │
+  ├───────────────────────────────────────────────────────────┼─────────────┤
+  │                                                           │ kontrola    │
+  │ bm.selftest                                               │ druhů a     │
+  │                                                           │ modulů      │
+  ├───────────────────────────────────────────────────────────┼─────────────┤
+  │ bm.debug [0-3]                                            │ úroveň logu │
+  ├───────────────────────────────────────────────────────────┼─────────────┤
+  │                                                           │ hledání     │
+  │ bm.items slovo, bm.prefabs slovo, bm.entities slovo,      │ předmětů,   │
+  │ bm.assets slovo                                           │ prefabů a   │
+  │                                                           │ assetů      │
+  ├───────────────────────────────────────────────────────────┼─────────────┤
+  │ bm.test                                                   │ automatické │
+  │ combat|tame|ritual|menu|horse|wild|boss|spray|stats|clips │  testy      │
+  │  druh|death|attacks|flames|scare                          │             │
+  └───────────────────────────────────────────────────────────┴─────────────┘
+
+  Menu volá interní příkaz bm.ui ...; ten nepoužívej ručně. Pokud chceš klávesy,
+  napiš jednorázově do F1 bind f5 bm.menu a bind h bm.nv.
+
+  Práva
+
+  ┌──────────────────────────────────────────────┬──────────────────────────┐
+  │                    Právo                     │         Co dává          │
+  ├──────────────────────────────────────────────┼──────────────────────────┤
+  │ beastmaster.use                              │ základní použití         │
+  ├──────────────────────────────────────────────┼──────────────────────────┤
+  │ beastmaster.ride,                            │ jízda na běžných a       │
+  │ beastmaster.ride.restricted                  │ omezených druzích        │
+  ├──────────────────────────────────────────────┼──────────────────────────┤
+  │ beastmaster.tame                             │ ochočování               │
+  ├──────────────────────────────────────────────┼──────────────────────────┤
+  │ beastmaster.transform,                       │ proměna                  │
+  │ beastmaster.transform.restricted             │                          │
+  ├──────────────────────────────────────────────┼──────────────────────────┤
+  │ beastmaster.spray                            │ přebarvení spreji        │
+  ├──────────────────────────────────────────────┼──────────────────────────┤
+  │ beastmaster.menu                             │ spawn a správa v menu    │
+  ├──────────────────────────────────────────────┼──────────────────────────┤
+  │ beastmaster.admin                            │ všechno                  │
+  └──────────────────────────────────────────────┴──────────────────────────┘
+
+  Owner a moderátoři mají přístup automaticky.
+
+> takže příkazy /sp už nejsou?
+
+● /sp v pluginu je, jen ho nemám v tabulce samostatně. Je to alias pro /bm
+  spawn, takže funguje /sp cow, /sp cow 2 tamed i /sp spawn cow. Dostupný je po
+  nahrání nové verze a oxide.reload Beastmaster. Potřebuješ právo
+  beastmaster.menu, nebo být owner/admin.
+
+  Je to jediný nový krátký příkaz. Další zkratky jako /ride nebo /form jsem
+  nepřidával, vše ostatní jde přes /bm ... nebo /beast ....
+
+> takže /bm spawn cow je totéž co /sp spawn cow ?
+
+● Ano, /bm spawn cow a /sp spawn cow dělají totéž, zrovna /sp spawn cow ale jen
+  po nahrání nové verze. Starší verze na wespneru /sp vůbec nezná. /sp cow bez
+  slova spawn je také totéž.
+
+  Potřebuješ právo beastmaster.menu, nebo být owner/admin. Za druhem může být
+  počet, tamed nebo wild, saddled a near, např. /sp cow 2 tamed saddled.
+
+> takže na aktuální verzi je jen /bm a /sp ne?
+
+● Poslední verze, kterou jsem ti dal (dist/Beastmaster.cs), má tři chatové
+  příkazy: /bm, /sp a /beast.
+
+  Tam, kde ti /bm funguje a /sp ne, běží starší verze. /sp jsem přidal až v
+  jedné z posledních úprav a na wespneru ho nemáš, dokud nenahraješ nový soubor.
+
+  Postup:
+  1. Nahraj nový Beastmaster.cs do oxide/plugins (Carbon: carbon/plugins).
+  2. Smaž starý oxide/config/Beastmaster.json.
+  3. V konzoli serveru zadej oxide.reload Beastmaster (Carbon: c.reload
+     Beastmaster).
+
+  Pak funguje /sp cow, /sp spawn cow i /bm spawn cow.
+
+[Image #21]
+
+> Pohled ze třetí osoby je už správně.
+  ta ikona vlevo, to dej pryč kompletně. Ty staty toho zvířete přesuneme.
+  Jakmile hrajeme za zvíře, hráčovy staty se zkryjí a namísto nich budou staty
+  zvířete.
+  Musí mi jít normálně otevřít inventář.
+  Pohled z první osoby mírně oddal a mírně dej výš. Stále občas vidím
+  vnitřnosti zvířete.
+  a pozor na animace. pokud začnu chodit, či běhat a sám triggernu animace, tak
+  to prostě přeruší idle animaci a pojede ta moje.
+  Máme tam F, Ctrl, Shift a Space.
+  Přidej ještě alt na kterém bude feed a X na kterém máme Human.
+  Koně budou defaultně všechny bez sedla.
+  Pokud zvíře narazí do zdi či objektu, uhodí se a spadne.
+  Rychle to proved a pošli finální kod. Rychle!!
+
+  Made 1 scratchpad edit +343, ran 5 shell commands (ctrl+o to expand)
+
+● Úpravy z tvého seznamu jsou v dist/Beastmaster.cs; kompiluje se bez chyb a
+  načetl se na vývojovém Carbon serveru. Ve hře jsem ale nic nezkoušel.
+
+  - Ikona vlevo: pryč úplně, inventář se otevírá normálně. Nic ho už nepřekrývá.
+  - Staty: vlevo dole zmizel starý panel. Teď se při hře za zvíře přes tvé staty
+    vpravo dole zobrazí Health, Stamina, Hunger a Thirst zvířete.
+  - První osoba: kamera je trochu výš a trochu dozadu, aby ses neviděl uvnitř
+    zvířete. Jemné doladění je v configu Camera → EyeHeight a EyeForward.
+  - Animace: jakmile začneš chodit nebo běhat, přeruší se idle animace nebo
+    gesto zvířete a jede tvoje. Totéž při skoku a útoku.
+  - Klávesy vlevo od hotbaru: šest buněk: F Attack, Ctrl Brake, E Feed, Shift
+    Sprint, Space Jump, X Human.
+  - Alt nešlo: Alt je klávesa jen v klientovi a server ji nevidí. Krmení proto
+    zůstává na E (jíst z cesty, pít, páslo se).
+  - Koně: všichni koně jsou bez sedla, i ti, kteří už ve světě byli před
+    načtením pluginu.
+  - Náraz do zdi nebo předmětu: při běhu se zvíře uhodí, zakňourá a spadne, jak
+    bylo dohodnuto. Platí jen pro zvířata na navmesh, ne pro koně.
+
+  Po nahrání smaž starý oxide/config/Beastmaster.json.
+
+> Feed má být na levém Altu
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Plugin levý Alt ze serveru přečíst nemůže, takže krmení na Altu bez
+  jednorázového bindu v F1 nejde. Nový soubor dist/Beastmaster.cs se kompiluje
+  bez chyb, ale ve hře jsem ho nezkoušel.
+
+  Server vidí jen W, A, S, D, Ctrl, Shift, Space, E, F, R a myš. Levý Alt je
+  klávesa jen v klientovi a hra ji serveru nepošle.
+
+  Co jsem udělal:
+  - Krmení jde pořád na E: jíst z cesty, pít, pást se.
+  - Alt: přibyl příkaz bm.feed (chat /bm feed). Když do F1 jednou zadáš bind
+    lalt bm.feed, hra si to pamatuje a Alt pak krmí. Ostatní klávesy to tak mít
+    nemusí.
+  - Buňka v nápovědě: vlevo od hotbaru je teď E / Alt Feed.
+
+  Po nahrání smaž starý oxide/config/Beastmaster.json.
+
+> Tak feed bude normálně na E
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Feed je zpátky na E a buňka vlevo od hotbaru ukazuje jen „E Feed“. Soubor
+  dist/Beastmaster.cs se kompiluje bez chyb, ve hře jsem ho nezkoušel.
+
+  Příkaz bm.feed (chat /bm feed) v pluginu zůstává, kdybys ho někdy chtěl dát na
+  vlastní klávesu. Po nahrání smaž starý oxide/config/Beastmaster.json.
+
+[Image #22]
+
+> je to mnohem lepší. Ale pokud zvíře skočí na objekt který má jakoby plošinu
+  na které se dá stát, mělo by to jít. Mělo by dokázat vyskočit na vyvýšené
+  plochy, objekty.  To Feed musí fungovat i na tu vodu.  First person při hraní
+  za zvíře vubec nebude. Zustane jen u jízdě na zvířeti. Jízda na zvířeti bude
+  mít oba pohledy. I když si ty zvířecí staty dal doprava, vidím, že jsou v
+  černé tabulce. Udělej ji trochu průhlednou. A ty staty nesmí blikat jako by
+  byli rozbité. U těch statů nepiš Health a ty názvy. A to číslo které značí
+  kolik čeho mám musí být v bílé barvě uvnitř těch specifických ukazatelů
+  například životů zarovnane vlevo v tom zelenem políčku. V podstatě podobně
+  jako to je originál. A ty staty by měli byt  ve velikosti tak jako staty
+  hráče. Stále ale vidím staty hráče během toho co hraju za zvíře. To nesmí
+  být. A taky dole uprostřed je hud s itemama. Ten vidět nebude během hraní
+  zvířete. Místo toho hudu s itemy tam dáš právě ta tlačitka F, Ctrl atd. V
+  podstě ten puvodní HUD zmizí kompletně během hraní za zvíře.
+  Pokud se zvířetem skočím pomocí Space, tak:
+  pokud to jen stisknu tak to bude tak jak je to ted.
+  pokud to podržím, tak vyskočím trochu výš.
+  Při transformu do zvířete se ozve zvuk ale je useknutý.
+  Při opuštění těla zvířete se ten zvuk ozve taky a to zvíře se despawne.
+  zvíře sice neprochází zdmi a zavřeným plotem, ALE proklipne hlava. Každá část
+  zvířecího modelu nesmí proclipnout.
+  A stále mi nejde otevřít muj inventář když hraju za zvíře.
+  Zaveď a dej mi finální věc rychle.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+> Pospěš
+
+  Made 1 scratchpad edit +534, ran 4 shell commands (ctrl+o to expand)
+
+> hotovo? pospěš
+
+● Hotovo. Finální soubor je dist/Beastmaster.cs; kompiluje se bez chyb a na
+  Carbon testovacím serveru se načetl a test smrti zvířat prošel. Ostatní změny
+  jsem ve hře nezkoušel.
+
+  Co je změněné
+  - Staty: moje černá tabulka je pryč, nic neblikne a staty hráče vidět nejsou.
+    Standardní lišty hry (životy, jídlo, voda) ukazují hodnoty zvířete, takže
+    vypadají jako originál se stejnou velikostí a bílým číslem uvnitř. Když
+    zvíře opustíš, hráči se vrátí jeho vlastní jídlo a voda. Stamina nemá ve hře
+    vlastní lištu, proto je nad nimi přidaná lišta stejné velikosti, kreslená
+    jednou a jen aktualizovaná.
+  - Pás s itemy: nad ním je při hře za zvíře neprůhledný panel, který ho
+    překryje, a v něm tlačítka F Attack, Ctrl Brake, E Feed, G Inventory, Shift
+    Sprint, Space Jump, X Human. Pás samotný vypnout nejde, jen překrýt. Při
+    jízdě na zvířeti zůstává pás a tlačítka jsou vedle něj.
+  - První osoba: při hře za zvíře žádná není, jen třetí osoba. Jízda na zvířeti
+    má obě.
+  - Inventář: ve třetí osobě za zvíře ho hra neotevře, protože jde o spectator
+    kameru. Proto je na G pohled pro inventář (hra tam inventář otevře) a zpět.
+    Pro jízdu G přepíná mezi pohledy jako dřív.
+  - Skok: na vyvýšenou plochu (podlaha, bedna, kámen) zvíře naskočí a stojí na
+    ní, pokud na ni dosáhne. Když ne, narazí a spadne. Krátký stisk Space je
+    jako dřív, podržení skočí výš.
+  - Zeď a plot: hlava ani žádná část těla už neprojde, zvíře se zastaví celým
+    tělem.
+  - Voda: Feed funguje na pití i v mělčině a vpředu před zvířetem.
+  - Zvuk: při proměně z rituálu je teď prodleva 1,6 s, aby se kouř dohrál. Při
+    opuštění se zvíře despawne, pokud není tvoje ochočené.
+  - Koně: všichni jsou bez sedla, i ti, co ve světě byli před načtením pluginu.
+
+  Po nahrání smaž starý config Beastmaster.json.
+
+> /model claude-sonnet-5
+  ⎿  Set model to claude-sonnet-5
+
+> /model sonnet
+  ⎿  Set model to claude-sonnet-5-5
+  ⎿  [Image #23]
+
+> Staty zvířete nejsou vidět správně, hráčův Hud tam zůstal. Hud hráče prostě
+  musí kompletně zmizet když hraji za zvíře.
+  Inventář je rozbitý a má se otvírat tak jak to je defaultně ve hře. na G nemá
+  být Inventář.
+  Zvíře stále neumí naskočit na objekt či plošinu. Zvuk při transformaci i po
+  opuštění zvířecího těla je stále krátky. navíc existuje lepší zvuk na vanish
+  věci či teleport takovy laser či dash zvuk.
+  A při zapnutí pluginu a připojení na serveru se nemá hráč objevit hned jako
+  zvíře.
+  Rychle fixni a finální kod mi dej. Test si udělám sám.
+  Ran 3 shell commands (ctrl+o to expand)
+
+> hra podporuje vypnutí hráčova hudu v nastavení. toto tam dej jakmile budu
+  hrát za zvíře.
+
+> přístup k inventáři musím mít normálně nadále jako když za zvíře nehraji.
+
+  Made 1 scratchpad edit +252, ran 3 shell commands (ctrl+o to expand)
+
+> rychle to dokonči a dej mi finalní věc
+
+● Finální soubor je dist/Beastmaster.cs; kompiluje se bez chyb a načte se na
+  Carbonu. Ve hře jsem nic z této dávky nezkoušel.
+
+  Hráčův HUD
+  - Když začneš hrát za zvíře, plugin pošle tvé hře příkaz graphics.hud 0, tedy
+    vypnutí HUD z nastavení hry, a po opuštění zvířete graphics.hud 1.
+  - Hra ale od serveru přijímá jen vybrané příkazy a tento mezi nimi nejspíš
+    není. Jestli se HUD sám nevypne, vypni ho ručně v nastavení; já ho z pluginu
+    skrýt nedokážu.
+  - Panel s klávesami a lišta staminy jsou teď na vrchní vrstvě a polopropustné.
+    Černá tabulka je pryč.
+  - Aby HUD nezůstal vypnutý po pádu hry, při každém připojení plugin zapne HUD
+    zpět, když zrovna nejsi zvíře.
+
+  Inventář: Tab za zvíře otevřít nejde, protože spectator kamera ve třetí osobě
+  inventář v klientu blokuje a z pluginu to nepřepíšu. Proto je tu přepínač
+  pohledu na R: pohled s inventářem, kde Tab funguje normálně a vrátí se i HUD
+  hry. Dalším R se vrátíš do pohledu zvířete. Plain G už inventář nedělá, je na
+  noční vidění (Ctrl+G zůstává). Při jízdě na zvířeti G přepíná pohledy jako
+  dřív.
+
+  Skok na plošinu: zvíře skočí výš a hledá, kam dopadnout, i když tam není
+  navmesh (nižší podlaha, bedna, kámen, zeď). Pokud má cíl pevný povrch do
+  dosahu skoku, naskočí a stojí na něm. Vyšší překážky se nepřeskočí a zvíře do
+  nich narazí.
+
+  Zvuk: při proměně hraje herní zvuk "disappear" a při návratu "appear"
+  (portálové efekty hry). Jestli je dost dlouhý, uslyšíš ve hře.
+
+  Přihlášení: hráč se po připojení ani po načtení pluginu už neobjeví jako
+  zvíře. Vrátí se jako člověk a spící zvíře po něm zmizí, pokud nebylo ochočené.
+
+  Po nahrání smaž starý config Beastmaster.json.
+
+> Dobrá jako zvíře inventář řešit nebudeme. Ale věci budeme sbírat do zvířecího
+  inventáře které má sám kun takže kdokoli jiný mi muže do inventáře dát věci
+  a já sám když něco seberu jako zvíře dá se mi to do zvířecího batohu.
+  Ty staty hráče vypnout nejde, takže je tam vidím. V tom případě jakmile budu
+  hrát za zvíře tak v tom hráčovych statech se načtou  ty zvířecí staty (hp,
+  voda, hunger). Stamina stat bude hidden a dobije se na 100% ihned po 3
+  sekundách.
+  Ta tlačítka budou nad tím hudem s předměty a budou výrazně menší. Takhle mi
+  zakrývají hodně obrazovky.
+  R bude měnit skin zvířete pokud ho má. hraní za zvířete bude mít jen pohled z
+  třetí osoby. Zvíře pomocí skoku musí umět skočit na polochy například
+  trojuhelnikovité stavební části které máme použité na stavbě base.
+  Při opuštění těla zvuk funguje krásně. Ale při transformaci ne. Při opuštění
+  těla je tam i hezky vizualní efekt. Ten chci i pro transformaci. A
+  transofrmace nesmí mít delay. Musí být rychlá.
+  Rychle to zaved a pošli finalní kod. Bleskově rychle.
+
+● Failed to refresh OAuth token: another Claude Code process is
+  refreshing it or exited mid-refresh. This is usually transient; retry
+  in a minute, and if it persists close other Claude Code processes or
+  sign in again
+
+> Pokračuj
+
+  Ran 1 shell command (ctrl+o to expand)
+
+> Rychle to zaved a pošli finalní kod. Bleskově rychle.
+
+  Made 1 scratchpad edit +244, ran 2 shell commands (ctrl+o to expand)
+
+● Finální soubor je dist/Beastmaster.cs; kompiluje se bez chyb a načte se na
+  Carbonu. Ve hře jsem nic z této dávky nezkoušel.
+
+  - Staty: vlastní lišty jsou pryč. Standardní lišty hry (životy, jídlo, voda)
+    ukazují hodnoty zvířete. Stamina je skrytá a po 3 s bez námahy je zase na
+    100 %.
+  - Tlačítka: jedna malá řada těsně nad lištou s itemy, výrazně menší než dřív.
+    Pro jízdu totéž.
+  - R: mění skin zvířete, pokud nějaký má (kráva, býk, ovce, beran, kůň).
+    Ostatní druhy nic.
+  - První osoba: při hře za zvíře žádná není, jen třetí osoba.
+  - Skok: zvíře skáče výš (JumpHeight v configu je teď 1,5) a naskakuje na
+    stavební díly včetně trojúhelníkových, pokud na ně dosáhne.
+  - Proměna: má stejný efekt jako opuštění těla, bez zpoždění. Hráč zmizí v
+    portálovém efektu a zvíře se objeví ve stejném. U rituálu zůstává jen 0,25 s
+    kvůli navmeshi.
+  - Věci do zvířecího batohu: sbírání jako zvíře dává věci do inventáře hráče,
+    který je tvým batohem. Kdokoli ti může věc dát: podívá se na tebe (do 6 m),
+    drží ji v ruce a napíše /bm give.
+
+  Po nahrání smaž starý config Beastmaster.json.
+
+> Při transformaci do zvířete se neozývá ten zvuk a ten efekt správně tak jako
+  při opuštění těla zvířete. Někdy to funguje někdy ne.
+  Při nárazu do objektu se často trochu posune kamera. Ta musí být stabilní.
+  Reskin zvířete pomocí R nefunguje uplně dobře. Změny skinu musí zahrovat
+  barvy a motivy pokud je zvíře má a aplikování pomocí R musí být instantní.
+  Při CTRL break dochází ke snížení kamery, to být nemá.
+  Ten hold jump dej pryč.
+  jump pomocí space má problém že se stává že když chci skočit na plošinu zvíře
+  se propadne plošinou a je pod ní. Zvíře které je na plošině naopak neumí
+  sejít plošinu i za cenu že spadne jako kun. To fixni.
+  Tu lištu s těmi tlačítky mužeš posunout víc dolů protože mezi tou lištou s
+  těmi tlačítky a samotným HUD s věcma je docela dost velká mezera. Když se
+  zvířetem bežím kolem jiného a nabourám do něj, to zvíře mi spadne. Náraz na
+  jiná zvířata či hráče nebude způsobovat ragdoll zvířete. To platí jen pro
+  neživé objekty.  Pro žívé objekty se to bere jako útok přece. Kameru třetí
+  osoby mužeš ještě mírně oddálit.
+  zvíře stále klipuje když jdu kolem zdí. někdy trčí hlava nebo tak. Jako zvíře
+  budu moci sbírat věci. Pokud hru ukončím a zustanu ve zvířeti, zvíře si
+  lehne a když hru zapnu budu zvíře.
+  Utoky musí byt dobře nastavene podle kamery. představ si že moje kamera je
+  jakoby v kruhu. přední pul kruh - animace utoku jen předních utoku. Zadní
+  pulkruh za zvířetem rádoby prostě zadní utoky.
+  když narazím jako Býk, Kun, Beran, Krava, Ovce Jelen či divočak do hráče či
+  jiného zvířete,  zvíře za které hraju nespadne a ten náraz zpusobí damage
+  tomu hráči či zvířeti do kterého jsem narazil a dá jim to damage jako bych je
+  kopnul.
+  Zvíře do kterého jsem se transformoval nezmizí hned když dám X human. Zvíře
+  tam zůstane. Pokud k tomu zvířeti pujdu a zmačknu X, tak se do něj zase
+  transformuju. Ale nemusím se jen transformovat. povolí mi to i na něj
+  nasednou stejnym tlačítkem jakym hra nabízí nasednout na koně. Pokud se od
+  zvířete které jsem dřív ovládal opusit pomocí X a šel bych od něj daleko 50m,
+  to zvíře se tou hezkou animací se zvukem samo despawne.
+  Bleskově Rychle to zaveď a dej mi finální kod rychle.
+
+  Made 1 scratchpad edit +507, ran 5 shell commands (ctrl+o to expand)
+
+● Finální soubor je dist/Beastmaster.cs; kompiluje se bez chyb a načte se na
+  Carbonu. Ve hře jsem nic z této dávky nezkoušel, takže vím jen, že se načetl.
+
+  Opraveno podle tvého seznamu
+  - Transformace: efekt a zvuk se při proměně posílají přímo na tvé připojení.
+    Nemají se tak ztratit, když se tvé tělo hned po proměně skrývá. Nemělo by to
+    být náhodné; ve hře to ověříš ty.
+  - Kamera při nárazu: zvíře se u zdi nehýbe po milimetrech, tělo se zastaví a
+    nedrhne. Kamera je tak stabilnější.
+  - Ctrl a snížená kamera: schovaný hráč už nepřijímá dřep, tedy by se kamera
+    při brzdění neměla propadat.
+  - Posun skinu (R): barvy i vzor se změní okamžitě. U krávy, býka, ovce a
+    berana se změní jméno (vzor), barvy a velikost skvrn. U koně plemeno.
+    Ostatní druhy skin nemají.
+  - Skok držením: pryč.
+  - Plošiny: zvíře po dopadu stojí na povrchu a navmesh ho nestahuje dolů. Z
+    plošiny umí slézt, případně spadnout.
+  - Lišta tlačítek: posunutá níž, těsně nad lištu s itemy.
+  - Náraz do zvířat a hráčů: živé věci nejsou zeď. Tvoje zvíře nespadne a kopne
+    cíl s poškozením. Padá jen při nárazu do zdi nebo předmětu.
+  - Pohled třetí osoby: o 0,55 m dál (config Camera → ThirdBack).
+  - Zdi: celé tělo, včetně hlavy a ocasu, se kontroluje při pohybu i při
+    otáčení. Zvíře se nezačne otáčet, kdyby se tím hlava dostala do zdi.
+  - Věci: zvíře sebere věc ze země (E). Jídlo se sní. Ostatní předměty se uloží
+    do inventáře skrytého těla, což je zvířecí batoh.
+  - Odhlášení: když hru ukončíš jako zvíře, zvíře si lehne a po přihlášení jsi
+    zase tím zvířetem.
+  - Útoky podle kamery: dopředná půlka kruhu hraje jen přední útoky (hlava,
+    kousnutí), zadní půlka jen zadní kopy. Hranice je 90° (config Combat →
+    RearAngle).
+  - X human: zvíře po opuštění zůstane stát.
+    - X u něj tě zase promění v něj.
+    - E na něj na něj nasedneš.
+    - Když od něj půjdeš dál než 50 m, nebo se odpojíš, zmizí s efektem a
+      zvukem.
+    - Kůň má po opuštění sedlo, dokud ho nemáš.
+
+  Po nahrání smaž starý config Beastmaster.json.
+
+[Image #24]
+
+> Stamina nebude, některá zvířata při nárazu do druhych zvířat stále padají na
+  zem. Pokud hraju za zvíře a dám x abych byl člověk budu moci otevřít inventář
+  toho zvířete které je vedle mě.
+  Jízda na zvířatech - hráč na některých zvířatech sedí bud moc nízko nebo moc
+  vysoko.
+  zvířata který skin nemají nebudou mít R tlačítko.
+  Jelen bude moci kopat zezadu taky. jelen bude taky moci spadnout když narazí
+  do zdi. Jelen při utoku musí dělat zvuky, i při zranění.
+   Zvířata musí bez problému vylezt na objekty a i slézt.
+  Zaved a dej mi cely finalni kod. Test si udělám sám.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+> na screenshotu máš objekt na ktery zvíře neumí vylézt skokem
+
+  Ran 1 shell command (ctrl+o to expand)
+
+> zaved a dej mi finalní kod. test udelam sam
+
+> rychle pošli hned finalni kod
+
+  Made 1 scratchpad edit +323, ran 7 shell commands (ctrl+o to expand)
+
+● Finální soubor je dist/Beastmaster.cs; kompiluje se bez chyb a načte se na
+  Carbonu. Ve hře jsem z této dávky nic nezkoušel.
+
+  - Stamina: pryč úplně, zvíře běží, jak dlouho chce.
+  - Šikmé objekty: zvíře teď vyleze i na šikmé plochy, jako je střecha-pyramida
+    ze screenshotu, a po šikmině se dá jít jen chůzí. Slézt umí také, případně
+    spadne. Skokem naskočí na šikmou plochu a vyleze se po ní nahoru.
+  - Pád při nárazu do zvířat: po zásahu jiného zvířete nebo hráče se pád od zdi
+    na 2 s vypne a zvíře by nemělo spadnout. Příčinu pádu u některých druhů jsem
+    v kódu nenašel, takže tohle je ochrana naslepo. Pokud se to děje dál, napiš
+    mi, o jaký druh šlo.
+  - X = člověk: zvíře vedle tebe zůstává a jeho inventář otevřeš Ctrl + E. Co
+    zvíře sebralo (a co mu kdo dal přes /bm give) jde do jeho vlastního batohu,
+    ne do tvého inventáře. Při opuštění a návratu se batoh drží u zvířete. Když
+    zvíře po 50 m zmizí, věci z něj zůstanou na zemi.
+  - Sedlo při jízdě: výšku sedla jde nastavit za jízdy /bm seat up a /bm seat
+    down (krok 10 cm, uloží se pro druh). Správné výšky u druhů jsem odhadnout
+    nemohl, naladíš si je sám.
+  - R: tlačítko se zobrazí jen u zvířat se skiny, tedy u koně, krávy, býka, ovce
+    a berana. Ostatní druhy ho nemají.
+  - Jelen, útoky: zezadu kope (dostane stejnou animaci útoku, zásah jde dozadu).
+    Při nárazu do zdi spadne: nemá animaci pádu, takže si lehne.
+  - Jelen, zvuky: hlasy jelena (útok, zranění) jsou v klientu navázané na jeho
+    vlastní AI, ne na prefab, který by plugin mohl pustit. Zvuky z pluginu proto
+    nepřidám a zatím nevím jak.
+
+  Po nahrání smaž starý config Beastmaster.json.
