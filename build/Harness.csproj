@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Compile harness: compiles ONE Oxide/Carbon plugin file against the real Rust server DLLs,
+    so that every wrong name, type or signature fails here instead of on the server.
+
+    Usage (from the repository root):
+      dotnet build build/Harness.csproj -p:PluginFile=../dist/Beastmaster.cs
+      dotnet build build/Harness.csproj -p:PluginFile=../tools/devplugins/BeastmasterDump.cs
+
+    The DLLs come from the local dev server (C:\RustDev\server-oxide), i.e. the exact build
+    the plugin runs on (Rust 25823813 + Oxide 2.0.7820 at the time of writing).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <AssemblyName>HarnessCheck</AssemblyName>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <NoStdLib>true</NoStdLib>
+    <NoCompilerStandardLib>true</NoCompilerStandardLib>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants>RUST;OXIDE</DefineConstants>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsAsErrors>CS0108;CS0114;CS0162;CS0168;CS0219;CS0252;CS0253;CS0649;CS0665;CS1717;CS4014</WarningsAsErrors>
+    <NoWarn>CS1701;CS1702;CS0436</NoWarn>
+    <!-- the server's DLLs reference different versions of the same dependencies; harmless for a compile check -->
+    <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
+    <ServerManaged Condition="'$(ServerManaged)' == ''">C:\RustDev\server-oxide\RustDedicated_Data\Managed</ServerManaged>
+    <PluginFile Condition="'$(PluginFile)' == ''">..\dist\Beastmaster.cs</PluginFile>
+    <BaseOutputPath>bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(PluginFile)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Newtonsoft.Json / protobuf-net / websocket-sharp: Oxide gives plugins the copies inside Oxide.References.dll,
+         the standalone files are blacklisted by Oxide's plugin loader (CSharpPluginLoader.AssemblyBlacklist). -->
+    <!-- UnityEngine.AnimationModule: proven NOT available to plugins on the server (ProbeAnimation failed to compile there,
+         2026-10-09), so it is excluded here too; a plugin that needs it must say `// Reference: UnityEngine.AnimationModule`.
+         PhysicsModule and AIModule were proven available (ProbePhysics / ProbeAI compiled on the server). -->
+    <Reference Include="$(ServerManaged)\*.dll" Exclude="$(ServerManaged)\Microsoft.CodeAnalysis*.dll;$(ServerManaged)\Newtonsoft.Json.dll;$(ServerManaged)\protobuf-net*.dll;$(ServerManaged)\websocket-sharp.dll;$(ServerManaged)\UnityEngine.AnimationModule.dll">
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

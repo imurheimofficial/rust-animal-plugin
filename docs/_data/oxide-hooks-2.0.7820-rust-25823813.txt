@@ -1,0 +1,424 @@
+﻿total distinct hooks in patched assembly: 688
+interesting hooks: 280
+CanAcceptItem                      ItemContainer.cs               this, item, targetPos, player
+CanAffordToPlace                   Planner.cs                     ownerPlayer, this, component
+CanBeHomingTargeted                BaseHelicopter.cs              this
+CanBeTargeted                      AutoTurret.cs                  obj, this
+CanBradleyApcTarget                BradleyAPC.cs                  this, ent
+CanBuild                           Planner.cs                     this, construction, target) != null
+CanCombineDroppedItem              DroppedItem.cs                 this, di) != null || NeverCombine || di.NeverCombine || !item.CanStack(di.item)
+CanCreateWorldProjectile           BasePlayer.cs                  info, itemDef) != null
+CanDeployItem                      Deployer.cs                    msg.player, this, networkableId) == null)
+		{
+			if (deployable.toSlot)
+			{
+				DoDeploy_Slot(deployable, ray, networkableId
+CanDeployScientists                BradleyAPC.cs                  this, attacker, scientistPrefabs, spawnPositions
+CanDesignFirework                  PatternFirework.cs             player, this
+CanDismountEntity                  BaseMountable.cs               player, this) != null
+CanDropActiveItem                  BasePlayer.cs                  this
+CanEquipItem                       PlayerInventory.cs             this, item, targetSlot, player
+CanFireLiquidWeapon                LiquidWeapon.cs                player, this
+CanHelicopterStrafeTarget          PatrolHelicopterAI.cs          this, ply
+CanHelicopterTarget                PatrolHelicopterAI.cs          this, ply
+CanLightCannonFuse                 Cannon.cs                      this
+CanLivestockAnimalRefuseTarget     LivestockAnimal.cs             this, basePlayer
+CanLockerAcceptItem                Locker.cs                      this, item, targetSlot, player
+CanLootEntity                      ContainerIOEntity.cs           player, this) != null
+CanLootPlayer                      BasePlayer.cs                  this, player
+CanMountEntity                     BaseMountable.cs               player, this) != null
+CanMoveItem                        PlayerInventory.cs             item, this, itemContainerId, num, num2, itemMoveModifier) != null || item.IsLocked() || (item.parent != null && item.parent.IsLocked())
+CanNetworkTo                       BaseNetworkable.cs             this, player
+CanNpcEat                          BaseNpc.cs                     this, best
+CanPurchaseItem                    VendingMachine.cs              buyer, item4, onItemPurchased, this, targetContainer
+CanRagdollDismount                 BaseRagdoll.cs                 this, player
+CanResearchItem                    ResearchTable.cs               player, targetItem) == null && targetItem.amount <= 1 && IsItemResearchable(targetItem) && (!onlyOneUser || !(msg.player.inventory.loot.enti
+CanSpectateTarget                  BasePlayer.cs                  this, strName) != null
+CanStackItem                       Item.cs                        this, item
+CanSwapToSeat                      BaseMountable.cs               player, this
+CanUseGesture                      GestureConfig.cs               player, this
+CanVendingAcceptItem               VendingMachine.cs              this, item, targetSlot, player
+CanWearItem                        PlayerInventory.cs             this, item, targetSlot, player
+IOnBaseCombatEntityHurt            BaseCombatEntity.cs            this, info) != null
+IOnBasePlayerAttacked              BasePlayer.cs                  this, info) != null
+IOnBasePlayerHurt                  BasePlayer.cs                  this, info) != null
+IOnNpcTarget                       BaseNpc.cs                     this, target
+IOnPlayerChat                      Chat.cs                        userId, username, strChatText, targetChannel, player
+IOnPlayerConnected                 BasePlayer.cs                  this
+OnActiveItemChange                 BasePlayer.cs                  this, activeItem, itemID) != null
+OnActiveItemChanged                BasePlayer.cs                  this, activeItem, activeItem2
+OnActiveTelephoneUpdated           BasePlayer.cs                  this, t
+OnAnimalDungProduce                RidableHorse.cs                this) == null)
+		{
+			Quaternion rotation = Quaternion.Euler(UnityEngine.Random.Range(-180f, 180f), UnityEngine.Random.Range(-180f, 180f), U
+OnAnimalDungProduced               RidableHorse.cs                this, item
+OnBoatGroupSpawn                   BoatGroupSpawner.cs            this, position, quaternion, list, flag, spawnsPT) != null
+OnBoatGroupSpawned                 BoatGroupSpawner.cs            this, position, quaternion, list, flag, spawnsPT
+OnBonusItemDrop                    LootContainer.cs               item, basePlayer, container) == null)
+			{
+				(item.Drop(GetDropPosition() + new Vector3(0f, 0.5f, 0f), GetInheritedDropVelocity()) as Drop
+OnBonusItemDropped                 LootContainer.cs               item, basePlayer, container
+OnBookmarkInput                    ComputerStation.cs             this, player, inputState) == null)
+		{
+			currentlyControllingEnt.Get(serverside: true).GetComponent<IRemoteControllable>().UserInput(inputS
+OnBroadcastCommand                 ConsoleNetwork.cs              strCommand, args) != null
+OnBuildingMerge                    ServerBuildingManager.cs       this, building1, building2
+OnBuildingPrivilege                BaseEntity.cs                  this, obb, cached, cacheDuration, exclude
+OnBuildingSplit                    ServerBuildingManager.cs       oldBuilding, num
+OnBuyVendingItem                   VendingMachine.cs              this, rpc.player, num, num2) != null
+OnCargoShipSpawnCrate              CargoShip.cs                   this) == null)
+		{
+			InvokeRepeating(PlayHorn, 0f, 8f
+OnCatapultFireForce                Catapult.cs                    this, shooter, num2
+OnClientCommand                    ConsoleNetwork.cs              packet.connection, text) == null)
+		{
+			ConsoleSystem.CommandResult commandResult = ConsoleSystem.RunWithResult(ConsoleSystem.Option.Server
+OnClientDisconnect                 ServerMgr.cs                   packet.connection, text
+OnClientProjectileEffectCreate     BaseProjectile.cs              sourceConnection, this, prefabName) == null
+OnClothingItemChanged              PlayerInventory.cs             this, item, bAdded
+OnCoalingTowerGather               CoalingTower.cs                this, item) != null)
+				{
+					item.Remove(
+OnConstructionPlace                Planner.cs                     baseEntity, component, placement, ownerPlayer) != null)
+		{
+			if (baseEntity.IsValid())
+			{
+				baseEntity.KillMessage(
+OnContainerDropItems               DropUtil.cs                    container) != null
+OnCorpsePopulate                   NPCPlayer.cs                   this, nPCPlayerCorpse
+OnCounterTargetChange              PowerCounter.cs                this, msg.player, num) == null && CanPlayerAdmin(msg.player)
+OnCrateLaptopAttack                HackableLockedCrate.cs         this, info) != null
+OnCrateSpawned                     BradleyAPC.cs                  this, baseEntity2
+OnDebrisSpawn                      DecayEntity.cs                 this, localPos, rot, dropToTerrain) != null
+OnDecayDamage                      DecayEntity.cs                 this) == null && num3 > 0f)
+			{
+				float num4 = num / GetEntityDecayDuration() * MaxHealth(
+OnDecayHeal                        DecayEntity.cs                 this) == null)
+				{
+					float num2 = decayDeltaTime / GetEntityDecayDuration() * GetEntityHealScale(
+OnDeepSeaTeleport                  TriggerDeepSeaPortal.cs        this, ent) != null
+OnDefaultItemsReceive              PlayerInventory.cs             this) != null
+OnDefaultItemsReceived             PlayerInventory.cs             this
+OnDieselEngineToggle               DieselEngine.cs                this, msg.player) != null
+OnDieselEngineToggled              DieselEngine.cs                this
+OnDispenserGather                  ResourceDispenser.cs           this, entity, item) == null && item != null)
+		{
+			ApplyItemOwnership(entity, item
+OnDispenserGathered                ResourceDispenser.cs           this, entity, item
+OnDoorOpened                       Door.cs                        this, rpc.player
+OnDroppedItemCombined              DroppedItem.cs                 this
+OnEntityActiveCheck                BaseEntity.cs                  ent, player, id, debugName
+OnEntityDeath                      BaseCombatEntity.cs            this, info
+OnEntityDismounted                 BaseMountable.cs               this, player
+OnEntityFlagsNetworkUpdate         BaseEntity.cs                  this) == null)
+			{
+				List<Connection> subscribers = GetSubscribers(
+OnEntityKill                       BaseNetworkable.cs             this) == null
+OnEntityMounted                    BaseMountable.cs               this, player
+OnEntityReskin                     SprayCan.cs                    baseEntity, num2, msg.player) != null
+OnEntityReskinned                  SprayCan.cs                    baseEntity, num2, msg.player
+OnEntitySpawned                    BaseNetworkable.cs             this
+OnEntityTakeDamage                 LivestockAnimal.cs             this, info) != null
+OnExcavatorGather                  ExcavatorArm.cs                this, item) != null
+OnExplosiveThrown                  ThrownWeapon.cs                msg.player, thrownEntity, this
+OnFindSpawnPoint                   ServerMgr.cs                   forPlayer, teamId
+OnFireBallDamage                   FireBall.cs                    this, item, hitInfo
+OnFireBallSpread                   FireBall.cs                    this, baseEntity
+OnFireworkDamage                   BaseFirework.cs                this, info) == null && info.damageTypes.Has(DamageType.Heat))
+		{
+			StaggeredTryLightFuse(
+OnFireworkDesignChange             PatternFirework.cs             this, design, rpc.player) != null
+OnFireworkDesignChanged            PatternFirework.cs             this, design, rpc.player
+OnFireworkExhausted                BaseFirework.cs                this
+OnFireworkStarted                  BaseFirework.cs                this
+OnFlameThrowerBurn                 FlameThrower.cs                this, baseEntity
+OnFrankensteinPetSleep             FrankensteinTable.cs           frankensteinPet, this, owner) == null)
+			{
+				ReturnFrankensteinItems(frankensteinPet
+OnFrankensteinPetWake              FrankensteinTable.cs           this, owner) == null
+OnFuelAmountCheck                  EntityFuelSystem.cs            this, fuelItem
+OnFuelItemCheck                    EntityFuelSystem.cs            this, fuelContainer
+OnGibsSpawned                      ServerGib.cs                   list, creator
+OnGiveSoldItem                     VendingMachine.cs              this, soldItem, buyer) == null)
+		{
+			while (soldItem.amount > soldItem.MaxStackable())
+			{
+				Item item = soldItem.SplitItem(soldItem.Ma
+OnGrowableGather                   GrowableEntity.cs              this, player, eat) != null
+OnGrowableGathered                 GrowableEntity.cs              this, item, player
+OnHealingItemUse                   MedicalTool.cs                 this, fromPlayer, toTarget) == null)
+			{
+				Facepunch.Rust.Analytics.Azure.OnMedUsed(ownerItemDefinition.shortname, fromPlayer, toTarget.G
+OnHelicopterAttack                 CH47HelicopterAIController.cs  this, info) != null
+OnHelicopterDropDoorOpen           CH47HelicopterAIController.cs  this) != null
+OnHelicopterTarget                 HelicopterTurret.cs            this, newTarget) == null
+OnHorseHitch                       HitchTrough.cs                 hitchable, spot
+OnHorseLead                        RidableHorse.cs                this, player) == null)
+		{
+			SetLeading(flag ? player : null
+OnHorseUnhitch                     HitchTrough.cs                 hitchable, hitchSpot) != null
+OnImpactEffectCreate               Effect.cs                      info, customEffect) != null || ((bool)info.InitiatorPlayer && info.InitiatorPlayer.limitNetworking) || !info.DoHitEffects || !CanPlayImpactE
+OnIngredientsCollect               ItemCrafter.cs                 this, bp, task, amount, player, takeBroken) != null
+OnInputUpdate                      IOEntity.cs                    this, inputAmount, inputSlot) != null
+OnInventoryAmmoItemFind            Chainsaw.cs                    ownerPlayer.inventory, fuelType
+OnInventoryItemFind                PlayerInventory.cs             this, id
+OnInventoryItemsCount              PlayerInventory.cs             this, itemid, includeBackpack, redirectAllowed
+OnInventoryItemsFind               PlayerInventory.cs             this, id, list) == null)
+		{
+			if (containerMain != null)
+			{
+				containerMain.FindItemsByItemID(list, id
+OnInventoryItemsTake               PlayerInventory.cs             this, collect, itemid, amount
+OnInventoryNetworkUpdate           PlayerInventory.cs             this, container, updateItemContainer, type, mode) != null
+OnItemAction                       PlayerInventory.cs             item, text, msg.player) != null
+OnItemAddedToContainer             ItemContainer.cs               this, item, sourcePlayer
+OnItemCraft                        IndustrialCrafter.cs           this, blueprint) != null
+OnItemCraftCancelled               ItemCrafter.cs                 itemCraftTask, this
+OnItemCraftFinished                ItemCrafter.cs                 task, item, this
+OnItemDeployed                     Deployer.cs                    this, baseEntity, baseEntity2
+OnItemDespawn                      DroppedItem.cs                 item
+OnItemDropped                      Item.cs                        this, baseEntity
+OnItemFilter                       StorageContainer.cs            item, this, targetSlot, player
+OnItemLock                         Item.cs                        this) == null) && (bNewState || Interface.CallHook("OnItemUnlock", this) == null))
+		{
+			SetFlag(Flag.IsLocked, bNewState
+OnItemPainted                      PaintedItemStorageEntity.cs    this, item, msg.player, array
+OnItemPickup                       WorldItem.cs                   this.item, msg.player, this) == null && CanOpenInSafeZone(msg.player))
+		{
+			ItemModContainer component = this.item.info.GetComponent<ItemM
+OnItemRecycle                      Recycler.cs                    slot, this) != null)
+				{
+					if (!HasRecyclable())
+					{
+						StopRecycling(
+OnItemRecycleAmount                Recycler.cs                    slot, num3, this
+OnItemRefill                       ItemModRepair.cs               item, player) == null
+OnItemRemove                       Item.cs                        this) != null
+OnItemRemovedFromContainer         ItemContainer.cs               this, item, sourcePlayer
+OnItemRepair                       RepairBench.cs                 player, itemToRepair) != null
+OnItemResearched                   ResearchTable.cs               this, num
+OnItemSkinChange                   RepairBench.cs                 inventoryId, slot, this, player) != null || (isValid && slot.uid != itemId)
+OnItemSplit                        Item.cs                        this, split_Amount
+OnItemStacked                      Item.cs                        item2, this, newcontainer
+OnItemSubmit                       Mailbox.cs                     slot, this, fromPlayer) != null || !slot.MoveToContainer(base.inventory)
+OnItemUnwrap                       ItemModUnwrap.cs               item, player, this) == null)
+		{
+			item.UseItem(
+OnItemUpgrade                      ItemModUpgrade.cs              item, item2, player
+OnItemUse                          Item.cs                        this, amountToConsume
+OnLiquidWeaponFired                LiquidWeapon.cs                this, player
+OnLivestockAnimalFamiliarityAdd    LivestockAnimal.cs             this, userId, seconds, reason) == null
+OnLivestockAnimalFamiliarityAdded  LivestockAnimal.cs             this, userId, seconds, reason
+OnLootEntity                       PlayerLoot.cs                  GetComponent<BasePlayer>(), targetEntity
+OnLootEntityEnd                    ContainerIOEntity.cs           player, this
+OnLootItem                         PlayerLoot.cs                  GetComponent<BasePlayer>(), item
+OnLootNetworkUpdate                PlayerLoot.cs                  this) != null
+OnLootPlayer                       BasePlayer.cs                  this, player
+OnLootSpawn                        LootContainer.cs               this) == null)
+		{
+			PopulateLoot(
+OnMeleeAttack                      BaseMelee.cs                   player, obj) != null
+OnMeleeThrown                      BaseMelee.cs                   player, item
+OnMlrsFire                         MLRS.cs                        this, owner) == null)
+		{
+			using (FlagsUpdateScope flagsUpdateScope = StartSetFlags(FlagsUpdateMode.SendNetworkUpdate))
+			{
+				flagsUpda
+OnMlrsFired                        MLRS.cs                        this, owner
+OnMlrsRocketFired                  MLRS.cs                        this, projectile
+OnMlrsTarget                       MLRS.cs                        this, worldPos, _mounted) != null
+OnMlrsTargetSet                    MLRS.cs                        this, trueTargetHitPos, _mounted
+OnNearbyTurretsScan                AutoTurret.cs                  this, obj) == null)
+		{
+			Vis.Entities(base.transform.position, Sentry.interferenceradius, obj, 256, QueryTriggerInteraction.Ignore
+OnNetworkGroupEntered              BaseNetworkable.cs             this, group
+OnNetworkGroupLeft                 BaseNetworkable.cs             this, group
+OnNetworkSubscriptionsGather       NetworkVisibilityGrid.cs       this, group, groups, radius) != null
+OnNpcAlert                         ScientistNPC.cs                this) == null
+OnNpcAttack                        BaseNpc.cs                     this, AttackTarget) == null && !((AttackTarget.ServerPosition - ServerPosition).magnitude > AttackRange)
+OnNpcConversationEnded             NPCTalking.cs                  this, player
+OnNpcConversationRespond           NPCTalking.cs                  this, player, conversationFor, responseNode) != null
+OnNpcConversationResponded         NPCTalking.cs                  this, player, conversationFor, responseNode
+OnNpcConversationStart             NPCTalking.cs                  this, ply, conversationFor) != null
+OnNpcDuck                          HumanNPC.cs                    this) == null
+OnNpcEquipWeapon                   NPCPlayer.cs                   this, slot) != null || slot == null
+OnNpcGiveSoldItem                  NPCVendingMachine.cs           this, soldItem, buyer) == null)
+		{
+			soldItem.SetItemOwnership(buyer, ItemOwnershipPhrases.VendorSale
+OnNpcRadioChatter                  ScientistNPC.cs                this) == null)
+			{
+				Effect.server.Run(RadioChatterEffects[UnityEngine.Random.Range(0, RadioChatterEffects.Length)].resourcePath, this, S
+OnNpcTarget                        AIBrainSenses.cs               owner, entity) == null)
+			{
+				float num2 = Vector3.Distance(entity.transform.position, owner.transform.position
+OnNpcTargetSense                   SimpleAIMemory.cs              owner, ent, brainSenses) != null
+OnOvenCook                         BaseOven.cs                    this, item) != null
+OnOvenCooked                       BaseOven.cs                    this, item, slot
+OnPatrolHelicopterKill             PatrolHelicopter.cs            this, info) != null
+OnPatrolHelicopterTakeDamage       PatrolHelicopter.cs            this, info) != null
+OnPayForPlacement                  Planner.cs                     player, this, component) != null || (player.IsInCreativeMode && Creative.freeBuild)
+OnPlayerActiveShieldDrop           PlayerBelt.cs                  player, foundShield) != null
+OnPlayerAttack                     BaseMelee.cs                   GetOwnerPlayer(), info) != null
+OnPlayerCorpseSpawn                BasePlayer.cs                  this) != null
+OnPlayerCorpseSpawned              BasePlayer.cs                  this, playerCorpse
+OnPlayerDeath                      BasePlayer.cs                  this, info) == null)
+				{
+					SleepingBag.OnPlayerDeath(this
+OnPlayerDisconnected               ServerMgr.cs                   basePlayer, strReason
+OnPlayerDismountFailed             BaseMountable.cs               player, this
+OnPlayerDrink                      LiquidContainer.cs             rpc.player, this) != null
+OnPlayerDropActiveItem             PlayerBelt.cs                  player, activeItem) != null
+OnPlayerHealthChange               BasePlayer.cs                  this, oldvalue, newvalue) != null
+OnPlayerInput                      BasePlayer.cs                  this, serverInput) != null || IsReceivingSnapshot || IsTransferProtected()
+OnPlayerLootEnd                    PlayerLoot.cs                  this
+OnPlayerPveDamage                  BuildingBlock.cs               info.Initiator, info, this) == null)
+			{
+				(info.Initiator as BasePlayer).Hurt(info.damageTypes.Total(), DamageType.Generic
+OnPlayerRespawn                    BasePlayer.cs                  this, spawnPoint
+OnPlayerRespawned                  BasePlayer.cs                  this
+OnPlayerSleep                      BasePlayer.cs                  this
+OnPlayerSleepEnd                   BasePlayer.cs                  this) == null)
+		{
+			if (IsRestrained)
+			{
+				inventory.SetLockedByRestraint(flag: true
+OnPlayerSleepEnded                 BasePlayer.cs                  this
+OnPlayerSpawn                      ServerMgr.cs                   basePlayer, connection) != null
+OnPlayerWantsDismount              BaseMountable.cs               player, this) == null && (!(player != null) || !player.IsRestrained))
+		{
+			AttemptDismount(player
+OnPlayerWantsMount                 BaseMountable.cs               player, this) != null
+OnPoweredLightsPointAdd            StringLights.cs                this, player, vector, vector2) == null
+OnProjectileRicochet               BasePlayer.cs                  this, playerProjectileRicochet) == null
+OnQuarryGather                     MiningQuarry.cs                this, item) != null)
+				{
+					item.Remove(
+OnRackedWeaponMount                WeaponRack.cs                  item, player, this
+OnRackedWeaponMounted              WeaponRack.cs                  item, player, this
+OnRandomItemAward                  RandomItemDispenser.cs         this, itemChance, forPlayer, distributorPosition) != null
+OnReactiveTargetReset              ReactiveTarget.cs              this
+OnResourceDepositCreated           ResourceDepositManager.cs      resourceDeposit
+OnRespawnInformationGiven          BasePlayer.cs                  this, list
+OnRidableAnimalClaim               RidableHorse.cs                this, player, purchaseToken) == null && ItemIsSaddle(purchaseToken))
+		{
+			using (FlagsUpdateScope flagsUpdateScope = StartSetFlags(FlagsUp
+OnRidableAnimalClaimed             RidableHorse.cs                this, player
+OnSamSiteModeToggle                SamSite.cs                     this, player, flag) != null
+OnSamSiteTarget                    SamSite.cs                     this, item) == null
+OnSamSiteTargetScan                SamSite.cs                     this, obj) == null)
+		{
+			if (!IsInDefenderMode())
+			{
+				AddTargetSet(obj, targetTypeVehicle.scanRadius
+OnSendCommand                      ConsoleNetwork.cs              cn, strCommand, args) == null)
+		{
+			NetWrite netWrite = Network.Net.sv.StartWrite(
+OnSiegeWeaponDoorOpen              BatteringRam.cs                this, rpc.player) == null)
+		{
+			OpenDoor(
+OnSiegeWeaponFire                  BatteringRam.cs                this, player) != null
+OnSleepingBagDestroy               SleepingBag.cs                 sleepingBag2, userID) != null
+OnSleepingBagDestroyed             SleepingBag.cs                 sleepingBag2, userID
+OnSleepingBagValidCheck            SleepingBag.cs                 this, playerID, ignoreTimers
+OnSprayCreate                      SprayCan.cs                    this, vector, quaternion) != null
+OnSprayRemove                      SprayCanSpray.cs               this, player) == null)
+		{
+			Kill(
+OnSteamInventoryUpdated            SteamInventory.cs              this
+OnSurveyGather                     SurveyCharge.cs                this, item
+OnTakeCurrencyItem                 NPCVendingMachine.cs           this, takenCurrencyItem) == null)
+		{
+			takenCurrencyItem.MoveToContainer(base.inventory
+OnTeamAcceptInvite                 RelationshipManager.cs         playerTeam, basePlayer) == null)
+			{
+				playerTeam.AcceptInvite(basePlayer
+OnTeamCreate                       RelationshipManager.cs         player) == null)
+		{
+			PlayerTeam playerTeam = ServerInstance.CreateTeam(
+OnTeamCreated                      RelationshipManager.cs         player, playerTeam
+OnTeamDisband                      RelationshipManager.cs         teamToDisband) == null)
+		{
+			teams.Remove(teamToDisband.teamID
+OnTeamDisbanded                    RelationshipManager.cs         teamToDisband
+OnTeamKick                         RelationshipManager.cs         playerTeam, basePlayer, uLong) == null)
+			{
+				playerTeam.RemovePlayer(uLong
+OnTeamLeave                        RelationshipManager.cs         playerTeam, basePlayer) == null)
+			{
+				playerTeam.RemovePlayer(basePlayer.userID
+OnTeamMemberInvite                 RelationshipManager.cs         playerTeam, basePlayer, basePlayer2.userID.Get(), false) == null)
+			{
+				playerTeam.SendInvite(basePlayer2
+OnTeamMemberPromote                RelationshipManager.cs         this, newTeamLeader) == null)
+			{
+				Facepunch.Rust.Analytics.Azure.OnTeamChanged("promoted", teamID, teamLeader, newTeamLeader, members
+OnTeamRejectInvite                 RelationshipManager.cs         basePlayer, playerTeam) == null)
+			{
+				playerTeam.RejectInvite(basePlayer
+OnTeamUpdate                       BasePlayer.cs                  currentTeam, newTeam, this) == null
+OnTeamUpdated                      BasePlayer.cs                  currentTeam, playerTeam2, this) == null)
+		{
+			ClientRPC(RpcTarget.PlayerAndSpectators("CLIENT_ReceiveTeamInfo", this), playerTeam2
+OnTerrainCreate                    TerrainGenerator.cs            this
+OnThreatLevelUpdate                BasePlayer.cs                  this) != null
+OnTrapArm                          BearTrap.cs                    this, rpc.player) == null)
+		{
+			Arm(
+OnTrapDisarm                       Landmine.cs                    this, rpc.player) != null || !Triggered()
+OnTrapSnapped                      BaseTrapTrigger.cs             this, obj, col
+OnTrapTrigger                      BearTrap.cs                    this, obj) == null
+OnTurretAssign                     AutoTurret.cs                  this, num, msg.player) == null)
+			{
+				Facepunch.Rust.Analytics.Azure.OnEntityAuthChanged(this, msg.player, authorizedPlayers, "added", nu
+OnTurretAssigned                   AutoTurret.cs                  this, num, msg.player
+OnTurretAuthorize                  AutoTurret.cs                  this, player) == null)
+		{
+			authorizedPlayers.Add(player.userID
+OnTurretClearList                  AutoTurret.cs                  this, rpc.player) == null)
+		{
+			authorizedPlayers.Clear(
+OnTurretDeauthorize                AutoTurret.cs                  this, rpc.player) == null)
+		{
+			authorizedPlayers.Remove(rpc.player.userID
+OnTurretIdentifierSet              AutoTurret.cs                  this, player, newID) == null)
+		{
+			Debug.Log("SetID success!"
+OnTurretModeToggle                 AutoTurret.cs                  this, rpc.player) == null)
+		{
+			SetPeacekeepermode(isOn: false
+OnTurretRotate                     AutoTurret.cs                  this, rpc.player) == null)
+		{
+			base.transform.rotation = Quaternion.LookRotation(-base.transform.forward, base.transform.up
+OnTurretShutdown                   AutoTurret.cs                  this) == null)
+		{
+			CancelInvoke(actionSetOnline
+OnTurretStartup                    AutoTurret.cs                  this) == null)
+		{
+			Effect.server.Run(onlineSound.resourcePath, this, 0u, Vector3.zero, Vector3.zero
+OnTurretTarget                     AutoTurret.cs                  this, targ) != null
+OnTurretToggle                     AutoTurret.cs                  this) == null)
+		{
+			using (FlagsUpdateScope flagsUpdateScope = StartSetFlags(FlagsUpdateMode.SendNetworkUpdate))
+			{
+				flagsUpdateScope
+OnVehicleHornPressed               VehicleModuleSeating.cs        this, player
+OnVehicleLockRequest               ModularCarGarage.cs            this, player, text) == null
+OnVehicleLockableCheck             ModularCarCodeLock.cs          this
+OnVehicleModuleDeselected          ModularCarGarage.cs            this, player
+OnVehicleModuleMove                BaseModularVehicle.cs          moduleForItem, this, player
+OnVehicleModuleSelect              ModularCarGarage.cs            vehicleItem, this, player) != null
+OnVehicleModuleSelected            ModularCarGarage.cs            vehicleItem, this, player
+OnVehicleModulesAssign             ModularCar.cs                  this, modularCarPresetConfig.socketItemDefs) != null
+OnVehicleModulesAssigned           ModularCar.cs                  this, modularCarPresetConfig.socketItemDefs
+OnVehiclePush                      BaseVehicle.cs                 this, msg.player) == null)
+		{
+			player.metabolism.calories.Subtract(3f
+OnWeaponFired                      BaseProjectile.cs              this, msg.player, component, projectileShoot
+OnWildlifeTrap                     SurvivalFishTrap.cs            this, itemDefinition) == null)
+			{
+				Item item2 = ItemManager.Create(itemDefinition, 1, 0uL, isServerSide: true, 0uL
+OnWorldPrefabSpawned               World.cs                       gameObject, category
+OnWorldProjectileCreate            BasePlayer.cs                  info, item) != null
+OnXmasLootDistribute               XMasRefill.cs                  this) == null)
+		{
+			InvokeRepeating(DistributeLoot, 3f, 0.02f

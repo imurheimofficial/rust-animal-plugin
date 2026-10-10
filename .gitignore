@@ -1,0 +1,9 @@
+# build outputs of the compile harness
+build/bin/
+build/obj/
+*.user
+.vs/
+
+# local machine files
+_local/
+*.log

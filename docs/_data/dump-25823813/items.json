@@ -1,0 +1,4086 @@
+{
+  "relevant": [
+    {
+      "shortname": "hat.wolf",
+      "name": "Wolf Headdress",
+      "itemid": -1478212975,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "50cal.mounted",
+      "name": "50 Cal Turret",
+      "itemid": 162882477,
+      "category": "Weapon",
+      "heldEntity": "assets/content/vehicles/boats/ptboat/turrets/50cal/entities/50cal.single.entity.prefab",
+      "deployable": null
+    },
+    {
+      "shortname": "50cal.mounted.left",
+      "name": "Dual 50 Cal Turret",
+      "itemid": -1467876094,
+      "category": "Weapon",
+      "heldEntity": "assets/content/vehicles/boats/ptboat/turrets/50cal/entities/50cal.left.entity.prefab",
+      "deployable": null
+    },
+    {
+      "shortname": "50cal.mounted.right",
+      "name": "Dual 50 Cal Turret",
+      "itemid": 1248383659,
+      "category": "Weapon",
+      "heldEntity": "assets/content/vehicles/boats/ptboat/turrets/50cal/entities/50cal.right.entity.prefab",
+      "deployable": null
+    },
+    {
+      "shortname": "horse",
+      "name": "Horse",
+      "itemid": 82772055,
+      "category": "Misc",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "horse.armor.roadsign",
+      "name": "Roadsign Horse Armor",
+      "itemid": 60528587,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null,
+      "equipment": {
+        "WearableFlag": "Reserved6",
+        "hideHair": true,
+        "animalProtection": "ProtectionProperties:roadsign.horse.protection",
+        "riderProtection": "ProtectionProperties:roadsign.horse.rider.protection",
+        "additionalInventorySlots": 0,
+        "speedModifier": -4.5,
+        "staminaUseModifier": 0.0,
+        "slot": "Armor"
+      }
+    },
+    {
+      "shortname": "horse.armor.wood",
+      "name": "Wooden Horse Armor",
+      "itemid": 1659447559,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null,
+      "equipment": {
+        "WearableFlag": "Reserved8",
+        "hideHair": true,
+        "animalProtection": "ProtectionProperties:wood.horse.protection",
+        "riderProtection": "ProtectionProperties:wood.horse.rider.protection",
+        "additionalInventorySlots": 6,
+        "speedModifier": -2.25,
+        "staminaUseModifier": 0.0,
+        "slot": "Armor"
+      }
+    },
+    {
+      "shortname": "horse.armor.lny26",
+      "name": "Lunar New Year Horse Armor",
+      "itemid": -2068194497,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null,
+      "equipment": {
+        "WearableFlag": "Unused23",
+        "hideHair": true,
+        "animalProtection": "ProtectionProperties:roadsign.horse.protection",
+        "riderProtection": "ProtectionProperties:roadsign.horse.rider.protection",
+        "additionalInventorySlots": 0,
+        "speedModifier": -4.5,
+        "staminaUseModifier": 0.0,
+        "slot": "Armor"
+      }
+    },
+    {
+      "shortname": "horse.saddle.double",
+      "name": "Double Horse Saddle",
+      "itemid": -1323101799,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null,
+      "equipment": {
+        "WearableFlag": "Reserved10",
+        "hideHair": false,
+        "animalProtection": null,
+        "riderProtection": null,
+        "additionalInventorySlots": 0,
+        "speedModifier": 0.0,
+        "staminaUseModifier": 0.0,
+        "slot": "SaddleDouble"
+      }
+    },
+    {
+      "shortname": "horse.saddle",
+      "name": "Horse Saddle",
+      "itemid": -1997543660,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "horse.saddle.single",
+      "name": "Single Horse Saddle",
+      "itemid": 1559915778,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null,
+      "equipment": {
+        "WearableFlag": "Reserved9",
+        "hideHair": false,
+        "animalProtection": null,
+        "riderProtection": null,
+        "additionalInventorySlots": 0,
+        "speedModifier": 0.0,
+        "staminaUseModifier": 0.0,
+        "slot": "Saddle"
+      }
+    },
+    {
+      "shortname": "horse.saddlebag",
+      "name": "Saddle bag",
+      "itemid": 1400460850,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null,
+      "equipment": {
+        "WearableFlag": "0",
+        "hideHair": false,
+        "animalProtection": null,
+        "riderProtection": null,
+        "additionalInventorySlots": 12,
+        "speedModifier": -1.0,
+        "staminaUseModifier": 0.0,
+        "slot": "Basic"
+      }
+    },
+    {
+      "shortname": "horse.shoes.advanced",
+      "name": "High Quality Horse Shoes",
+      "itemid": 1989785143,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null,
+      "equipment": {
+        "WearableFlag": "0",
+        "hideHair": false,
+        "animalProtection": null,
+        "riderProtection": null,
+        "additionalInventorySlots": 0,
+        "speedModifier": 2.5,
+        "staminaUseModifier": 0.0,
+        "slot": "Feet"
+      }
+    },
+    {
+      "shortname": "horse.shoes.basic",
+      "name": "Basic Horse Shoes",
+      "itemid": -1211268013,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null,
+      "equipment": {
+        "WearableFlag": "0",
+        "hideHair": false,
+        "animalProtection": null,
+        "riderProtection": null,
+        "additionalInventorySlots": 0,
+        "speedModifier": 1.5,
+        "staminaUseModifier": 0.0,
+        "slot": "Feet"
+      }
+    },
+    {
+      "shortname": "aiming.module.mlrs",
+      "name": "Aiming Module",
+      "itemid": 343045591,
+      "category": "Component",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "2module.car",
+      "name": "2 Module Car",
+      "itemid": -866121090,
+      "category": "Misc",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "3module.car",
+      "name": "3 Module Car",
+      "itemid": -831725027,
+      "category": "Misc",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "4module.car",
+      "name": "4 Module Car",
+      "itemid": -935322684,
+      "category": "Misc",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "2module.car.chassis",
+      "name": "2 Module Car Chassis",
+      "itemid": -226151558,
+      "category": "Misc",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "3module.car.chassis",
+      "name": "3 Module Car Chassis",
+      "itemid": 1482871705,
+      "category": "Misc",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "4module.car.chassis",
+      "name": "4 Module Car Chassis",
+      "itemid": 385099196,
+      "category": "Misc",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "ballista.mounted",
+      "name": "Mounted Ballista",
+      "itemid": -759279626,
+      "category": "Weapon",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/content/vehicles/siegeweapons/ballista/ballista.constructable.entity.prefab"
+    },
+    {
+      "shortname": "dart.incapacitate",
+      "name": "Incapacitate Dart",
+      "itemid": -963819285,
+      "category": "Ammunition",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "dart.radiation",
+      "name": "Radiation Dart",
+      "itemid": -594596146,
+      "category": "Ammunition",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "dart.scatter",
+      "name": "Scatter Dart",
+      "itemid": 2036395619,
+      "category": "Ammunition",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "dart.wood",
+      "name": "Wood Dart",
+      "itemid": -274709858,
+      "category": "Ammunition",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "boots.frog",
+      "name": "Frog Boots",
+      "itemid": -1000573653,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "deer.skull.mask",
+      "name": "Bone Helmet",
+      "itemid": -1903165497,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "silly.horse.mask",
+      "name": "Silly Horse Mask",
+      "itemid": 1849409072,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "jumpsuit.waterwellnpc",
+      "name": "Waterwell NPC Jumpsuit",
+      "itemid": -874908751,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "clothing.mod.armorinsert_lead",
+      "name": "Lead Armor Insert",
+      "itemid": 2047789913,
+      "category": "Items",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "rope",
+      "name": "Rope",
+      "itemid": 1414245522,
+      "category": "Component",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "wall.animal.fence.gate",
+      "name": "Animal Fence Gate",
+      "itemid": 1143376304,
+      "category": "Construction",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/deployable/animal fence/animalfencegate.deployed.prefab"
+    },
+    {
+      "shortname": "wall.animal.fence",
+      "name": "Animal Fence",
+      "itemid": -1814195745,
+      "category": "Construction",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/deployable/animal fence/animalfence.deployed.prefab"
+    },
+    {
+      "shortname": "trap.bear",
+      "name": "Snap Trap",
+      "itemid": -582782051,
+      "category": "Traps",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/deployable/bear trap/beartrap.prefab"
+    },
+    {
+      "shortname": "beanbagseatfabric",
+      "name": "Fabric Beanbag Seat",
+      "itemid": -576866254,
+      "category": "Items",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/deployable/chair/skins/cozy_beanbag_seat/beanbag.seat.fabric.deployed.prefab"
+    },
+    {
+      "shortname": "beanbagseatleather",
+      "name": "Leather Beanbag Seat",
+      "itemid": -1220928936,
+      "category": "Items",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/deployable/chair/skins/cozy_beanbag_seat/beanbag.seat.leather.deployed.prefab"
+    },
+    {
+      "shortname": "chair.ejector.seat",
+      "name": "Salvaged Ejector Seat",
+      "itemid": -463012608,
+      "category": "Items",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/deployable/chair/skins/pilot_hazmat_ejector_seat/chair.ejectorseat.prefab"
+    },
+    {
+      "shortname": "chickencoop",
+      "name": "Chicken Coop",
+      "itemid": -2018158920,
+      "category": "Items",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/deployable/chickencoop/chickencoop.deployed.prefab"
+    },
+    {
+      "shortname": "dartboard",
+      "name": "Dart Board",
+      "itemid": -872679147,
+      "category": "Fun",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/deployable/dartboard/dartboard.deployed.prefab"
+    },
+    {
+      "shortname": "hitchtroughcombo",
+      "name": "Hitch & Trough",
+      "itemid": 1160881421,
+      "category": "Items",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/deployable/hitch & trough/hitchtrough.deployed.prefab"
+    },
+    {
+      "shortname": "rug.bear",
+      "name": "Bear Skin Rug",
+      "itemid": -1104881824,
+      "category": "Items",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/deployable/rug/rug.bear.deployed.prefab"
+    },
+    {
+      "shortname": "cupboard.tool",
+      "name": "Tool Cupboard",
+      "itemid": -97956382,
+      "category": "Construction",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/deployable/tool cupboard/cupboard.tool.deployed.prefab"
+    },
+    {
+      "shortname": "cupboard.tool.retro",
+      "name": "Retro Tool Cupboard",
+      "itemid": 1488606552,
+      "category": "Construction",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/deployable/tool cupboard/retro/cupboard.tool.retro.deployed.prefab"
+    },
+    {
+      "shortname": "cupboard.tool.shockbyte",
+      "name": "Shockbyte Tool Cupboard",
+      "itemid": 1174957864,
+      "category": "Construction",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/deployable/tool cupboard/shockbyte/cupboard.tool.shockbyte.deployed.prefab"
+    },
+    {
+      "shortname": "apple",
+      "name": "Apple",
+      "itemid": 1548091822,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=30",
+        "Hydration=15",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "apple.spoiled",
+      "name": "Rotten Apple",
+      "itemid": 352130972,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=15",
+        "Hydration=2",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "black.raspberries",
+      "name": "Black Raspberries",
+      "itemid": 1931713481,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=40",
+        "Hydration=20",
+        "Poison=-5",
+        "Health=10"
+      ]
+    },
+    {
+      "shortname": "blueberries",
+      "name": "Blueberries",
+      "itemid": -586342290,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=30",
+        "Hydration=20",
+        "Poison=-5",
+        "Health=10"
+      ]
+    },
+    {
+      "shortname": "bread.loaf",
+      "name": "Bread Loaf",
+      "itemid": 281099360,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=150",
+        "Hydration=10",
+        "HealthOverTime=8"
+      ]
+    },
+    {
+      "shortname": "bread.brioche.loaf",
+      "name": "Brioche Bread",
+      "itemid": -909588488,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=190",
+        "Hydration=13",
+        "HealthOverTime=10"
+      ]
+    },
+    {
+      "shortname": "grub",
+      "name": "Grub",
+      "itemid": -568419968,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=3",
+        "Hydration=-15"
+      ]
+    },
+    {
+      "shortname": "worm",
+      "name": "Worm",
+      "itemid": 1770475779,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=1",
+        "Hydration=-10"
+      ]
+    },
+    {
+      "shortname": "cactusflesh",
+      "name": "Cactus Flesh",
+      "itemid": 1783512007,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=5",
+        "Hydration=20",
+        "HealthOverTime=3"
+      ]
+    },
+    {
+      "shortname": "can.beans",
+      "name": "Can of Beans",
+      "itemid": -700591459,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=25",
+        "HealthOverTime=4"
+      ]
+    },
+    {
+      "shortname": "can.tuna",
+      "name": "Can of Tuna",
+      "itemid": -1941646328,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=50",
+        "Hydration=15",
+        "HealthOverTime=2"
+      ]
+    },
+    {
+      "shortname": "chocolate",
+      "name": "Chocolate Bar",
+      "itemid": -965336208,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=1",
+        "HealthOverTime=2"
+      ]
+    },
+    {
+      "shortname": "coconut",
+      "name": "Coconut",
+      "itemid": -24571537,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=15",
+        "Hydration=50",
+        "HealthOverTime=2"
+      ]
+    },
+    {
+      "shortname": "egg",
+      "name": "Egg",
+      "itemid": 1858828593,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=40",
+        "Hydration=15",
+        "HealthOverTime=2"
+      ]
+    },
+    {
+      "shortname": "fish.minnows",
+      "name": "Minnows",
+      "itemid": -542577259,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=1",
+        "HealthOverTime=1"
+      ]
+    },
+    {
+      "shortname": "fish.smallshark",
+      "name": "Small Shark",
+      "itemid": -1768880890,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "granolabar",
+      "name": "Granola Bar",
+      "itemid": -746030907,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=60",
+        "HealthOverTime=5"
+      ]
+    },
+    {
+      "shortname": "honey",
+      "name": "Jar of Honey",
+      "itemid": 1601800933,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=50",
+        "Radiation=-15",
+        "HealthOverTime=3"
+      ]
+    },
+    {
+      "shortname": "bearmeat.burned",
+      "name": "Burnt Bear Meat",
+      "itemid": -989755543,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=25",
+        "HealthOverTime=1"
+      ]
+    },
+    {
+      "shortname": "bearmeat.cooked",
+      "name": "Cooked Bear Meat",
+      "itemid": 1873897110,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=1",
+        "HealthOverTime=5"
+      ]
+    },
+    {
+      "shortname": "bearmeat",
+      "name": "Raw Bear Meat",
+      "itemid": -1520560807,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=3",
+        "Poison=5"
+      ]
+    },
+    {
+      "shortname": "bearmeat.spoiled",
+      "name": "Spoiled Bear Meat",
+      "itemid": 1348294923,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=2",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "bigcatmeat.cooked",
+      "name": "Cooked Big Cat Meat",
+      "itemid": -1318837358,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=120",
+        "Hydration=1",
+        "HealthOverTime=7"
+      ]
+    },
+    {
+      "shortname": "bigcatmeat",
+      "name": "Raw Big Cat Meat",
+      "itemid": -2095813057,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=3",
+        "Poison=5"
+      ]
+    },
+    {
+      "shortname": "bigcatmeat.spoiled",
+      "name": "Spoiled Big Cat Meat",
+      "itemid": 248643189,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=2",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "chicken.burned",
+      "name": "Burnt Chicken",
+      "itemid": 1973684065,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "HealthOverTime=2"
+      ]
+    },
+    {
+      "shortname": "chicken.cooked",
+      "name": "Cooked Chicken",
+      "itemid": -1848736516,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=40",
+        "Hydration=3",
+        "HealthOverTime=10"
+      ]
+    },
+    {
+      "shortname": "chicken.raw",
+      "name": "Raw Chicken Breast",
+      "itemid": -1440987069,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=20",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "chicken.spoiled",
+      "name": "Spoiled Chicken",
+      "itemid": -751151717,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=2",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "beefmeat.cooked",
+      "name": "Cooked Beef",
+      "itemid": 718346230,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=120",
+        "Hydration=1",
+        "HealthOverTime=7"
+      ]
+    },
+    {
+      "shortname": "beefmeat",
+      "name": "Raw Beef",
+      "itemid": -201824959,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=3",
+        "Poison=5"
+      ]
+    },
+    {
+      "shortname": "beefmeat.spoiled",
+      "name": "Spoiled Beef",
+      "itemid": 1412100395,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=2",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "crocodilemeat.cooked",
+      "name": "Cooked Crocodile Meat",
+      "itemid": 392828520,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=1",
+        "HealthOverTime=5"
+      ]
+    },
+    {
+      "shortname": "crocodilemeat",
+      "name": "Raw Crocodile Meat",
+      "itemid": -1081599445,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=3",
+        "Poison=5"
+      ]
+    },
+    {
+      "shortname": "crocodilemeat.spoiled",
+      "name": "Spoiled Crocodile Meat",
+      "itemid": -1796837031,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=2",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "deermeat.burned",
+      "name": "Burnt Deer Meat",
+      "itemid": -78533081,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "HealthOverTime=2"
+      ]
+    },
+    {
+      "shortname": "deermeat.cooked",
+      "name": "Cooked Deer Meat",
+      "itemid": -1509851560,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=40",
+        "Hydration=3",
+        "HealthOverTime=10"
+      ]
+    },
+    {
+      "shortname": "deermeat.raw",
+      "name": "Raw Deer Meat",
+      "itemid": 1422530437,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=20",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "deermeat.spoiled",
+      "name": "Spoiled Deer Meat",
+      "itemid": -2035449523,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=2",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "fish.cooked",
+      "name": "Cooked Fish",
+      "itemid": 1668129151,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=60",
+        "Hydration=15",
+        "HealthOverTime=5"
+      ]
+    },
+    {
+      "shortname": "fish.raw",
+      "name": "Raw Fish",
+      "itemid": 989925924,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=5",
+        "Hydration=1"
+      ]
+    },
+    {
+      "shortname": "fish.spoiled",
+      "name": "Spoiled Fish Meat",
+      "itemid": 1130729138,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=2",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "horsemeat.burned",
+      "name": "Burnt Horse Meat",
+      "itemid": 1917703890,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "HealthOverTime=2"
+      ]
+    },
+    {
+      "shortname": "horsemeat.cooked",
+      "name": "Cooked Horse Meat",
+      "itemid": -1162759543,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=45",
+        "Hydration=3",
+        "HealthOverTime=8"
+      ]
+    },
+    {
+      "shortname": "horsemeat.raw",
+      "name": "Raw Horse Meat",
+      "itemid": -1130350864,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=20",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "horsemeat.spoiled",
+      "name": "Spoiled Horse Meat",
+      "itemid": -724146494,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=2",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "humanmeat.burned",
+      "name": "Burnt Human Meat",
+      "itemid": -682687162,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=6",
+        "Hydration=-30"
+      ]
+    },
+    {
+      "shortname": "humanmeat.cooked",
+      "name": "Cooked Human Meat",
+      "itemid": 1536610005,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=30",
+        "Hydration=-30",
+        "HealthOverTime=2"
+      ]
+    },
+    {
+      "shortname": "humanmeat.raw",
+      "name": "Raw Human Meat",
+      "itemid": -1709878924,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=5",
+        "Hydration=-3",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "humanmeat.spoiled",
+      "name": "Spoiled Human Meat",
+      "itemid": 1272768630,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=2",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "muttonmeat.cooked",
+      "name": "Cooked Mutton",
+      "itemid": -319133397,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=120",
+        "Hydration=1",
+        "HealthOverTime=7"
+      ]
+    },
+    {
+      "shortname": "muttonmeat",
+      "name": "Raw Mutton",
+      "itemid": -1957595450,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=3",
+        "Poison=5"
+      ]
+    },
+    {
+      "shortname": "muttonmeat.spoiled",
+      "name": "Spoiled Mutton",
+      "itemid": 1751463672,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=2",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "meat.pork.burned",
+      "name": "Burnt Pork",
+      "itemid": 1391703481,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=15",
+        "HealthOverTime=1"
+      ]
+    },
+    {
+      "shortname": "meat.pork.cooked",
+      "name": "Cooked Pork",
+      "itemid": -242084766,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=60",
+        "Hydration=1",
+        "HealthOverTime=5"
+      ]
+    },
+    {
+      "shortname": "meat.boar",
+      "name": "Raw Pork",
+      "itemid": 621915341,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=60",
+        "Poison=5"
+      ]
+    },
+    {
+      "shortname": "porkmeat.spoiled",
+      "name": "Spoiled Pork Meat",
+      "itemid": 1925646349,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=2",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "snakemeat.cooked",
+      "name": "Cooked Snake Meat",
+      "itemid": -170436364,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=1",
+        "HealthOverTime=5"
+      ]
+    },
+    {
+      "shortname": "snakemeat",
+      "name": "Raw Snake Meat",
+      "itemid": -2100458529,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=3",
+        "Poison=5"
+      ]
+    },
+    {
+      "shortname": "snakemeat.spoiled",
+      "name": "Spoiled Snake Meat",
+      "itemid": -1616704051,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=2",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "wolfmeat.burned",
+      "name": "Burnt Wolf Meat",
+      "itemid": 1827479659,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=15",
+        "HealthOverTime=1"
+      ]
+    },
+    {
+      "shortname": "wolfmeat.cooked",
+      "name": "Cooked Wolf Meat",
+      "itemid": 813023040,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=60",
+        "Hydration=1",
+        "HealthOverTime=5"
+      ]
+    },
+    {
+      "shortname": "wolfmeat.raw",
+      "name": "Raw Wolf Meat",
+      "itemid": -395377963,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=20",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "wolfmeat.spoiled",
+      "name": "Spoiled Wolf Meat",
+      "itemid": -1167031859,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=10",
+        "Hydration=2",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "cream",
+      "name": "Cream",
+      "itemid": 1185218972,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=30",
+        "Hydration=9",
+        "Health=1.5"
+      ]
+    },
+    {
+      "shortname": "milk",
+      "name": "Milk",
+      "itemid": 325350919,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=60",
+        "Hydration=45",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "skimmedmilk",
+      "name": "Skimmed Milk",
+      "itemid": -1019639625,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=30",
+        "Hydration=36",
+        "Health=1"
+      ]
+    },
+    {
+      "shortname": "mushroom",
+      "name": "Mushroom",
+      "itemid": -1962971928,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=15",
+        "Hydration=5",
+        "Health=3"
+      ]
+    },
+    {
+      "shortname": "jar.pickle",
+      "name": "Pickles",
+      "itemid": 286193827,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=50",
+        "Hydration=20",
+        "HealthOverTime=5"
+      ]
+    },
+    {
+      "shortname": "pie.apple",
+      "name": "Apple Pie",
+      "itemid": 4384538,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=80",
+        "Hydration=15",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "pie.apple.rich",
+      "name": "Rich Apple Pie",
+      "itemid": -1846744758,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=19",
+        "Health=3"
+      ]
+    },
+    {
+      "shortname": "pie.bear",
+      "name": "Bear Pie",
+      "itemid": 2039177180,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=80",
+        "Hydration=15",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "pie.bear.rich",
+      "name": "Rich Bear Pie",
+      "itemid": 1883513936,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=19",
+        "Health=3"
+      ]
+    },
+    {
+      "shortname": "pie.beef",
+      "name": "Beef Pie",
+      "itemid": 782269436,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=80",
+        "Hydration=15",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "pie.beef.rich",
+      "name": "Rich Beef Pie",
+      "itemid": -867055736,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=19",
+        "Health=3"
+      ]
+    },
+    {
+      "shortname": "pie.bigcat",
+      "name": "Big Cat Pie",
+      "itemid": 309017792,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=80",
+        "Hydration=15",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "pie.bigcat.rich",
+      "name": "Rich Big Cat Pie",
+      "itemid": 1469787676,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=19",
+        "Health=3"
+      ]
+    },
+    {
+      "shortname": "pie.chicken",
+      "name": "Chicken Pie",
+      "itemid": 120820987,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=80",
+        "Hydration=15",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "pie.chicken.rich",
+      "name": "Rich Chicken Pie",
+      "itemid": 2006264797,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=19",
+        "Health=3"
+      ]
+    },
+    {
+      "shortname": "pie.crocodile",
+      "name": "Crocodile Pie",
+      "itemid": 54265286,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=80",
+        "Hydration=15",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "pie.fish",
+      "name": "Fish Pie",
+      "itemid": -1785248332,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=80",
+        "Hydration=15",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "pie.fish.rich",
+      "name": "Rich Fish Pie",
+      "itemid": 1427291780,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=19",
+        "Health=3"
+      ]
+    },
+    {
+      "shortname": "pie.hunters",
+      "name": "Hunters Pie",
+      "itemid": 320438357,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=80",
+        "Hydration=15",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "pie.hunters.rich",
+      "name": "Rich Hunters Pie",
+      "itemid": -1188678681,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=19",
+        "Health=3"
+      ]
+    },
+    {
+      "shortname": "pie.mutton",
+      "name": "Shepherds Pie",
+      "itemid": 939198535,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=80",
+        "Hydration=15",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "pie.mutton.rich",
+      "name": "Rich Shepherds Pie",
+      "itemid": 1468691829,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=19",
+        "Health=3"
+      ]
+    },
+    {
+      "shortname": "pie.pork",
+      "name": "Pork Pie",
+      "itemid": 1467878256,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=80",
+        "Hydration=15",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "pie.pork.rich",
+      "name": "Rich Pork Pie",
+      "itemid": 1988640176,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=19",
+        "Health=3"
+      ]
+    },
+    {
+      "shortname": "pie.pumpkin",
+      "name": "Pumpkin Pie",
+      "itemid": -1488408786,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=80",
+        "Hydration=15",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "pie.pumpkin.rich",
+      "name": "Rich Pumpkin Pie",
+      "itemid": 1364112542,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=19",
+        "Health=3"
+      ]
+    },
+    {
+      "shortname": "pie.survivors",
+      "name": "Survivor's Pie",
+      "itemid": -963820355,
+      "category": "Food",
+      "heldEntity": "assets/prefabs/food/pies/food_pie_generic.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=80",
+        "Hydration=15",
+        "Health=2"
+      ]
+    },
+    {
+      "shortname": "spoiled.produce",
+      "name": "Spoiled Produce",
+      "itemid": 1184215560,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=-50",
+        "Hydration=-50",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "fun.cowbell",
+      "name": "Cowbell",
+      "itemid": -1049881973,
+      "category": "Fun",
+      "heldEntity": "assets/prefabs/instruments/cowbell/cowbell.weapon.prefab",
+      "deployable": null
+    },
+    {
+      "shortname": "hat.horsemask",
+      "name": "Horse Mask",
+      "itemid": -418359052,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "hat.rabbitmask",
+      "name": "Rabbit Mask",
+      "itemid": -986782031,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "hat.snakemask",
+      "name": "Snake mask",
+      "itemid": -1314079879,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "hat.tigermask",
+      "name": "Tiger Mask",
+      "itemid": 709206314,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "torchholder",
+      "name": "Torch Holder",
+      "itemid": 446206234,
+      "category": "Items",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/misc/decor_dlc/torchholder/torchholder.deployed.prefab"
+    },
+    {
+      "shortname": "chicken.costume",
+      "name": "Chicken Costume",
+      "itemid": -152332823,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "horse.costume",
+      "name": "Horse Costume",
+      "itemid": 1420547167,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "halloween.candy",
+      "name": "Halloween Candy",
+      "itemid": -888153050,
+      "category": "Misc",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=25",
+        "HealthOverTime=1"
+      ]
+    },
+    {
+      "shortname": "boogieboard",
+      "name": "Boogie Board",
+      "itemid": -1478094705,
+      "category": "Fun",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/misc/summer_dlc/boogie_board/boogieboard.deployed.prefab"
+    },
+    {
+      "shortname": "innertube.horse",
+      "name": "Inner Tube",
+      "itemid": 185586769,
+      "category": "Fun",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/misc/summer_dlc/inner_tube/skins/innertube.horse.deployed.prefab"
+    },
+    {
+      "shortname": "venom.snake",
+      "name": "Snake Venom",
+      "itemid": -870140677,
+      "category": "Items",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "candycaneclub",
+      "name": "Candy Cane Club",
+      "itemid": 1789825282,
+      "category": "Weapon",
+      "heldEntity": "assets/prefabs/misc/xmas/candy cane club/candy_cane.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=300",
+        "Hydration=100",
+        "HealthOverTime=16"
+      ]
+    },
+    {
+      "shortname": "pookie.bear",
+      "name": "Pookie Bear",
+      "itemid": -1651220691,
+      "category": "Items",
+      "heldEntity": "assets/prefabs/tools/planner/building_planner.entity.prefab",
+      "deployable": "assets/prefabs/misc/xmas/pookie/pookie_deployed.prefab"
+    },
+    {
+      "shortname": "attire.reindeer.headband",
+      "name": "Reindeer Antlers",
+      "itemid": -324675402,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "santabeard",
+      "name": "Santa Beard",
+      "itemid": 2126889441,
+      "category": "Attire",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "black.berry",
+      "name": "Black Berry",
+      "itemid": 1771755747,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=5",
+        "Hydration=2"
+      ]
+    },
+    {
+      "shortname": "blue.berry",
+      "name": "Blue Berry",
+      "itemid": 1112162468,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=5",
+        "Hydration=2"
+      ]
+    },
+    {
+      "shortname": "green.berry",
+      "name": "Green Berry",
+      "itemid": 858486327,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=5",
+        "Hydration=2"
+      ]
+    },
+    {
+      "shortname": "red.berry",
+      "name": "Red Berry",
+      "itemid": 1272194103,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=5",
+        "Hydration=2"
+      ]
+    },
+    {
+      "shortname": "white.berry",
+      "name": "White Berry",
+      "itemid": 854447607,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=5",
+        "Hydration=2"
+      ]
+    },
+    {
+      "shortname": "yellow.berry",
+      "name": "Yellow Berry",
+      "itemid": 1660145984,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=5",
+        "Hydration=2"
+      ]
+    },
+    {
+      "shortname": "corn",
+      "name": "Corn",
+      "itemid": 1367190888,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=75",
+        "Hydration=10",
+        "HealthOverTime=6"
+      ]
+    },
+    {
+      "shortname": "potato",
+      "name": "Potato",
+      "itemid": -2086926071,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=125",
+        "Hydration=5",
+        "HealthOverTime=6"
+      ]
+    },
+    {
+      "shortname": "pumpkin",
+      "name": "Pumpkin",
+      "itemid": -567909622,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=80",
+        "Hydration=30",
+        "HealthOverTime=8"
+      ]
+    },
+    {
+      "shortname": "wheat",
+      "name": "Wheat",
+      "itemid": 1178325727,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=75",
+        "Hydration=10",
+        "HealthOverTime=6"
+      ]
+    },
+    {
+      "shortname": "fat.animal",
+      "name": "Animal Fat",
+      "itemid": -1018587433,
+      "category": "Resources",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "crude.oil",
+      "name": "Crude Oil",
+      "itemid": -321733511,
+      "category": "Resources",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=-50",
+        "Hydration=-50",
+        "Poison=10"
+      ]
+    },
+    {
+      "shortname": "honeycomb",
+      "name": "Honeycomb",
+      "itemid": -1513203236,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=5"
+      ]
+    },
+    {
+      "shortname": "horsedung",
+      "name": "Dung",
+      "itemid": -1579932985,
+      "category": "Resources",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "water.radioactive",
+      "name": "Radioactive Water",
+      "itemid": 1811780502,
+      "category": "Resources",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=10",
+        "Poison=5",
+        "Health=-5",
+        "Radiation=5"
+      ]
+    },
+    {
+      "shortname": "water.salt",
+      "name": "Salt Water",
+      "itemid": -277057363,
+      "category": "Resources",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Calories=-15",
+        "Hydration=-20",
+        "Poison=5",
+        "Health=-2"
+      ]
+    },
+    {
+      "shortname": "thruster.module",
+      "name": "Thruster Module",
+      "itemid": 1754952075,
+      "category": "Component",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "water",
+      "name": "Water",
+      "itemid": -1779180711,
+      "category": "Resources",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30",
+        "Poison=-3",
+        "HealthOverTime=5",
+        "Radiation=-5"
+      ]
+    },
+    {
+      "shortname": "skull.wolf",
+      "name": "Wolf Skull",
+      "itemid": 2048317869,
+      "category": "Resources",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "advancedcoolingtea",
+      "name": "Advanced Cooling Tea",
+      "itemid": -1498613415,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "coolingtea",
+      "name": "Basic Cooling Tea",
+      "itemid": -1260229965,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "purecoolingtea.creamy",
+      "name": "Creamy Pure Cooling Tea",
+      "itemid": 1527700610,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30",
+        "Health=5",
+        "Calories=45"
+      ]
+    },
+    {
+      "shortname": "purecoolingtea",
+      "name": "Pure Cooling Tea",
+      "itemid": 1121416193,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "purecoolingtea.milky",
+      "name": "Milky Pure Cooling Tea",
+      "itemid": 1738714421,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=45",
+        "Calories=90"
+      ]
+    },
+    {
+      "shortname": "advancedcraftingtea_quality",
+      "name": "Advanced Crafting Quality Tea",
+      "itemid": -652889722,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "craftingtea_quality",
+      "name": "Basic Crafting Quality Tea",
+      "itemid": 368008432,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "purecraftingtea_quality",
+      "name": "Pure Crafting Quality Tea",
+      "itemid": 97903330,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "advanceharvestingtea",
+      "name": "Advanced Harvesting Tea",
+      "itemid": -1385721419,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "harvestingtea",
+      "name": "Basic Harvesting Tea",
+      "itemid": 1516531815,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "pureharvestingtea.creamy",
+      "name": "Creamy Pure Harvesting Tea",
+      "itemid": -1661676046,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30",
+        "Health=5",
+        "Calories=45"
+      ]
+    },
+    {
+      "shortname": "pureharvestingtea",
+      "name": "Pure Harvesting Tea",
+      "itemid": 377750553,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "pureharvestingtea.milky",
+      "name": "Milky Pure Harvesting Tea",
+      "itemid": 789540413,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=45",
+        "Calories=90"
+      ]
+    },
+    {
+      "shortname": "healingtea.advanced",
+      "name": "Advanced Healing Tea",
+      "itemid": -2123125470,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "HealthOverTime=50",
+        "Hydration=30",
+        "Health=5"
+      ]
+    },
+    {
+      "shortname": "healingtea",
+      "name": "Basic Healing Tea",
+      "itemid": -929092070,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "HealthOverTime=30",
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "healingtea.pure.creamy",
+      "name": "Creamy Pure Healing Tea",
+      "itemid": -132349657,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "HealthOverTime=97",
+        "Hydration=30",
+        "Health=18",
+        "Calories=45"
+      ]
+    },
+    {
+      "shortname": "healingtea.pure",
+      "name": "Pure Healing Tea",
+      "itemid": -1677315902,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "HealthOverTime=75",
+        "Hydration=30",
+        "Health=10"
+      ]
+    },
+    {
+      "shortname": "healingtea.pure.milky",
+      "name": "Milky Pure Healing Tea",
+      "itemid": -1644292642,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "HealthOverTime=100",
+        "Hydration=45",
+        "Health=10",
+        "Calories=90"
+      ]
+    },
+    {
+      "shortname": "maxhealthtea.advanced",
+      "name": "Advanced Max Health Tea",
+      "itemid": 603811464,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "maxhealthtea",
+      "name": "Basic Max Health Tea",
+      "itemid": -1184406448,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "maxhealthtea.pure.creamy",
+      "name": "Creamy Pure Max Health Tea",
+      "itemid": -1244746477,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30",
+        "Health=5",
+        "Calories=45"
+      ]
+    },
+    {
+      "shortname": "maxhealthtea.pure",
+      "name": "Pure Max Health Tea",
+      "itemid": 1712261904,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "maxhealthtea.pure.milky",
+      "name": "Milky Pure Max Health Tea",
+      "itemid": -1388103748,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=45",
+        "Calories=90"
+      ]
+    },
+    {
+      "shortname": "oretea.advanced",
+      "name": "Advanced Ore Tea",
+      "itemid": 2063916636,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "oretea",
+      "name": "Basic Ore Tea",
+      "itemid": 1480022580,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "oretea.pure.creamy",
+      "name": "Creamy Pure Ore Tea",
+      "itemid": -744942541,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30",
+        "Health=5",
+        "Calories=45"
+      ]
+    },
+    {
+      "shortname": "oretea.pure",
+      "name": "Pure Ore Tea",
+      "itemid": 1729374708,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "oretea.pure.milky",
+      "name": "Milky Pure Ore Tea",
+      "itemid": 1243083208,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=45",
+        "Calories=90"
+      ]
+    },
+    {
+      "shortname": "radiationremovetea.advanced",
+      "name": "Advanced Rad. Removal Tea",
+      "itemid": 2021351233,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30",
+        "Radiation=-8"
+      ]
+    },
+    {
+      "shortname": "radiationremovetea",
+      "name": "Rad. Removal Tea",
+      "itemid": -496584751,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30",
+        "Radiation=-6"
+      ]
+    },
+    {
+      "shortname": "radiationremovetea.pure",
+      "name": "Pure Rad. Removal Tea",
+      "itemid": 1905387657,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30",
+        "Radiation=-10"
+      ]
+    },
+    {
+      "shortname": "radiationresisttea.advanced",
+      "name": "Advanced Anti-Rad Tea",
+      "itemid": -1729415579,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "radiationresisttea",
+      "name": "Basic Anti-Rad Tea",
+      "itemid": -487356515,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "radiationresisttea.pure.creamy",
+      "name": "Creamy Pure Anti-Rad Tea",
+      "itemid": -1882497808,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30",
+        "Health=5",
+        "Calories=45"
+      ]
+    },
+    {
+      "shortname": "radiationresisttea.pure",
+      "name": "Pure Anti-Rad Tea",
+      "itemid": -33009419,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "radiationresisttea.pure.milky",
+      "name": "Milky Pure Anti-Rad Tea",
+      "itemid": -1341272471,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=45",
+        "Calories=90"
+      ]
+    },
+    {
+      "shortname": "scraptea.advanced",
+      "name": "Advanced Scrap Tea",
+      "itemid": 524678627,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "scraptea",
+      "name": "Basic Scrap Tea",
+      "itemid": 263834859,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "scraptea.pure.creamy",
+      "name": "Creamy Pure Scrap Tea",
+      "itemid": 1519395656,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30",
+        "Health=5",
+        "Calories=45"
+      ]
+    },
+    {
+      "shortname": "scraptea.pure",
+      "name": "Pure Scrap Tea",
+      "itemid": 2024467711,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "scraptea.pure.milky",
+      "name": "Milky Pure Scrap Tea",
+      "itemid": -1057052157,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=45",
+        "Calories=90"
+      ]
+    },
+    {
+      "shortname": "supertea",
+      "name": "Super Serum",
+      "itemid": -1003665711,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=500",
+        "Calories=500"
+      ]
+    },
+    {
+      "shortname": "advancedwarmingtea",
+      "name": "Advanced Warming Tea",
+      "itemid": -334418777,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "purewarmingtea.creamy",
+      "name": "Creamy Pure Warming Tea",
+      "itemid": 556232090,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30",
+        "Health=5",
+        "Calories=45"
+      ]
+    },
+    {
+      "shortname": "purewarmingtea",
+      "name": "Pure Warming Tea",
+      "itemid": -1476814093,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "purewarmingtea.milky",
+      "name": "Milky Pure Warming Tea",
+      "itemid": 91167975,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=45",
+        "Calories=90"
+      ]
+    },
+    {
+      "shortname": "warmingtea",
+      "name": "Basic Warming Tea",
+      "itemid": -1142222427,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "woodtea.advanced",
+      "name": "Advanced Wood Tea",
+      "itemid": -541206665,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "woodtea",
+      "name": "Basic Wood Tea",
+      "itemid": -649128577,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "woodtea.pure.creamy",
+      "name": "Creamy Pure Wood Tea",
+      "itemid": -844428380,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30",
+        "Health=5",
+        "Calories=45"
+      ]
+    },
+    {
+      "shortname": "woodtea.pure",
+      "name": "Pure Wood Tea",
+      "itemid": -557539629,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=30"
+      ]
+    },
+    {
+      "shortname": "woodtea.pure.milky",
+      "name": "Milky Pure Wood Tea",
+      "itemid": 777041831,
+      "category": "Food",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Hydration=45",
+        "Calories=90"
+      ]
+    },
+    {
+      "shortname": "antiradpills",
+      "name": "Anti-Radiation Pills",
+      "itemid": -1432674913,
+      "category": "Medical",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Radiation=-75",
+        "Hydration=-5"
+      ]
+    },
+    {
+      "shortname": "largemedkit",
+      "name": "Large Medkit",
+      "itemid": 254522515,
+      "category": "Medical",
+      "heldEntity": null,
+      "deployable": null,
+      "effects": [
+        "Poison=-10",
+        "Bleeding=-100",
+        "HealthOverTime=100",
+        "Health=10",
+        "Radiation=-20"
+      ]
+    },
+    {
+      "shortname": "syringe.medical",
+      "name": "Medical Syringe",
+      "itemid": 1079279582,
+      "category": "Medical",
+      "heldEntity": "assets/prefabs/tools/medical syringe/syringe_medical.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Poison=-5",
+        "Radiation=-10",
+        "Health=15",
+        "HealthOverTime=20"
+      ]
+    },
+    {
+      "shortname": "outbreak.sprayer",
+      "name": "Outbreak Sprayer",
+      "itemid": 1621942085,
+      "category": "Tool",
+      "heldEntity": "assets/prefabs/tools/outbreaksprayer/outbreak_sprayer.entity.prefab",
+      "deployable": null
+    },
+    {
+      "shortname": "spraycan",
+      "name": "Spray Can",
+      "itemid": -596876839,
+      "category": "Tool",
+      "heldEntity": "assets/prefabs/tools/spraycan/spraycan.weapon.prefab",
+      "deployable": null
+    },
+    {
+      "shortname": "spraycandecal",
+      "name": "Spray Can Decal",
+      "itemid": -1366326648,
+      "category": "Tool",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "vehicle.1mod.flatbed",
+      "name": "Flatbed Vehicle Module",
+      "itemid": -1880231361,
+      "category": "Component",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "vehicle.1mod.rear.seats",
+      "name": "Rear Seats Vehicle Module",
+      "itemid": 1376065505,
+      "category": "Component",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "vehicle.2mod.flatbed",
+      "name": "Large Flatbed Vehicle Module",
+      "itemid": -1693832478,
+      "category": "Component",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "vehicle.module",
+      "name": "Generic vehicle module",
+      "itemid": 878301596,
+      "category": "Component",
+      "heldEntity": null,
+      "deployable": null
+    },
+    {
+      "shortname": "weapon.mod.burstmodule",
+      "name": "Burst Module",
+      "itemid": 838308300,
+      "category": "Component",
+      "heldEntity": "assets/prefabs/weapon mods/burstmodule/burstmodule.entity.prefab",
+      "deployable": null
+    },
+    {
+      "shortname": "bandage",
+      "name": "Bandage",
+      "itemid": -2072273936,
+      "category": "Medical",
+      "heldEntity": "assets/prefabs/weapons/bandage/bandage.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Poison=-2",
+        "Health=5",
+        "Bleeding=-50"
+      ]
+    },
+    {
+      "shortname": "blowpipe",
+      "name": "Blow Pipe",
+      "itemid": -851288382,
+      "category": "Weapon",
+      "heldEntity": "assets/prefabs/weapons/blowpipe/blowpipe.entity.prefab",
+      "deployable": null
+    },
+    {
+      "shortname": "cakefiveyear",
+      "name": "Birthday Cake",
+      "itemid": 1973165031,
+      "category": "Tool",
+      "heldEntity": "assets/prefabs/weapons/cake/cake.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Calories=100",
+        "Hydration=1",
+        "HealthOverTime=10"
+      ]
+    },
+    {
+      "shortname": "divertorch",
+      "name": "Abyss Torch",
+      "itemid": 1846605708,
+      "category": "Tool",
+      "heldEntity": "assets/prefabs/weapons/divertorch/diver_torch.entity.prefab",
+      "deployable": null
+    },
+    {
+      "shortname": "torch.torch.skull",
+      "name": "Cultist Deer Torch",
+      "itemid": -1175656359,
+      "category": "Tool",
+      "heldEntity": "assets/prefabs/weapons/halloween/skull torch/skulltorch.entity.prefab",
+      "deployable": null
+    },
+    {
+      "shortname": "medical.honey.bandage",
+      "name": "Medical Honey Bandage",
+      "itemid": -75264812,
+      "category": "Medical",
+      "heldEntity": "assets/prefabs/weapons/medicalhoneybandage/honeybandage.entity.prefab",
+      "deployable": null,
+      "effects": [
+        "Poison=-4",
+        "Health=8",
+        "Bleeding=-50",
+        "HealthOverTime=6",
+        "Radiation=-5"
+      ]
+    },
+    {
+      "shortname": "industrial.torch",
+      "name": "Industrial Torch",
+      "itemid": 4474927,
+      "category": "Tool",
+      "heldEntity": "assets/prefabs/weapons/torch/skins/industrial_torch/industrial_torch.entity.prefab",
+      "deployable": null
+    },
+    {
+      "shortname": "torch",
+      "name": "Torch",
+      "itemid": 795236088,
+      "category": "Tool",
+      "heldEntity": "assets/prefabs/weapons/torch/torch.entity.prefab",
+      "deployable": null
+    }
+  ],
+  "allShortnames": [
+    "2module.car",
+    "2module.car.chassis",
+    "3module.car",
+    "3module.car.chassis",
+    "4module.car",
+    "4module.car.chassis",
+    "50cal.mounted",
+    "50cal.mounted.left",
+    "50cal.mounted.right",
+    "abovegroundpool",
+    "abyss.barrel.horizontal",
+    "abyss.barrel.vertical",
+    "advancedblueprintfragment",
+    "advancedcoolingtea",
+    "advancedcraftingtea_quality",
+    "advancedwarmingtea",
+    "advanceharvestingtea",
+    "aiming.module.mlrs",
+    "ammo.grenadelauncher.buckshot",
+    "ammo.grenadelauncher.he",
+    "ammo.grenadelauncher.smoke",
+    "ammo.handmade.shell",
+    "ammo.mortar.basic",
+    "ammo.mortar.fragment",
+    "ammo.nailgun.nails",
+    "ammo.paintball",
+    "ammo.pistol",
+    "ammo.pistol.fire",
+    "ammo.pistol.hv",
+    "ammo.rifle",
+    "ammo.rifle.explosive",
+    "ammo.rifle.hv",
+    "ammo.rifle.incendiary",
+    "ammo.rocket.basic",
+    "ammo.rocket.fire",
+    "ammo.rocket.hv",
+    "ammo.rocket.mlrs",
+    "ammo.rocket.sam",
+    "ammo.rocket.seeker",
+    "ammo.rocket.smoke",
+    "ammo.shotgun",
+    "ammo.shotgun.fire",
+    "ammo.shotgun.slug",
+    "ammo.snowballgun",
+    "anchor",
+    "antiradpills",
+    "apartment.master_key",
+    "apple",
+    "apple.spoiled",
+    "arcade.machine.chippy",
+    "arrow.bone",
+    "arrow.fire",
+    "arrow.hv",
+    "arrow.wooden",
+    "attackhelicopter",
+    "attire.banditguard",
+    "attire.bunny.onesie",
+    "attire.bunnyears",
+    "attire.egg.suit",
+    "attire.hide.boots",
+    "attire.hide.helterneck",
+    "attire.hide.pants",
+    "attire.hide.poncho",
+    "attire.hide.skirt",
+    "attire.hide.vest",
+    "attire.nesthat",
+    "attire.ninja.suit",
+    "attire.reindeer.headband",
+    "attire.snowman.helmet",
+    "autoturret",
+    "axe.salvaged",
+    "ball",
+    "ballista.bolt.hammerhead",
+    "ballista.bolt.incendiary",
+    "ballista.bolt.piercer",
+    "ballista.bolt.pitchfork",
+    "ballista.mounted",
+    "ballista.static",
+    "ballistic.helmet",
+    "ballistic.legarmor",
+    "ballistic.vest",
+    "bamboo.barrel",
+    "bandage",
+    "bar.stool.metal",
+    "bar.stool.wood",
+    "barrelcostume",
+    "barricade.concrete",
+    "barricade.medieval",
+    "barricade.metal",
+    "barricade.sandbags",
+    "barricade.sandbags.half",
+    "barricade.sandbags.pillbox",
+    "barricade.sandbags.three.quarter",
+    "barricade.stone",
+    "barricade.wood",
+    "barricade.wood.cover",
+    "barricade.woodwire",
+    "base.half.shelves",
+    "base.horizontal.barrel",
+    "base.single.shelves",
+    "base.vertical.barrel",
+    "basicblueprintfragment",
+    "bathtub.planter",
+    "batteringram",
+    "batteringram.head.repair",
+    "battery.small",
+    "bbq",
+    "bdu.pants",
+    "bdu.shirt",
+    "beachchair",
+    "beachparasol",
+    "beachtable",
+    "beachtowel",
+    "beanbagseatfabric",
+    "beanbagseatleather",
+    "bearmeat",
+    "bearmeat.burned",
+    "bearmeat.cooked",
+    "bearmeat.spoiled",
+    "bed",
+    "beefmeat",
+    "beefmeat.cooked",
+    "beefmeat.spoiled",
+    "beehive",
+    "bicycle",
+    "bigcatmeat",
+    "bigcatmeat.cooked",
+    "bigcatmeat.spoiled",
+    "black.berry",
+    "black.raspberries",
+    "bleach",
+    "blood",
+    "blowpipe",
+    "blue.berry",
+    "blueberries",
+    "bluedogtags",
+    "blueidtag",
+    "blueprintbase",
+    "blunderbuss",
+    "boat.planner",
+    "boatbuildingstation",
+    "bone.armor.suit",
+    "bone.club",
+    "bone.fragments",
+    "boogieboard",
+    "boombox",
+    "boomerang",
+    "boots.frog",
+    "botabag",
+    "bottle.vodka",
+    "bow.compound",
+    "bow.hunting",
+    "box.repair.bench",
+    "box.wooden",
+    "box.wooden.large",
+    "bread.brioche.loaf",
+    "bread.loaf",
+    "bucket.helmet",
+    "bucket.water",
+    "building.planner",
+    "bunny.suit",
+    "burlap.gloves",
+    "burlap.gloves.new",
+    "burlap.headwrap",
+    "burlap.shirt",
+    "burlap.shoes",
+    "burlap.trousers",
+    "caboose",
+    "cactusflesh",
+    "cakefiveyear",
+    "campfire",
+    "can.beans",
+    "can.beans.empty",
+    "can.tuna",
+    "can.tuna.empty",
+    "candycane",
+    "candycaneclub",
+    "cannon",
+    "cannonball",
+    "captainslog",
+    "carburetor1",
+    "carburetor2",
+    "carburetor3",
+    "cardtable",
+    "carvable.pumpkin",
+    "cassette",
+    "cassette.medium",
+    "cassette.short",
+    "catapult",
+    "catapult.ammo.bee",
+    "catapult.ammo.boulder",
+    "catapult.ammo.explosive",
+    "catapult.ammo.incendiary",
+    "cctv.camera",
+    "ceilinglight",
+    "chainsaw",
+    "chair",
+    "chair.ejector.seat",
+    "chair.icethrone",
+    "charcoal",
+    "charity.plushy.01",
+    "charity.plushy.02",
+    "charity.plushy.03",
+    "charity.plushy.04",
+    "chicken.burned",
+    "chicken.cooked",
+    "chicken.costume",
+    "chicken.raw",
+    "chicken.spoiled",
+    "chickencoop",
+    "chineselantern",
+    "chineselanternwhite",
+    "chocolate",
+    "circleballoon2025",
+    "clantable",
+    "clatter.helmet",
+    "clone.black.berry",
+    "clone.blue.berry",
+    "clone.corn",
+    "clone.green.berry",
+    "clone.hemp",
+    "clone.orchid",
+    "clone.potato",
+    "clone.pumpkin",
+    "clone.red.berry",
+    "clone.rose",
+    "clone.sunflower",
+    "clone.wheat",
+    "clone.white.berry",
+    "clone.yellow.berry",
+    "cloth",
+    "clothing.mannequin",
+    "clothing.mod.armorinsert_asbestos",
+    "clothing.mod.armorinsert_lead",
+    "clothing.mod.armorinsert_metal",
+    "clothing.mod.armorinsert_wood",
+    "coal",
+    "cocoknight.armor.gloves",
+    "cocoknight.armor.helmet",
+    "cocoknight.armor.pants",
+    "cocoknight.armor.torso",
+    "coconut",
+    "coffeecan.helmet",
+    "coffin.storage",
+    "command.block",
+    "compass",
+    "component.box.ammo.large",
+    "component.box.armor.large",
+    "component.box.charcoal.large",
+    "component.box.clothing.large",
+    "component.box.comps.large",
+    "component.box.explosives.large",
+    "component.box.food.large",
+    "component.box.guns.large",
+    "component.box.meds.large",
+    "component.box.metal.large",
+    "component.box.ore.large",
+    "component.box.scrap.large",
+    "component.box.stone.large",
+    "component.box.sulfur.large",
+    "component.box.tools.large",
+    "component.box.wood.large",
+    "composter",
+    "computerstation",
+    "concretehatchet",
+    "concretepickaxe",
+    "confetticannon",
+    "connected.speaker",
+    "cookingworkbench",
+    "coolingtea",
+    "corn",
+    "craftingtea_quality",
+    "crankshaft1",
+    "crankshaft2",
+    "crankshaft3",
+    "cratecostume",
+    "cream",
+    "crocodilemeat",
+    "crocodilemeat.cooked",
+    "crocodilemeat.spoiled",
+    "crossbow",
+    "crossbowbowless",
+    "crude.oil",
+    "cupboard.tool",
+    "cupboard.tool.retro",
+    "cupboard.tool.shockbyte",
+    "cursedcauldron",
+    "dart.incapacitate",
+    "dart.radiation",
+    "dart.scatter",
+    "dart.wood",
+    "dartboard",
+    "deer.skull.mask",
+    "deermeat.burned",
+    "deermeat.cooked",
+    "deermeat.raw",
+    "deermeat.spoiled",
+    "diesel_barrel",
+    "discoball",
+    "discofloor",
+    "discofloor.largetiles",
+    "discord.plushie",
+    "discord.trophy",
+    "diverhatchet",
+    "diverpickaxe",
+    "divertorch",
+    "diving.fins",
+    "diving.mask",
+    "diving.tank",
+    "diving.tank.double",
+    "diving.wetsuit",
+    "documents",
+    "dogtagneutral",
+    "door.closer",
+    "door.double.hinged.bardoors",
+    "door.double.hinged.metal",
+    "door.double.hinged.toptier",
+    "door.double.hinged.wood",
+    "door.hinged.boat.wood",
+    "door.hinged.industrial.a",
+    "door.hinged.metal",
+    "door.hinged.toptier",
+    "door.hinged.wood",
+    "door.key",
+    "draculacape",
+    "draculamask",
+    "dragondoorknocker",
+    "drone",
+    "dropbox",
+    "drumkit",
+    "ducttape",
+    "easel",
+    "easter.bronzeegg",
+    "easter.goldegg",
+    "easter.paintedeggs",
+    "easter.silveregg",
+    "easterbasket",
+    "easterdoorwreath",
+    "egg",
+    "electric.andswitch",
+    "electric.audioalarm",
+    "electric.battery.rechargable.large",
+    "electric.battery.rechargable.medium",
+    "electric.battery.rechargable.small",
+    "electric.blocker",
+    "electric.bulbstringlights",
+    "electric.button",
+    "electric.cabletunnel",
+    "electric.chandelier",
+    "electric.counter",
+    "electric.digitalclock",
+    "electric.doorcontroller",
+    "electric.fairylights",
+    "electric.flasherlight",
+    "electric.fluorescentlight",
+    "electric.fluorescentlight.ceiling",
+    "electric.fuelgenerator.small",
+    "electric.furnace",
+    "electric.generator.small",
+    "electric.hbhfsensor",
+    "electric.heater",
+    "electric.igniter",
+    "electric.laserdetector",
+    "electric.orswitch",
+    "electric.pressurepad",
+    "electric.random.switch",
+    "electric.rf.broadcaster",
+    "electric.rf.receiver",
+    "electric.seismicsensor",
+    "electric.simplelight",
+    "electric.sirenlight",
+    "electric.solarpanel.large",
+    "electric.splitter",
+    "electric.spotlight",
+    "electric.spotlight.tripod",
+    "electric.sprinkler",
+    "electric.switch",
+    "electric.tablelight",
+    "electric.teslacoil",
+    "electric.timer",
+    "electric.wallcabinet",
+    "electric.xorswitch",
+    "electrical.branch",
+    "electrical.combiner",
+    "electrical.memorycell",
+    "elevator",
+    "explosive.satchel",
+    "explosive.timed",
+    "explosives",
+    "factorydoor",
+    "fat.animal",
+    "fertilizer",
+    "fireplace.stone",
+    "firework.boomer.blue",
+    "firework.boomer.champagne",
+    "firework.boomer.green",
+    "firework.boomer.orange",
+    "firework.boomer.pattern",
+    "firework.boomer.red",
+    "firework.boomer.violet",
+    "firework.boomer.white",
+    "firework.romancandle.blue",
+    "firework.romancandle.green",
+    "firework.romancandle.red",
+    "firework.romancandle.violet",
+    "firework.volcano",
+    "firework.volcano.red",
+    "firework.volcano.violet",
+    "fish.anchovy",
+    "fish.catfish",
+    "fish.cooked",
+    "fish.herring",
+    "fish.minnows",
+    "fish.orangeroughy",
+    "fish.raw",
+    "fish.salmon",
+    "fish.sardine",
+    "fish.smallshark",
+    "fish.spoiled",
+    "fish.troutsmall",
+    "fish.yellowperch",
+    "fishing.tackle",
+    "fishingrod.handmade",
+    "fishtrap.small",
+    "fishtrophy",
+    "flamethrower",
+    "flameturret",
+    "flare",
+    "flashlight.held",
+    "floor.grill",
+    "floor.ladder.hatch",
+    "floor.ladder.hatch.toptier",
+    "floor.triangle.grill",
+    "floor.triangle.ladder.hatch",
+    "floor.triangle.ladder.hatch.toptier",
+    "fluid.combiner",
+    "fluid.splitter",
+    "fluid.switch",
+    "fogmachine",
+    "frankensteinmask",
+    "frankensteins.monster.01.head",
+    "frankensteins.monster.01.legs",
+    "frankensteins.monster.01.torso",
+    "frankensteins.monster.02.head",
+    "frankensteins.monster.02.legs",
+    "frankensteins.monster.02.torso",
+    "frankensteins.monster.03.head",
+    "frankensteins.monster.03.legs",
+    "frankensteins.monster.03.torso",
+    "frankensteintable",
+    "fridge",
+    "frontier_hatchet",
+    "frontiermirror.large",
+    "frontiermirror.medium",
+    "frontiermirror.small",
+    "frontiermirror.standing",
+    "fun.bass",
+    "fun.boomboxportable",
+    "fun.casetterecorder",
+    "fun.cowbell",
+    "fun.flute",
+    "fun.guitar",
+    "fun.jerrycanguitar",
+    "fun.tambourine",
+    "fun.trumpet",
+    "fun.tuba",
+    "furnace",
+    "furnace.large",
+    "fuse",
+    "fuse.highgrade",
+    "gamesroom.minifridge",
+    "gamesroom.shotgun.trap",
+    "gates.external.high.adobe",
+    "gates.external.high.legacy",
+    "gates.external.high.stone",
+    "gates.external.high.wood",
+    "gears",
+    "geiger.counter",
+    "generator.biofuel",
+    "generator.water",
+    "generator.wind.scrap",
+    "ghostsheet",
+    "giantcandycanedecor",
+    "giantlollipops",
+    "gingerbreadsuit",
+    "gloweyes",
+    "glue",
+    "goldframe.large",
+    "goldframe.medium",
+    "goldframe.small",
+    "goldframe.standing",
+    "goldframe.xl",
+    "goldframe.xxl",
+    "goldmirror.large",
+    "goldmirror.medium",
+    "goldmirror.small",
+    "goldmirror.standing",
+    "granolabar",
+    "gravestone",
+    "grayidtag",
+    "green.berry",
+    "greenidtag",
+    "grenade.beancan",
+    "grenade.bee",
+    "grenade.f1",
+    "grenade.flashbang",
+    "grenade.molotov",
+    "grenade.smoke",
+    "grub",
+    "gun.water",
+    "gunpowder",
+    "gunrack.horizontal",
+    "gunrack.single.1.horizontal",
+    "gunrack.single.2.horizontal",
+    "gunrack.single.3.horizontal",
+    "gunrack_stand",
+    "gunrack_tall.horizontal",
+    "gunrack_wide.horizontal",
+    "guntrap",
+    "hab",
+    "hab.armor",
+    "half.bamboo.shelves",
+    "halfheight.industrial.shelves",
+    "halloween.candy",
+    "halloween.lootbag.large",
+    "halloween.lootbag.medium",
+    "halloween.lootbag.small",
+    "halloween.mummysuit",
+    "halloween.surgeonsuit",
+    "hammer",
+    "hammer.salvaged",
+    "handcuffs",
+    "harvestingtea",
+    "hat.beenie",
+    "hat.boonie",
+    "hat.bunnyhat",
+    "hat.candle",
+    "hat.candle.birthday",
+    "hat.cap",
+    "hat.dragonmask",
+    "hat.gas.mask",
+    "hat.horsemask",
+    "hat.miner",
+    "hat.oxmask",
+    "hat.rabbitmask",
+    "hat.ratmask",
+    "hat.snakemask",
+    "hat.tigermask",
+    "hat.wellipets",
+    "hat.wolf",
+    "hatchet",
+    "hazmat.krieg",
+    "hazmat.plague",
+    "hazmat.plushy",
+    "hazmatsuit",
+    "hazmatsuit.arcticsuit",
+    "hazmatsuit.diver",
+    "hazmatsuit.frontier",
+    "hazmatsuit.kick",
+    "hazmatsuit.lumberjack",
+    "hazmatsuit.nomadsuit",
+    "hazmatsuit.pilot",
+    "hazmatsuit.spacesuit",
+    "hazmatsuit_scientist",
+    "hazmatsuit_scientist_arctic",
+    "hazmatsuit_scientist_naval",
+    "hazmatsuit_scientist_nvgm",
+    "hazmatsuit_scientist_peacekeeper",
+    "hazmatsuittwitch",
+    "hazmatyoutooz",
+    "head.bag",
+    "healingtea",
+    "healingtea.advanced",
+    "healingtea.pure",
+    "healingtea.pure.creamy",
+    "healingtea.pure.milky",
+    "heartballoon2025",
+    "heavy.plate.helmet",
+    "heavy.plate.jacket",
+    "heavy.plate.pants",
+    "heavy.scientist.plushie",
+    "heavyscientistyoutooz",
+    "hitchtroughcombo",
+    "hmlmg",
+    "hobobarrel",
+    "homingmissile.launcher",
+    "honey",
+    "honeycomb",
+    "hoodie",
+    "hopper",
+    "horse",
+    "horse.armor.lny26",
+    "horse.armor.roadsign",
+    "horse.armor.wood",
+    "horse.costume",
+    "horse.saddle",
+    "horse.saddle.double",
+    "horse.saddle.single",
+    "horse.saddlebag",
+    "horse.shoes.advanced",
+    "horse.shoes.basic",
+    "horsedung",
+    "horsemeat.burned",
+    "horsemeat.cooked",
+    "horsemeat.raw",
+    "horsemeat.spoiled",
+    "hosetool",
+    "hq.metal.ore",
+    "humanmeat.burned",
+    "humanmeat.cooked",
+    "humanmeat.raw",
+    "humanmeat.spoiled",
+    "huntingtrophylarge",
+    "huntingtrophysmall",
+    "icepick.salvaged",
+    "improvised.shield",
+    "industrial.autoturret",
+    "industrial.combiner",
+    "industrial.conveyor",
+    "industrial.crafter",
+    "industrial.electric.furnace",
+    "industrial.furnace.large",
+    "industrial.garagedoor",
+    "industrial.splitter",
+    "industrial.storage.horizontal",
+    "industrial.storage.vertical",
+    "industrial.torch",
+    "industrial.wall.light",
+    "industrial.wall.light.blue",
+    "industrial.wall.light.green",
+    "industrial.wall.light.red",
+    "innertube",
+    "innertube.horse",
+    "innertube.unicorn",
+    "iotable",
+    "jacket",
+    "jacket.snow",
+    "jackhammer",
+    "jackolantern.angry",
+    "jackolantern.happy",
+    "jar.pickle",
+    "jukebox",
+    "jumpsuit.suit",
+    "jumpsuit.suit.blue",
+    "jumpsuit.waterwellnpc",
+    "jungle.rock",
+    "kayak",
+    "keycard_blue",
+    "keycard_green",
+    "keycard_red",
+    "kickgems",
+    "knife.bone",
+    "knife.bone.obsidian",
+    "knife.butcher",
+    "knife.combat",
+    "knife.skinning",
+    "knightsarmour.helmet",
+    "knightsarmour.skirt",
+    "knighttorso.armour",
+    "krieg.chainsword",
+    "krieg.shotgun",
+    "krieg.storage.horizontal",
+    "krieg.storage.vertical",
+    "kriegbackpack",
+    "ladder.wooden.boat",
+    "ladder.wooden.wall",
+    "lantern",
+    "largebackpack",
+    "largecandles",
+    "largemedkit",
+    "laserlight",
+    "latexballoon2025",
+    "latexclumpballoon2025",
+    "lavenderidtag",
+    "leather",
+    "legacy bow",
+    "legacy.shelter.wood",
+    "legacyfurnace",
+    "lightup.large",
+    "lightup.xl",
+    "lightup.xxl",
+    "lightupframe.medium",
+    "lightupframe.small",
+    "lightupframe.standing",
+    "lightupmirror.large",
+    "lightupmirror.medium",
+    "lightupmirror.small",
+    "lightupmirror.standing",
+    "lmg.m249",
+    "lock.code",
+    "lock.code.a.pilot",
+    "lock.key",
+    "locker",
+    "locomotive",
+    "longsword",
+    "lowgradefuel",
+    "lumberjack hoodie",
+    "lumberjack.hatchet",
+    "lumberjack.pickaxe",
+    "lunar.firecrackers",
+    "m16a2",
+    "mace",
+    "mace.baseballbat",
+    "machete",
+    "mailbox",
+    "mannequin",
+    "map",
+    "mask.balaclava",
+    "mask.bandana",
+    "maxhealthtea",
+    "maxhealthtea.advanced",
+    "maxhealthtea.pure",
+    "maxhealthtea.pure.creamy",
+    "maxhealthtea.pure.milky",
+    "meat.boar",
+    "meat.pork.burned",
+    "meat.pork.cooked",
+    "medical.honey.bandage",
+    "medieval.box.wooden.large",
+    "medieval.door.double.hinged.metal",
+    "medieval.door.hinged.metal",
+    "megaphone",
+    "metal.detector",
+    "metal.facemask",
+    "metal.facemask.hockey",
+    "metal.facemask.icemask",
+    "metal.fragments",
+    "metal.ore",
+    "metal.plate.torso",
+    "metal.plate.torso.icevest",
+    "metal.refined",
+    "metal.shield",
+    "metalblade",
+    "metalpipe",
+    "metalspring",
+    "microphonestand",
+    "military flamethrower",
+    "milk",
+    "minecart.planter",
+    "mini fridge",
+    "minicopter",
+    "minicrossbow",
+    "minigun",
+    "minigunammopack",
+    "minihelicopter.repair",
+    "mining.pumpjack",
+    "mining.quarry",
+    "mintidtag",
+    "mixedclumpballoon2025",
+    "mixingtable",
+    "mlrs",
+    "mobilephone",
+    "modularcarlift",
+    "mortar.deployable",
+    "motorbike",
+    "motorbike_sidecar",
+    "movembermoustache",
+    "movembermoustachecard",
+    "mrspice.can",
+    "multiplegrenadelauncher",
+    "mummymask",
+    "mushroom",
+    "muttonmeat",
+    "muttonmeat.cooked",
+    "muttonmeat.spoiled",
+    "neonsigntr",
+    "newyeargong",
+    "nightvisiongoggles",
+    "note",
+    "nucleus",
+    "orangeidtag",
+    "orchid",
+    "oretea",
+    "oretea.advanced",
+    "oretea.pure",
+    "oretea.pure.creamy",
+    "oretea.pure.milky",
+    "oubreak_scientist",
+    "outbreak.sprayer",
+    "paddle",
+    "paddlingpool",
+    "paintabletarget.reactive",
+    "paintballgun",
+    "paintballoveralls.suit",
+    "pants",
+    "pants.shorts",
+    "paper",
+    "parachute",
+    "parachute.deployed",
+    "partyhat",
+    "photo",
+    "photoframe.landscape",
+    "photoframe.large",
+    "photoframe.portrait",
+    "piano",
+    "pickaxe",
+    "pie.apple",
+    "pie.apple.rich",
+    "pie.bear",
+    "pie.bear.rich",
+    "pie.beef",
+    "pie.beef.rich",
+    "pie.bigcat",
+    "pie.bigcat.rich",
+    "pie.chicken",
+    "pie.chicken.rich",
+    "pie.crocodile",
+    "pie.fish",
+    "pie.fish.rich",
+    "pie.hunters",
+    "pie.hunters.rich",
+    "pie.mutton",
+    "pie.mutton.rich",
+    "pie.pork",
+    "pie.pork.rich",
+    "pie.pumpkin",
+    "pie.pumpkin.rich",
+    "pie.survivors",
+    "pilot.hazmat.box.wooden",
+    "pinata",
+    "pinkidtag",
+    "pipetool",
+    "pistol.eoka",
+    "pistol.m92",
+    "pistol.nailgun",
+    "pistol.prototype17",
+    "pistol.python",
+    "pistol.revolver",
+    "pistol.semiauto",
+    "pistol.semiauto.a.m15",
+    "pistol.water",
+    "piston1",
+    "piston2",
+    "piston3",
+    "pitchfork",
+    "plank",
+    "planter.large",
+    "planter.small",
+    "planter.triangle",
+    "plantfiber",
+    "plantpot.single",
+    "pookie.bear",
+    "pooltable",
+    "porkmeat.spoiled",
+    "potato",
+    "powered.water.purifier",
+    "prisonerhood",
+    "propanetank",
+    "ptboat",
+    "ptz.cctv.camera",
+    "pumpkin",
+    "pumpkinbasket",
+    "purecoolingtea",
+    "purecoolingtea.creamy",
+    "purecoolingtea.milky",
+    "purecraftingtea_quality",
+    "pureharvestingtea",
+    "pureharvestingtea.creamy",
+    "pureharvestingtea.milky",
+    "purewarmingtea",
+    "purewarmingtea.creamy",
+    "purewarmingtea.milky",
+    "purpleidtag",
+    "radiationremovetea",
+    "radiationremovetea.advanced",
+    "radiationremovetea.pure",
+    "radiationresisttea",
+    "radiationresisttea.advanced",
+    "radiationresisttea.pure",
+    "radiationresisttea.pure.creamy",
+    "radiationresisttea.pure.milky",
+    "rail.road.planter",
+    "red.berry",
+    "reddogtags",
+    "redidtag",
+    "reinforced.wooden.shield",
+    "research.table",
+    "researchpaper",
+    "revolver.hc",
+    "rf.detonator",
+    "rf_pager",
+    "rhib",
+    "rifle.ak",
+    "rifle.ak.diver",
+    "rifle.ak.glass",
+    "rifle.ak.glass.blue",
+    "rifle.ak.glass.green",
+    "rifle.ak.glass.pink",
+    "rifle.ak.glass.red",
+    "rifle.ak.ice",
+    "rifle.ak.jungle",
+    "rifle.ak.med",
+    "rifle.bolt",
+    "rifle.l96",
+    "rifle.lr300",
+    "rifle.lr300.space",
+    "rifle.m39",
+    "rifle.semiauto",
+    "rifle.sks",
+    "riflebody",
+    "riot.helmet",
+    "roadsign.gloves",
+    "roadsign.jacket",
+    "roadsign.kilt",
+    "roadsigns",
+    "rock",
+    "rocket.launcher",
+    "rocket.launcher.dragon",
+    "rocket.launcher.rpg7",
+    "rockingchair",
+    "rockingchair.rockingchair2",
+    "rockingchair.rockingchair3",
+    "rope",
+    "rose",
+    "rowboat",
+    "rug",
+    "rug.bear",
+    "rustige_egg_a",
+    "rustige_egg_b",
+    "rustige_egg_c",
+    "rustige_egg_d",
+    "rustige_egg_e",
+    "rustige_egg_f",
+    "rustige_egg_g",
+    "rustige_egg_h",
+    "sail",
+    "salvaged.bamboo.shelves",
+    "salvaged.cleaver",
+    "salvaged.industrial.shelves",
+    "salvaged.sword",
+    "samsite",
+    "santabeard",
+    "santahat",
+    "scarecrow",
+    "scarecrow.suit",
+    "scarecrowhead",
+    "scientist.plushie",
+    "scientistsuit_heavy",
+    "scrap",
+    "scrapframe.large",
+    "scrapframe.medium",
+    "scrapframe.small",
+    "scrapframe.standing",
+    "scrapframe.xl",
+    "scrapframe.xxl",
+    "scrapmirror.large",
+    "scrapmirror.medium",
+    "scrapmirror.small",
+    "scrapmirror.standing",
+    "scraptea",
+    "scraptea.advanced",
+    "scraptea.pure",
+    "scraptea.pure.creamy",
+    "scraptea.pure.milky",
+    "scraptransportheli",
+    "sculpture.ice",
+    "sculpture.rock",
+    "searchlight",
+    "secretlabchair",
+    "sedan",
+    "seed.black.berry",
+    "seed.blue.berry",
+    "seed.corn",
+    "seed.green.berry",
+    "seed.hemp",
+    "seed.orchid",
+    "seed.potato",
+    "seed.pumpkin",
+    "seed.red.berry",
+    "seed.rose",
+    "seed.sunflower",
+    "seed.wheat",
+    "seed.white.berry",
+    "seed.yellow.berry",
+    "semibody",
+    "sewingkit",
+    "sheetmetal",
+    "shelves",
+    "shirt.collared",
+    "shirt.tanktop",
+    "shoes.boots",
+    "shotgun.double",
+    "shotgun.m4",
+    "shotgun.pump",
+    "shotgun.spas12",
+    "shotgun.waterpipe",
+    "shovel",
+    "shutter.metal.embrasure.a",
+    "shutter.metal.embrasure.b",
+    "shutter.wood.a",
+    "sickle",
+    "siegetower",
+    "sign.artistcanvas.l",
+    "sign.artistcanvas.m",
+    "sign.artistcanvas.s",
+    "sign.artistcanvas.xl",
+    "sign.artistcanvas.xs",
+    "sign.artistcanvas.xxl",
+    "sign.hanging",
+    "sign.hanging.banner.large",
+    "sign.hanging.ornate",
+    "sign.neon.125x125",
+    "sign.neon.125x215",
+    "sign.neon.125x215.animated",
+    "sign.neon.xl",
+    "sign.neon.xl.animated",
+    "sign.pictureframe.landscape",
+    "sign.pictureframe.portrait",
+    "sign.pictureframe.tall",
+    "sign.pictureframe.xl",
+    "sign.pictureframe.xxl",
+    "sign.pole.banner.large",
+    "sign.post.double",
+    "sign.post.single",
+    "sign.post.town",
+    "sign.post.town.roof",
+    "sign.wooden.huge",
+    "sign.wooden.large",
+    "sign.wooden.medium",
+    "sign.wooden.small",
+    "silly.horse.mask",
+    "single.shallow.wall.shelves",
+    "skidoo",
+    "skimmedmilk",
+    "skull",
+    "skull.human",
+    "skull.trophy",
+    "skull.trophy.jar",
+    "skull.trophy.jar2",
+    "skull.trophy.table",
+    "skull.wolf",
+    "skull_fire_pit",
+    "skulldoorknocker",
+    "skullspikes",
+    "skullspikes.candles",
+    "skullspikes.pumpkin",
+    "skylantern",
+    "skylantern.skylantern.green",
+    "skylantern.skylantern.orange",
+    "skylantern.skylantern.purple",
+    "skylantern.skylantern.red",
+    "sled",
+    "sled.xmas",
+    "sleepingbag",
+    "small.oil.refinery",
+    "small_ramp",
+    "smallbackpack",
+    "smallcandles",
+    "smallengine",
+    "smallwaterbottle",
+    "smart.alarm",
+    "smart.switch",
+    "smg.2",
+    "smg.mp5",
+    "smg.thompson",
+    "smgbody",
+    "snakemeat",
+    "snakemeat.cooked",
+    "snakemeat.spoiled",
+    "snowball",
+    "snowballgun",
+    "snowmachine",
+    "snowman",
+    "snowmobile",
+    "snowmobiletomaha",
+    "sofa",
+    "sofa.pattern",
+    "soundlight",
+    "sparkplug1",
+    "sparkplug2",
+    "sparkplug3",
+    "spear.cny",
+    "spear.stone",
+    "spear.wooden",
+    "speargun",
+    "speargun.spear",
+    "speechbubbleballoon2025",
+    "spiderweb",
+    "spikes.floor",
+    "spikes.trap",
+    "spinner.wheel",
+    "spoiled.produce",
+    "spookyspeaker",
+    "spraycan",
+    "spraycandecal",
+    "starballoon2025",
+    "stash.small",
+    "steeringwheel.boat",
+    "sticks",
+    "stocking.large",
+    "stocking.small",
+    "stone.pickaxe",
+    "stonehatchet",
+    "stones",
+    "storage.monitor",
+    "storage_barrel_a",
+    "storage_barrel_b",
+    "storage_barrel_c",
+    "storageadaptor",
+    "strobelight",
+    "submarine.torpedo.straight",
+    "submarineduo",
+    "submarinesolo",
+    "sulfur",
+    "sulfur.ore",
+    "sunflower",
+    "sunglasses",
+    "sunglasses02black",
+    "sunglasses02camo",
+    "sunglasses02red",
+    "sunglasses03black",
+    "sunglasses03chrome",
+    "sunglasses03gold",
+    "sunken.knife",
+    "supertea",
+    "supply.signal",
+    "surveycharge",
+    "syringe.medical",
+    "t1_smg",
+    "table",
+    "tactical.gloves",
+    "target.reactive",
+    "targeting.computer",
+    "tarp",
+    "techparts",
+    "telephone",
+    "thruster.module",
+    "tincan.alarm",
+    "tool.binoculars",
+    "tool.camera",
+    "tool.instant_camera",
+    "toolgun",
+    "torch",
+    "torch.torch.skull",
+    "torchholder",
+    "trap.bear",
+    "trap.landmine",
+    "triangle.rail.road.planter",
+    "trike",
+    "trophy",
+    "trophy2023",
+    "tshirt",
+    "tshirt.long",
+    "tugboat",
+    "tunalight",
+    "twitch.headset",
+    "twitchrivals2023desk",
+    "twitchrivals2025sofa",
+    "twitchrivalsflag",
+    "twitchsunglasses",
+    "valve1",
+    "valve2",
+    "valve3",
+    "vampire.stake",
+    "vehicle.1mod.cockpit",
+    "vehicle.1mod.cockpit.armored",
+    "vehicle.1mod.cockpit.with.engine",
+    "vehicle.1mod.engine",
+    "vehicle.1mod.flatbed",
+    "vehicle.1mod.passengers.armored",
+    "vehicle.1mod.rear.seats",
+    "vehicle.1mod.storage",
+    "vehicle.1mod.taxi",
+    "vehicle.2mod.camper",
+    "vehicle.2mod.flatbed",
+    "vehicle.2mod.fuel.tank",
+    "vehicle.2mod.passengers",
+    "vehicle.car_radio",
+    "vehicle.chassis",
+    "vehicle.chassis.2mod",
+    "vehicle.chassis.3mod",
+    "vehicle.chassis.4mod",
+    "vehicle.module",
+    "vending.machine",
+    "venom.snake",
+    "wagon",
+    "walkietalkie",
+    "wall.animal.fence",
+    "wall.animal.fence.gate",
+    "wall.external.high",
+    "wall.external.high.adobe",
+    "wall.external.high.ice",
+    "wall.external.high.legacy",
+    "wall.external.high.stone",
+    "wall.frame.cell",
+    "wall.frame.cell.gate",
+    "wall.frame.fence",
+    "wall.frame.fence.gate",
+    "wall.frame.garagedoor",
+    "wall.frame.lunar2025_a",
+    "wall.frame.lunar2025_b",
+    "wall.frame.lunar2025_c",
+    "wall.frame.netting",
+    "wall.frame.shopfront",
+    "wall.frame.shopfront.metal",
+    "wall.graveyard.fence",
+    "wall.ice.wall",
+    "wall.shallow.industrial.shelves",
+    "wall.window.bars.metal",
+    "wall.window.bars.toptier",
+    "wall.window.bars.wood",
+    "wall.window.glass.reinforced",
+    "wallpaper.ceiling",
+    "wallpaper.flooring",
+    "wallpaper.tool",
+    "wallpaper.wall",
+    "wantedposter",
+    "wantedposter.wantedposter2",
+    "wantedposter.wantedposter3",
+    "wantedposter.wantedposter4",
+    "warmingtea",
+    "watchtower.wood",
+    "water",
+    "water.barrel",
+    "water.catcher.large",
+    "water.catcher.small",
+    "water.purifier",
+    "water.radioactive",
+    "water.salt",
+    "waterjug",
+    "waterpump",
+    "weapon.mod.8x.scope",
+    "weapon.mod.burstmodule",
+    "weapon.mod.extendedmags",
+    "weapon.mod.flashlight",
+    "weapon.mod.gascompressionovedrive",
+    "weapon.mod.holosight",
+    "weapon.mod.lasersight",
+    "weapon.mod.muzzleboost",
+    "weapon.mod.muzzlebrake",
+    "weapon.mod.oilfiltersilencer",
+    "weapon.mod.silencer",
+    "weapon.mod.simplesight",
+    "weapon.mod.small.scope",
+    "weapon.mod.sodacansilencer",
+    "weapon.mod.targetingattachment",
+    "weaponrack.doublelight",
+    "weaponrack.light",
+    "wheat",
+    "white.berry",
+    "whiteidtag",
+    "wicker.barrel",
+    "window.paintable",
+    "wiretool",
+    "wolfmeat.burned",
+    "wolfmeat.cooked",
+    "wolfmeat.raw",
+    "wolfmeat.spoiled",
+    "wood",
+    "wood.armor.helmet",
+    "wood.armor.jacket",
+    "wood.armor.pants",
+    "woodarmor.gloves",
+    "woodcross",
+    "wooden.shield",
+    "woodframe.large",
+    "woodframe.medium",
+    "woodframe.small",
+    "woodframe.standing",
+    "woodmirror.large",
+    "woodmirror.medium",
+    "woodmirror.small",
+    "woodmirror.standing",
+    "woodtea",
+    "woodtea.advanced",
+    "woodtea.pure",
+    "woodtea.pure.creamy",
+    "woodtea.pure.milky",
+    "wool",
+    "workbench.upgrade.accelerated",
+    "workbench.upgrade.comfort",
+    "workbench.upgrade.defensive",
+    "workbench.upgrade.efficiency",
+    "workbench.upgrade.prototype",
+    "workbench.upgrade.range",
+    "workbench.upgrade.recyclebin",
+    "workbench.upgrade.reinforced",
+    "workbench.upgrade.salvage",
+    "workbench.upgrade.surplus",
+    "workbench1",
+    "workbench2",
+    "workbench3",
+    "workcart",
+    "worm",
+    "wrappedgift",
+    "wrappingpaper",
+    "xmas.advent",
+    "xmas.decoration.baubels",
+    "xmas.decoration.candycanes",
+    "xmas.decoration.gingerbreadmen",
+    "xmas.decoration.lights",
+    "xmas.decoration.pinecone",
+    "xmas.decoration.star",
+    "xmas.decoration.tinsel",
+    "xmas.door.garland",
+    "xmas.double.door.garland",
+    "xmas.lightstring",
+    "xmas.lightstring.advanced",
+    "xmas.present.large",
+    "xmas.present.medium",
+    "xmas.present.small",
+    "xmas.tree",
+    "xmas.window.garland",
+    "xmasdoorwreath",
+    "xylophone",
+    "yellow.berry",
+    "yellowidtag"
+  ]
+}
