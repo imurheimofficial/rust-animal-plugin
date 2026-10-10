@@ -748,6 +748,11 @@ namespace Oxide.Plugins
             BeastMenu menu;
             beastMenus.TryGetValue(player.userID, out menu);
             CloseBeastMenu(player);
+            CuiHelper.DestroyUi(player, BeastUi);              // also a menu left over from before the plugin was switched off
+            if (!Active)
+            {
+                return;
+            }
             ulong id;
             if (args.Length < 3 || !ulong.TryParse(args[1], out id) || id == 0UL || menu == null || !Valid(menu.Target) || menu.Target.net.ID.Value != id)
             {
@@ -872,6 +877,17 @@ namespace Oxide.Plugins
             {
                 Bm.StoreTamed();
                 Bm.StopAllFollowers();
+                CloseMenus();
+            }
+
+            public override void OnDisable()
+            {
+                Bm.StopAllFollowers();
+                CloseMenus();
+            }
+
+            private void CloseMenus()
+            {
                 foreach (ulong id in Bm.beastMenus.Keys.ToList())
                 {
                     BasePlayer p = BasePlayer.FindByID(id);
@@ -881,11 +897,7 @@ namespace Oxide.Plugins
                     }
                 }
                 Bm.beastMenus.Clear();
-            }
-
-            public override void OnDisable()
-            {
-                Bm.StopAllFollowers();
+                Bm.usePresses.Clear();
             }
 
             public override void OnEnable()

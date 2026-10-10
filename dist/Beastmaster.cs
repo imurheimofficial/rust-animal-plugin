@@ -6009,10 +6009,33 @@ namespace Oxide.Plugins
                 }
             }
 
-            // A crash or a fall throws the rider (and the passengers) off, the way a horse does.
+            // The control ends while the animal is still down after a fall: it gets up when the fall is over, without its driver.
+            private void EndFallPoseLater()
+            {
+                if (!restingFromFall)
+                {
+                    return;
+                }
+                restingFromFall = false;
+                LivestockAnimal livestock = Animal as LivestockAnimal;
+                if (livestock == null)
+                {
+                    return;
+                }
+                float wait = Mathf.Max(0.1f, fallenUntil - 0.8f - Time.time);
+                bm.timer.Once(wait, () =>
+                {
+                    if (Valid(livestock) && !livestock.IsDead())
+                    {
+                        livestock.SetResting(false);
+                    }
+                });
+            }
+
+            // A crash or a fall throws the rider and the passengers off, the way a horse does. An animal form throws its passengers only.
             private void ThrowRider()
             {
-                if (Kind != ControlKind.Ride || released || Player == null)
+                if (released || Player == null)
                 {
                     return;
                 }
@@ -6027,6 +6050,10 @@ namespace Oxide.Plugins
                         guestSeat.DismountAllPlayers();
                         bm.NextTick(() => bm.ThrowPlayer(thrown, forward));
                     }
+                }
+                if (Kind != ControlKind.Ride)
+                {
+                    return;
                 }
                 bm.StopControl(rider, "thrown off");
                 bm.NextTick(() => bm.ThrowPlayer(rider, forward));
@@ -6224,9 +6251,9 @@ namespace Oxide.Plugins
             // is set again at the end of every frame, so the camera never swings round on its own.
             private void LateUpdate()
             {
-                if (released || Animal == null || Body == null || Body.IsDestroyed || Body.IsDead())
+                if (released || Animal == null || Body == null || Body.IsDestroyed || Body.IsDead() || Animal.IsMounted)
                 {
-                    return;
+                    return;                                 // loaded onto a transport, the animal turns with the vehicle
                 }
                 Quaternion want = Quaternion.Euler(0f, moveYaw + yawOffset, 0f);
                 if (Quaternion.Angle(Body.transform.rotation, want) > 0.5f)
@@ -6476,10 +6503,10 @@ namespace Oxide.Plugins
                 Vector3 forward = Horse.transform.forward;
                 forward.y = 0f;
                 forward.Normalize();
-                Vector3 v = horseBody.linearVelocity;
+                Vector3 v = horseBody.linearVelocity;               // what the physics made of the last step (a wall stops it)
                 horseBody.linearVelocity = new Vector3(forward.x * currentSpeed, v.y, forward.z * currentSpeed);
                 bm.LeashHorse(this, horseBody);
-                HorseWallCheck(dt);
+                HorseWallCheck(dt, v);
                 if (horseBody.IsSleeping())
                 {
                     horseBody.WakeUp();
@@ -6505,14 +6532,15 @@ namespace Oxide.Plugins
             // other animals. A player or an animal in the way is no wall - running into them is an attack.
             private float horseStall;
 
-            private void HorseWallCheck(float dt)
+            // measured: the horse's velocity after the last physics step, before the drive set the new one
+            private void HorseWallCheck(float dt, Vector3 measured)
             {
                 if (!AtFullSprint() || Time.time < nextWallCrash || horseBody == null)
                 {
                     horseStall = 0f;
                     return;
                 }
-                Vector3 v = horseBody.linearVelocity;
+                Vector3 v = measured;
                 v.y = 0f;
                 horseStall = v.magnitude < Mathf.Abs(currentSpeed) * 0.35f ? horseStall + dt : 0f;
                 if (horseStall < 0.2f)
@@ -6619,6 +6647,8 @@ namespace Oxide.Plugins
                 bm.EndChain(this, "sleep");
                 EndGuests();
                 ClearPose();
+                EndFallPoseLater();
+                bm.EndFeedPose(this);
                 if (Player != null)
                 {
                     Rust.Ai.SimpleAIMemory.PlayerIgnoreList.Remove(Player);
@@ -6659,6 +6689,8 @@ namespace Oxide.Plugins
                 bm.EndChain(this, reason);
                 EndGuests();
                 ClearPose();
+                EndFallPoseLater();                 // a sheep or ram down after a crash gets up in time, also when its rider is thrown off
+                bm.EndFeedPose(this);
                 if (Player != null)
                 {
                     bm.ClearKeyHints(Player);
@@ -6777,6 +6809,7 @@ namespace Oxide.Plugins
             public List<ItemRecord> Bag = new List<ItemRecord>();      // the storage (Slot = index in the storage)
             public bool HasBag;                          // a saddle bag is fitted
             public int Armor;                            // 0 none, 1 wooden, 2 roadsign, 3 lunar new year
+            public List<ItemRecord> Worn = new List<ItemRecord>();     // the items of the four equipment slots as they were (skin, condition)
         }
 
         // One owned animal. State: follow, wait, guard.
@@ -7274,6 +7307,7 @@ namespace Oxide.Plugins
                 OwnsAnimal = d.OwnsAnimal,
                 Gear = RecordOf(animal) == null && FormGears.ContainsKey(player.userID) ? FormGears[player.userID] : null
             };
+            FormGears.Remove(player.userID);              // the inventory stays with the sleeping animal (the record), not with the player
             FormSleepers[player.userID] = animal;
             Log(2, player.displayName + " left in " + d.Species.Display + " form - the animal sleeps.");
             return true;
@@ -7311,9 +7345,15 @@ namespace Oxide.Plugins
                 if (rec.OwnsAnimal || RecordOf(animal) == null)
                 {
                     FormSmoke(spot);
+                    DropGearRecord(rec.Gear, spot + Vector3.up * 0.6f);     // what it carried stays on the ground
+                    RemoveSaddle(animal);
                     Data.Bosses.Remove(animal.skinID);
                     animal.Kill();
                 }
+            }
+            else
+            {
+                DropGearRecord(rec.Gear, spot + Vector3.up * 0.6f);
             }
             player.limitNetworking = false;
             BasePlayer p = player;
@@ -7339,6 +7379,7 @@ namespace Oxide.Plugins
             BaseCombatEntity animal;
             if (!FormSleepers.TryGetValue(player.userID, out animal) || !Valid(animal) || animal.IsDead())
             {
+                DropGearRecord(rec.Gear, (Valid(animal) ? animal.transform.position : rec.Position.Value) + Vector3.up * 0.6f);
                 Data.Forms.Remove(player.userID);
                 FormSleepers.Remove(player.userID);
                 return;
@@ -7420,6 +7461,7 @@ namespace Oxide.Plugins
                 }
                 if (animal == null)
                 {
+                    DropGearRecord(rec.Gear, rec.Position.Value + Vector3.up * 0.6f);
                     Data.Forms.Remove(rec.Player);
                     continue;
                 }
@@ -7452,6 +7494,12 @@ namespace Oxide.Plugins
             {
                 if (pair.Value == entity)
                 {
+                    FormRecord dead;
+                    if (Data.Forms.TryGetValue(pair.Key, out dead) && dead != null)
+                    {
+                        Vector3 at = Valid(pair.Value) ? pair.Value.transform.position : dead.Position.Value;
+                        DropGearRecord(dead.Gear, at + Vector3.up * 0.6f);      // what the sleeping animal carried
+                    }
                     FormSleepers.Remove(pair.Key);
                     Data.Forms.Remove(pair.Key);
                     BasePlayer sleeper = BasePlayer.FindSleeping(pair.Key);
@@ -7536,6 +7584,10 @@ namespace Oxide.Plugins
                 {
                     if (!Valid(lf.Animal) || lf.Animal.IsDead())
                     {
+                        if (Valid(lf.Animal))
+                        {
+                            Bm.DropGearRecord(lf.Gear, lf.Animal.transform.position + Vector3.up * 0.6f);
+                        }
                         Bm.LeftForms.Remove(lf.Animal != null && lf.Animal.net != null ? lf.Animal.net.ID.Value : 0UL);
                         continue;
                     }
@@ -7628,12 +7680,31 @@ namespace Oxide.Plugins
                 }
             }
 
+            // An animal that was left behind dies (or is removed some other way): what it carried falls to the ground. It may be ridden by its
+            // owner at that moment.
+            public override void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
+            {
+                DropLeft(entity);
+            }
+
             public override void OnEntityKill(BaseNetworkable entity)
             {
-                if (Bm.LeftForms.Count > 0 && entity != null && entity.net != null)
+                DropLeft(entity);
+            }
+
+            private void DropLeft(BaseNetworkable entity)
+            {
+                LeftForm lf;
+                if (Bm.LeftForms.Count == 0 || entity == null || entity.net == null || !Bm.LeftForms.TryGetValue(entity.net.ID.Value, out lf))
                 {
-                    Bm.LeftForms.Remove(entity.net.ID.Value);
+                    return;
                 }
+                Bm.LeftForms.Remove(entity.net.ID.Value);
+                if (entity.transform != null)
+                {
+                    Bm.DropGearRecord(lf.Gear, entity.transform.position + Vector3.up * 0.6f);
+                }
+                Bm.RemoveSaddle(entity);
             }
 
             public override void OnDisable()
@@ -7754,7 +7825,7 @@ namespace Oxide.Plugins
                     Item item = ItemFromRecord(pair.Value);
                     if (item != null && !item.MoveToContainer(box.inventory, pair.Key, true))
                     {
-                        item.Remove();
+                        GiveBack(player, item);             // no slot for it any more (fewer slots in the config): to the player, never lost
                     }
                 }
             }
@@ -7890,13 +7961,17 @@ namespace Oxide.Plugins
             {
                 return FormGearOf(d);
             }
+            TamedRecord rec = RecordOf(animal);
+            if (rec != null)
+            {
+                return rec.Gear;                    // a tamed animal keeps its own inventory, also when a player was it and left it
+            }
             LeftForm lf;
             if (animal.net != null && LeftForms.TryGetValue(animal.net.ID.Value, out lf))
             {
                 return lf.Gear;
             }
-            TamedRecord rec = RecordOf(animal);
-            return rec != null ? rec.Gear : null;
+            return null;
         }
 
         internal int SaddleOf(BaseEntity animal)
@@ -7976,19 +8051,7 @@ namespace Oxide.Plugins
             {
                 FinishBox(own);                      // a panel of the same player still counted as open (saved first)
             }
-            if (openGears.Contains(gear))
-            {
-                // the game of a player in animal form may not show the panel at all (the spectator view): such a panel never keeps others out
-                foreach (VirtualBox held in Boxes.Values.ToList())
-                {
-                    InventoryContext hc = held.Data as InventoryContext;
-                    Driver holder = held.Player != null ? DriverOf(held.Player) : null;
-                    if (hc != null && hc.Gear == gear && (held.Player == null || !held.Player.IsConnected || (holder != null && holder.Spectating)))
-                    {
-                        FinishBox(held);
-                    }
-                }
-            }
+            ReleaseStuckPanels(gear);
             if (openGears.Contains(gear))
             {
                 TellRaw(player, "Somebody is in its inventory right now.");
@@ -7996,21 +8059,9 @@ namespace Oxide.Plugins
             }
             SpeciesDef species = SpeciesOf(animal);
             var contents = new List<KeyValuePair<int, ItemRecord>>();
-            if (gear.Saddle > 0)
+            foreach (KeyValuePair<int, ItemRecord> worn in WornItems(gear))
             {
-                contents.Add(new KeyValuePair<int, ItemRecord>(SlotSaddle, new ItemRecord { Shortname = gear.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single" }));
-            }
-            if (gear.Shoes > 0)
-            {
-                contents.Add(new KeyValuePair<int, ItemRecord>(SlotShoes, new ItemRecord { Shortname = gear.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic" }));
-            }
-            if (gear.HasBag)
-            {
-                contents.Add(new KeyValuePair<int, ItemRecord>(SlotBag, new ItemRecord { Shortname = "horse.saddlebag" }));
-            }
-            if (gear.Armor > 0 && gear.Armor < ArmorItems.Length)
-            {
-                contents.Add(new KeyValuePair<int, ItemRecord>(SlotArmor, new ItemRecord { Shortname = ArmorItems[gear.Armor] }));
+                contents.Add(worn);
             }
             foreach (ItemRecord stored in gear.Bag)
             {
@@ -8023,6 +8074,22 @@ namespace Oxide.Plugins
                 openGears.Add(gear);
                 Tell(player, "GearOpen", species.Display, Cfg.Gear.BagSlots, Cfg.Gear.WoodArmorSlots);
             }
+        }
+
+        // The items of the four equipment slots: as they were put in (skin, condition), or plain ones for older records.
+        internal static List<KeyValuePair<int, ItemRecord>> WornItems(GearRecord g)
+        {
+            var list = new List<KeyValuePair<int, ItemRecord>>();
+            Action<int, string> add = (slot, shortname) =>
+            {
+                ItemRecord kept = g.Worn != null ? g.Worn.FirstOrDefault(r => r.Slot == slot && r.Shortname == shortname) : null;
+                list.Add(new KeyValuePair<int, ItemRecord>(slot, kept ?? new ItemRecord { Shortname = shortname, Slot = slot }));
+            };
+            if (g.Saddle > 0) add(SlotSaddle, g.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single");
+            if (g.Shoes > 0) add(SlotShoes, g.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic");
+            if (g.HasBag) add(SlotBag, "horse.saddlebag");
+            if (g.Armor > 0 && g.Armor < ArmorItems.Length) add(SlotArmor, ArmorItems[g.Armor]);
+            return list;
         }
 
         private bool InventoryAccept(VirtualBox vb, Item item, int slot)
@@ -8066,6 +8133,18 @@ namespace Oxide.Plugins
             g.Shoes = shoes == null ? 0 : shoes.info.shortname == "horse.shoes.advanced" ? 2 : 1;
             g.HasBag = bagItem != null && bagItem.info.shortname == "horse.saddlebag";
             g.Armor = armor != null ? ArmorIndex(armor.info.shortname) : 0;
+            if (g.Worn == null)
+            {
+                g.Worn = new List<ItemRecord>();
+            }
+            g.Worn.Clear();
+            foreach (Item worn in new[] { saddle, shoes, bagItem, armor })
+            {
+                if (worn != null)
+                {
+                    g.Worn.Add(RecordFromItem(worn, worn.position));
+                }
+            }
             int capacity = StorageOf(g);
             g.Bag.Clear();
             foreach (Item item in inv.itemList.ToList())
@@ -8135,6 +8214,11 @@ namespace Oxide.Plugins
             if (player == null || !Valid(entity))
             {
                 return false;
+            }
+            // the owner rules (this plugin's and other plugins') are asked first: the game's own method may not ask them itself
+            if (Interface.CallHook("CanLootEntity", player, entity) != null)
+            {
+                return true;                         // refused, and the refusal has been told already
             }
             StorageContainer storage = entity as StorageContainer;
             Type type = entity.GetType();
@@ -8251,6 +8335,34 @@ namespace Oxide.Plugins
             return AddToGear(FormGearOf(d), item, out why);
         }
 
+        // The game of a player in animal form may not show a panel at all (the spectator view), and a player who left cannot close his: such
+        // a panel is saved and closed as soon as somebody else needs the inventory, so that it never keeps others (or the pick-ups) out.
+        private static bool PanelMayBeUnseen(VirtualBox vb, Beastmaster bm)
+        {
+            if (vb.Player == null || !vb.Player.IsConnected)
+            {
+                return true;
+            }
+            Driver holder = bm.DriverOf(vb.Player);
+            return holder != null && holder.Spectating;
+        }
+
+        private void ReleaseStuckPanels(GearRecord g)
+        {
+            if (g == null || !openGears.Contains(g))
+            {
+                return;
+            }
+            foreach (VirtualBox held in Boxes.Values.ToList())
+            {
+                InventoryContext hc = held.Data as InventoryContext;
+                if (hc != null && hc.Gear == g && PanelMayBeUnseen(held, this))
+                {
+                    FinishBox(held);
+                }
+            }
+        }
+
         // An open panel of this inventory is closed first (its contents are saved), so that nothing is dropped and kept at the same time.
         internal void CloseInventoriesOf(GearRecord g)
         {
@@ -8282,6 +8394,7 @@ namespace Oxide.Plugins
                 why = "This animal has no inventory.";
                 return false;
             }
+            ReleaseStuckPanels(g);
             if (openGears.Contains(g))
             {
                 why = "Its inventory is open right now.";
@@ -8321,14 +8434,9 @@ namespace Oxide.Plugins
                 return;
             }
             CloseInventoriesOf(g);
-            var names = new List<string>();
-            if (g.Saddle > 0) names.Add(g.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single");
-            if (g.Shoes > 0) names.Add(g.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic");
-            if (g.HasBag) names.Add("horse.saddlebag");
-            if (g.Armor > 0 && g.Armor < ArmorItems.Length) names.Add(ArmorItems[g.Armor]);
-            foreach (string name in names)
+            foreach (KeyValuePair<int, ItemRecord> worn in WornItems(g))
             {
-                Item item = ItemManager.CreateByName(name, 1);
+                Item item = ItemFromRecord(worn.Value);
                 if (item != null)
                 {
                     item.Drop(pos, Vector3.up * 2f + UnityEngine.Random.insideUnitSphere);
@@ -8347,6 +8455,10 @@ namespace Oxide.Plugins
             g.HasBag = false;
             g.Armor = 0;
             g.Bag.Clear();
+            if (g.Worn != null)
+            {
+                g.Worn.Clear();
+            }
         }
 
         // Dying tamed animals drop what they carried (R3.5).
@@ -8644,9 +8756,14 @@ namespace Oxide.Plugins
                 // a panel the player's game never showed, or one that was closed without the end hook, ends here (its contents are saved)
                 foreach (VirtualBox vb in Bm.Boxes.Values.ToList())
                 {
-                    if (Time.realtimeSinceStartup - vb.Opened > 2f && (vb.Player == null || !vb.Player.IsConnected || vb.Player.inventory.loot.entitySource != vb.Box))
+                    float open = Time.realtimeSinceStartup - vb.Opened;
+                    if (open > 2f && (vb.Player == null || !vb.Player.IsConnected || vb.Player.inventory.loot.entitySource != vb.Box))
                     {
                         Bm.FinishBox(vb);
+                    }
+                    else if (open > 120f && PanelMayBeUnseen(vb, Bm))
+                    {
+                        Bm.FinishBox(vb);                    // a panel in the animal view that may never have been seen: saved after two minutes
                     }
                 }
                 var wanted = new HashSet<ulong>();
@@ -8777,7 +8894,12 @@ namespace Oxide.Plugins
             {
                 return 0;
             }
-            return SaddleOf(host.Body);
+            int saddle = SaddleOf(host.Body);
+            if (!Cfg.Riding.RequireSaddle || !Cfg.Features.Gear)
+            {
+                return Mathf.Max(1, saddle);        // the server rides without saddles: one rider, two with a double saddle
+            }
+            return saddle;
         }
 
         // May this player climb on that animal form right now? (the horse form uses this in its vanilla mount hook, the others in TryFormHandle)
@@ -11387,26 +11509,13 @@ namespace Oxide.Plugins
 
             public override void OnServerInitialized()
             {
-                if (!Bm.Cfg.Life.NoWildJumps)
-                {
-                    return;
-                }
-                int n = 0;
-                foreach (BaseNetworkable net in BaseNetworkable.serverEntities.ToList())
-                {
-                    BaseNPC2 npc = net as BaseNPC2;
-                    if (npc != null && NoJumps(npc))
-                    {
-                        n++;
-                    }
-                }
-                Bm.Log(3, "Wild jumps switched off on " + n + " animals (" + JumpReport + ")");
+                ApplyNoJumps();
             }
 
             public override void OnEntitySpawned(BaseNetworkable entity)
             {
                 BaseNPC2 npc = entity as BaseNPC2;
-                if (npc == null || !Bm.Cfg.Life.NoWildJumps)
+                if (npc == null || !Bm.Cfg.Life.NoWildJumps || !Bm.Active)
                 {
                     return;
                 }
@@ -11705,7 +11814,17 @@ namespace Oxide.Plugins
             private static int jumpAreaBit;
             private static bool jumpLooked;
             internal static string JumpReport = "not looked at yet";
-            private readonly HashSet<BaseNPC2> jumpless = new HashSet<BaseNPC2>();
+
+            // What each animal had before its jumps were switched off, so that exactly that comes back.
+            private sealed class JumpState
+            {
+                public object[] Fields;
+                public object[] Props;
+                public int Mask;
+                public bool HasMask;
+            }
+
+            private readonly Dictionary<BaseNPC2, JumpState> jumpless = new Dictionary<BaseNPC2, JumpState>();
 
             private static void LookUpJumpSwitches()
             {
@@ -11767,32 +11886,36 @@ namespace Oxide.Plugins
             private bool NoJumps(BaseNPC2 npc)
             {
                 LookUpJumpSwitches();
-                RustNavMeshAgent agent = npc.GetComponent<RustNavMeshAgent>();
-                if (agent == null)
+                if (jumpless.ContainsKey(npc))
                 {
                     return false;
                 }
-                bool changed = false;
+                RustNavMeshAgent agent = npc.GetComponent<RustNavMeshAgent>();
+                if (agent == null || (jumpSwitches.Count == 0 && jumpSwitchProps.Count == 0 && (unityAgentField == null || areaMaskProperty == null || jumpAreaBit == 0)))
+                {
+                    return false;
+                }
+                var state = new JumpState { Fields = new object[jumpSwitches.Count], Props = new object[jumpSwitchProps.Count] };
                 try
                 {
-                    foreach (FieldInfo f in jumpSwitches)
+                    for (int i = 0; i < jumpSwitches.Count; i++)
                     {
-                        f.SetValue(agent, false);
-                        changed = true;
+                        state.Fields[i] = jumpSwitches[i].GetValue(agent);
+                        jumpSwitches[i].SetValue(agent, false);
                     }
-                    foreach (PropertyInfo p in jumpSwitchProps)
+                    for (int i = 0; i < jumpSwitchProps.Count; i++)
                     {
-                        p.SetValue(agent, false, null);
-                        changed = true;
+                        state.Props[i] = jumpSwitchProps[i].CanRead ? jumpSwitchProps[i].GetValue(agent, null) : (object)true;
+                        jumpSwitchProps[i].SetValue(agent, false, null);
                     }
                     if (unityAgentField != null && areaMaskProperty != null && jumpAreaBit != 0)
                     {
                         object unityAgent = unityAgentField.GetValue(agent);
                         if (unityAgent != null)
                         {
-                            int mask = (int)areaMaskProperty.GetValue(unityAgent, null);
-                            areaMaskProperty.SetValue(unityAgent, mask & ~jumpAreaBit, null);
-                            changed = true;
+                            state.Mask = (int)areaMaskProperty.GetValue(unityAgent, null);
+                            state.HasMask = true;
+                            areaMaskProperty.SetValue(unityAgent, state.Mask & ~jumpAreaBit, null);
                         }
                     }
                 }
@@ -11800,17 +11923,34 @@ namespace Oxide.Plugins
                 {
                     Bm.Log(1, "Switching off the jumps of " + npc.ShortPrefabName + " failed: " + ex.Message);
                 }
-                if (changed)
+                jumpless[npc] = state;
+                return true;
+            }
+
+            private void ApplyNoJumps()
+            {
+                if (!Bm.Cfg.Life.NoWildJumps || !Bm.Active)
                 {
-                    jumpless.Add(npc);
+                    return;
                 }
-                return changed;
+                int n = 0;
+                foreach (BaseNetworkable net in BaseNetworkable.serverEntities.ToList())
+                {
+                    BaseNPC2 npc = net as BaseNPC2;
+                    if (npc != null && NoJumps(npc))
+                    {
+                        n++;
+                    }
+                }
+                Bm.Log(3, "Wild jumps switched off on " + n + " animals (" + JumpReport + ")");
             }
 
             private void RestoreJumps()
             {
-                foreach (BaseNPC2 npc in jumpless)
+                foreach (KeyValuePair<BaseNPC2, JumpState> pair in jumpless)
                 {
+                    BaseNPC2 npc = pair.Key;
+                    JumpState state = pair.Value;
                     if (!Valid(npc))
                     {
                         continue;
@@ -11822,20 +11962,20 @@ namespace Oxide.Plugins
                     }
                     try
                     {
-                        foreach (FieldInfo f in jumpSwitches)
+                        for (int i = 0; i < jumpSwitches.Count && i < state.Fields.Length; i++)
                         {
-                            f.SetValue(agent, true);
+                            jumpSwitches[i].SetValue(agent, state.Fields[i]);
                         }
-                        foreach (PropertyInfo p in jumpSwitchProps)
+                        for (int i = 0; i < jumpSwitchProps.Count && i < state.Props.Length; i++)
                         {
-                            p.SetValue(agent, true, null);
+                            jumpSwitchProps[i].SetValue(agent, state.Props[i], null);
                         }
-                        if (unityAgentField != null && areaMaskProperty != null && jumpAreaBit != 0)
+                        if (state.HasMask && unityAgentField != null && areaMaskProperty != null)
                         {
                             object unityAgent = unityAgentField.GetValue(agent);
                             if (unityAgent != null)
                             {
-                                areaMaskProperty.SetValue(unityAgent, (int)areaMaskProperty.GetValue(unityAgent, null) | jumpAreaBit, null);
+                                areaMaskProperty.SetValue(unityAgent, state.Mask, null);
                             }
                         }
                     }
@@ -11844,6 +11984,20 @@ namespace Oxide.Plugins
                     }
                 }
                 jumpless.Clear();
+            }
+
+            public override void OnEntityKill(BaseNetworkable entity)
+            {
+                BaseNPC2 npc = entity as BaseNPC2;
+                if (npc != null)
+                {
+                    jumpless.Remove(npc);
+                }
+            }
+
+            public override void OnEnable()
+            {
+                ApplyNoJumps();
             }
 
             public override void SelfTest(List<string> report)
@@ -12825,7 +12979,7 @@ namespace Oxide.Plugins
             MenuState st = MenuOf(player);
             bool control = HasMenuAccess(player);
             string act = args[0].ToLowerInvariant();
-            if (!Active && act != "close" && act != "plugin" && act != "noop")
+            if (!Active && act != "close" && act != "plugin" && act != "noop" && act != "beast")
             {
                 return;
             }
@@ -16919,6 +17073,11 @@ namespace Oxide.Plugins
             BeastMenu menu;
             beastMenus.TryGetValue(player.userID, out menu);
             CloseBeastMenu(player);
+            CuiHelper.DestroyUi(player, BeastUi);              // also a menu left over from before the plugin was switched off
+            if (!Active)
+            {
+                return;
+            }
             ulong id;
             if (args.Length < 3 || !ulong.TryParse(args[1], out id) || id == 0UL || menu == null || !Valid(menu.Target) || menu.Target.net.ID.Value != id)
             {
@@ -17043,6 +17202,17 @@ namespace Oxide.Plugins
             {
                 Bm.StoreTamed();
                 Bm.StopAllFollowers();
+                CloseMenus();
+            }
+
+            public override void OnDisable()
+            {
+                Bm.StopAllFollowers();
+                CloseMenus();
+            }
+
+            private void CloseMenus()
+            {
                 foreach (ulong id in Bm.beastMenus.Keys.ToList())
                 {
                     BasePlayer p = BasePlayer.FindByID(id);
@@ -17052,11 +17222,7 @@ namespace Oxide.Plugins
                     }
                 }
                 Bm.beastMenus.Clear();
-            }
-
-            public override void OnDisable()
-            {
-                Bm.StopAllFollowers();
+                Bm.usePresses.Clear();
             }
 
             public override void OnEnable()

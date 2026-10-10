@@ -52,26 +52,13 @@ namespace Oxide.Plugins
 
             public override void OnServerInitialized()
             {
-                if (!Bm.Cfg.Life.NoWildJumps)
-                {
-                    return;
-                }
-                int n = 0;
-                foreach (BaseNetworkable net in BaseNetworkable.serverEntities.ToList())
-                {
-                    BaseNPC2 npc = net as BaseNPC2;
-                    if (npc != null && NoJumps(npc))
-                    {
-                        n++;
-                    }
-                }
-                Bm.Log(3, "Wild jumps switched off on " + n + " animals (" + JumpReport + ")");
+                ApplyNoJumps();
             }
 
             public override void OnEntitySpawned(BaseNetworkable entity)
             {
                 BaseNPC2 npc = entity as BaseNPC2;
-                if (npc == null || !Bm.Cfg.Life.NoWildJumps)
+                if (npc == null || !Bm.Cfg.Life.NoWildJumps || !Bm.Active)
                 {
                     return;
                 }
@@ -370,7 +357,17 @@ namespace Oxide.Plugins
             private static int jumpAreaBit;
             private static bool jumpLooked;
             internal static string JumpReport = "not looked at yet";
-            private readonly HashSet<BaseNPC2> jumpless = new HashSet<BaseNPC2>();
+
+            // What each animal had before its jumps were switched off, so that exactly that comes back.
+            private sealed class JumpState
+            {
+                public object[] Fields;
+                public object[] Props;
+                public int Mask;
+                public bool HasMask;
+            }
+
+            private readonly Dictionary<BaseNPC2, JumpState> jumpless = new Dictionary<BaseNPC2, JumpState>();
 
             private static void LookUpJumpSwitches()
             {
@@ -432,32 +429,36 @@ namespace Oxide.Plugins
             private bool NoJumps(BaseNPC2 npc)
             {
                 LookUpJumpSwitches();
-                RustNavMeshAgent agent = npc.GetComponent<RustNavMeshAgent>();
-                if (agent == null)
+                if (jumpless.ContainsKey(npc))
                 {
                     return false;
                 }
-                bool changed = false;
+                RustNavMeshAgent agent = npc.GetComponent<RustNavMeshAgent>();
+                if (agent == null || (jumpSwitches.Count == 0 && jumpSwitchProps.Count == 0 && (unityAgentField == null || areaMaskProperty == null || jumpAreaBit == 0)))
+                {
+                    return false;
+                }
+                var state = new JumpState { Fields = new object[jumpSwitches.Count], Props = new object[jumpSwitchProps.Count] };
                 try
                 {
-                    foreach (FieldInfo f in jumpSwitches)
+                    for (int i = 0; i < jumpSwitches.Count; i++)
                     {
-                        f.SetValue(agent, false);
-                        changed = true;
+                        state.Fields[i] = jumpSwitches[i].GetValue(agent);
+                        jumpSwitches[i].SetValue(agent, false);
                     }
-                    foreach (PropertyInfo p in jumpSwitchProps)
+                    for (int i = 0; i < jumpSwitchProps.Count; i++)
                     {
-                        p.SetValue(agent, false, null);
-                        changed = true;
+                        state.Props[i] = jumpSwitchProps[i].CanRead ? jumpSwitchProps[i].GetValue(agent, null) : (object)true;
+                        jumpSwitchProps[i].SetValue(agent, false, null);
                     }
                     if (unityAgentField != null && areaMaskProperty != null && jumpAreaBit != 0)
                     {
                         object unityAgent = unityAgentField.GetValue(agent);
                         if (unityAgent != null)
                         {
-                            int mask = (int)areaMaskProperty.GetValue(unityAgent, null);
-                            areaMaskProperty.SetValue(unityAgent, mask & ~jumpAreaBit, null);
-                            changed = true;
+                            state.Mask = (int)areaMaskProperty.GetValue(unityAgent, null);
+                            state.HasMask = true;
+                            areaMaskProperty.SetValue(unityAgent, state.Mask & ~jumpAreaBit, null);
                         }
                     }
                 }
@@ -465,17 +466,34 @@ namespace Oxide.Plugins
                 {
                     Bm.Log(1, "Switching off the jumps of " + npc.ShortPrefabName + " failed: " + ex.Message);
                 }
-                if (changed)
+                jumpless[npc] = state;
+                return true;
+            }
+
+            private void ApplyNoJumps()
+            {
+                if (!Bm.Cfg.Life.NoWildJumps || !Bm.Active)
                 {
-                    jumpless.Add(npc);
+                    return;
                 }
-                return changed;
+                int n = 0;
+                foreach (BaseNetworkable net in BaseNetworkable.serverEntities.ToList())
+                {
+                    BaseNPC2 npc = net as BaseNPC2;
+                    if (npc != null && NoJumps(npc))
+                    {
+                        n++;
+                    }
+                }
+                Bm.Log(3, "Wild jumps switched off on " + n + " animals (" + JumpReport + ")");
             }
 
             private void RestoreJumps()
             {
-                foreach (BaseNPC2 npc in jumpless)
+                foreach (KeyValuePair<BaseNPC2, JumpState> pair in jumpless)
                 {
+                    BaseNPC2 npc = pair.Key;
+                    JumpState state = pair.Value;
                     if (!Valid(npc))
                     {
                         continue;
@@ -487,20 +505,20 @@ namespace Oxide.Plugins
                     }
                     try
                     {
-                        foreach (FieldInfo f in jumpSwitches)
+                        for (int i = 0; i < jumpSwitches.Count && i < state.Fields.Length; i++)
                         {
-                            f.SetValue(agent, true);
+                            jumpSwitches[i].SetValue(agent, state.Fields[i]);
                         }
-                        foreach (PropertyInfo p in jumpSwitchProps)
+                        for (int i = 0; i < jumpSwitchProps.Count && i < state.Props.Length; i++)
                         {
-                            p.SetValue(agent, true, null);
+                            jumpSwitchProps[i].SetValue(agent, state.Props[i], null);
                         }
-                        if (unityAgentField != null && areaMaskProperty != null && jumpAreaBit != 0)
+                        if (state.HasMask && unityAgentField != null && areaMaskProperty != null)
                         {
                             object unityAgent = unityAgentField.GetValue(agent);
                             if (unityAgent != null)
                             {
-                                areaMaskProperty.SetValue(unityAgent, (int)areaMaskProperty.GetValue(unityAgent, null) | jumpAreaBit, null);
+                                areaMaskProperty.SetValue(unityAgent, state.Mask, null);
                             }
                         }
                     }
@@ -509,6 +527,20 @@ namespace Oxide.Plugins
                     }
                 }
                 jumpless.Clear();
+            }
+
+            public override void OnEntityKill(BaseNetworkable entity)
+            {
+                BaseNPC2 npc = entity as BaseNPC2;
+                if (npc != null)
+                {
+                    jumpless.Remove(npc);
+                }
+            }
+
+            public override void OnEnable()
+            {
+                ApplyNoJumps();
             }
 
             public override void SelfTest(List<string> report)

@@ -2097,10 +2097,33 @@ namespace Oxide.Plugins
                 }
             }
 
-            // A crash or a fall throws the rider (and the passengers) off, the way a horse does.
+            // The control ends while the animal is still down after a fall: it gets up when the fall is over, without its driver.
+            private void EndFallPoseLater()
+            {
+                if (!restingFromFall)
+                {
+                    return;
+                }
+                restingFromFall = false;
+                LivestockAnimal livestock = Animal as LivestockAnimal;
+                if (livestock == null)
+                {
+                    return;
+                }
+                float wait = Mathf.Max(0.1f, fallenUntil - 0.8f - Time.time);
+                bm.timer.Once(wait, () =>
+                {
+                    if (Valid(livestock) && !livestock.IsDead())
+                    {
+                        livestock.SetResting(false);
+                    }
+                });
+            }
+
+            // A crash or a fall throws the rider and the passengers off, the way a horse does. An animal form throws its passengers only.
             private void ThrowRider()
             {
-                if (Kind != ControlKind.Ride || released || Player == null)
+                if (released || Player == null)
                 {
                     return;
                 }
@@ -2115,6 +2138,10 @@ namespace Oxide.Plugins
                         guestSeat.DismountAllPlayers();
                         bm.NextTick(() => bm.ThrowPlayer(thrown, forward));
                     }
+                }
+                if (Kind != ControlKind.Ride)
+                {
+                    return;
                 }
                 bm.StopControl(rider, "thrown off");
                 bm.NextTick(() => bm.ThrowPlayer(rider, forward));
@@ -2312,9 +2339,9 @@ namespace Oxide.Plugins
             // is set again at the end of every frame, so the camera never swings round on its own.
             private void LateUpdate()
             {
-                if (released || Animal == null || Body == null || Body.IsDestroyed || Body.IsDead())
+                if (released || Animal == null || Body == null || Body.IsDestroyed || Body.IsDead() || Animal.IsMounted)
                 {
-                    return;
+                    return;                                 // loaded onto a transport, the animal turns with the vehicle
                 }
                 Quaternion want = Quaternion.Euler(0f, moveYaw + yawOffset, 0f);
                 if (Quaternion.Angle(Body.transform.rotation, want) > 0.5f)
@@ -2564,10 +2591,10 @@ namespace Oxide.Plugins
                 Vector3 forward = Horse.transform.forward;
                 forward.y = 0f;
                 forward.Normalize();
-                Vector3 v = horseBody.linearVelocity;
+                Vector3 v = horseBody.linearVelocity;               // what the physics made of the last step (a wall stops it)
                 horseBody.linearVelocity = new Vector3(forward.x * currentSpeed, v.y, forward.z * currentSpeed);
                 bm.LeashHorse(this, horseBody);
-                HorseWallCheck(dt);
+                HorseWallCheck(dt, v);
                 if (horseBody.IsSleeping())
                 {
                     horseBody.WakeUp();
@@ -2593,14 +2620,15 @@ namespace Oxide.Plugins
             // other animals. A player or an animal in the way is no wall - running into them is an attack.
             private float horseStall;
 
-            private void HorseWallCheck(float dt)
+            // measured: the horse's velocity after the last physics step, before the drive set the new one
+            private void HorseWallCheck(float dt, Vector3 measured)
             {
                 if (!AtFullSprint() || Time.time < nextWallCrash || horseBody == null)
                 {
                     horseStall = 0f;
                     return;
                 }
-                Vector3 v = horseBody.linearVelocity;
+                Vector3 v = measured;
                 v.y = 0f;
                 horseStall = v.magnitude < Mathf.Abs(currentSpeed) * 0.35f ? horseStall + dt : 0f;
                 if (horseStall < 0.2f)
@@ -2707,6 +2735,8 @@ namespace Oxide.Plugins
                 bm.EndChain(this, "sleep");
                 EndGuests();
                 ClearPose();
+                EndFallPoseLater();
+                bm.EndFeedPose(this);
                 if (Player != null)
                 {
                     Rust.Ai.SimpleAIMemory.PlayerIgnoreList.Remove(Player);
@@ -2747,6 +2777,8 @@ namespace Oxide.Plugins
                 bm.EndChain(this, reason);
                 EndGuests();
                 ClearPose();
+                EndFallPoseLater();                 // a sheep or ram down after a crash gets up in time, also when its rider is thrown off
+                bm.EndFeedPose(this);
                 if (Player != null)
                 {
                     bm.ClearKeyHints(Player);

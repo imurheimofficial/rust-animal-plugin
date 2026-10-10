@@ -73,6 +73,7 @@ namespace Oxide.Plugins
             public List<ItemRecord> Bag = new List<ItemRecord>();      // the storage (Slot = index in the storage)
             public bool HasBag;                          // a saddle bag is fitted
             public int Armor;                            // 0 none, 1 wooden, 2 roadsign, 3 lunar new year
+            public List<ItemRecord> Worn = new List<ItemRecord>();     // the items of the four equipment slots as they were (skin, condition)
         }
 
         // One owned animal. State: follow, wait, guard.

@@ -117,6 +117,7 @@ namespace Oxide.Plugins
                 OwnsAnimal = d.OwnsAnimal,
                 Gear = RecordOf(animal) == null && FormGears.ContainsKey(player.userID) ? FormGears[player.userID] : null
             };
+            FormGears.Remove(player.userID);              // the inventory stays with the sleeping animal (the record), not with the player
             FormSleepers[player.userID] = animal;
             Log(2, player.displayName + " left in " + d.Species.Display + " form - the animal sleeps.");
             return true;
@@ -154,9 +155,15 @@ namespace Oxide.Plugins
                 if (rec.OwnsAnimal || RecordOf(animal) == null)
                 {
                     FormSmoke(spot);
+                    DropGearRecord(rec.Gear, spot + Vector3.up * 0.6f);     // what it carried stays on the ground
+                    RemoveSaddle(animal);
                     Data.Bosses.Remove(animal.skinID);
                     animal.Kill();
                 }
+            }
+            else
+            {
+                DropGearRecord(rec.Gear, spot + Vector3.up * 0.6f);
             }
             player.limitNetworking = false;
             BasePlayer p = player;
@@ -182,6 +189,7 @@ namespace Oxide.Plugins
             BaseCombatEntity animal;
             if (!FormSleepers.TryGetValue(player.userID, out animal) || !Valid(animal) || animal.IsDead())
             {
+                DropGearRecord(rec.Gear, (Valid(animal) ? animal.transform.position : rec.Position.Value) + Vector3.up * 0.6f);
                 Data.Forms.Remove(player.userID);
                 FormSleepers.Remove(player.userID);
                 return;
@@ -263,6 +271,7 @@ namespace Oxide.Plugins
                 }
                 if (animal == null)
                 {
+                    DropGearRecord(rec.Gear, rec.Position.Value + Vector3.up * 0.6f);
                     Data.Forms.Remove(rec.Player);
                     continue;
                 }
@@ -295,6 +304,12 @@ namespace Oxide.Plugins
             {
                 if (pair.Value == entity)
                 {
+                    FormRecord dead;
+                    if (Data.Forms.TryGetValue(pair.Key, out dead) && dead != null)
+                    {
+                        Vector3 at = Valid(pair.Value) ? pair.Value.transform.position : dead.Position.Value;
+                        DropGearRecord(dead.Gear, at + Vector3.up * 0.6f);      // what the sleeping animal carried
+                    }
                     FormSleepers.Remove(pair.Key);
                     Data.Forms.Remove(pair.Key);
                     BasePlayer sleeper = BasePlayer.FindSleeping(pair.Key);
@@ -379,6 +394,10 @@ namespace Oxide.Plugins
                 {
                     if (!Valid(lf.Animal) || lf.Animal.IsDead())
                     {
+                        if (Valid(lf.Animal))
+                        {
+                            Bm.DropGearRecord(lf.Gear, lf.Animal.transform.position + Vector3.up * 0.6f);
+                        }
                         Bm.LeftForms.Remove(lf.Animal != null && lf.Animal.net != null ? lf.Animal.net.ID.Value : 0UL);
                         continue;
                     }
@@ -471,12 +490,31 @@ namespace Oxide.Plugins
                 }
             }
 
+            // An animal that was left behind dies (or is removed some other way): what it carried falls to the ground. It may be ridden by its
+            // owner at that moment.
+            public override void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
+            {
+                DropLeft(entity);
+            }
+
             public override void OnEntityKill(BaseNetworkable entity)
             {
-                if (Bm.LeftForms.Count > 0 && entity != null && entity.net != null)
+                DropLeft(entity);
+            }
+
+            private void DropLeft(BaseNetworkable entity)
+            {
+                LeftForm lf;
+                if (Bm.LeftForms.Count == 0 || entity == null || entity.net == null || !Bm.LeftForms.TryGetValue(entity.net.ID.Value, out lf))
                 {
-                    Bm.LeftForms.Remove(entity.net.ID.Value);
+                    return;
                 }
+                Bm.LeftForms.Remove(entity.net.ID.Value);
+                if (entity.transform != null)
+                {
+                    Bm.DropGearRecord(lf.Gear, entity.transform.position + Vector3.up * 0.6f);
+                }
+                Bm.RemoveSaddle(entity);
             }
 
             public override void OnDisable()

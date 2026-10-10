@@ -93,6 +93,29 @@ než čekám, jsou dole v části „Co je nejisté“.
 * **Divoká zvířata:** zvíře, které zaútočilo, už hned neuteče. Rozhodnutí bránit se nebo utéct se drží, dokud útok neskončí.
 * **`/bm saddle` (admin):** `lift`, `scale`, `turn`, `reset` doladí sedlo na zádech pro druh, na který se díváš, jedeš na něm nebo za něj hraješ. Uloží se.
 
+## Druhá kontrola kódu
+
+Po dokončení jsem nechal kód projít ještě jednou nezávislou kontrolou a opravil, co našla:
+
+* **Ztráta věcí:**
+  * Zvíře, které jsi opustil (X), po smrti nic neupustilo.
+  * Inventář zvířete, ve kterém ses odhlásil, zmizel, když zvíře umřelo. Ve stejné relaci se navíc objevil u tvé další proměny.
+  * Teď všechno spadne na zem.
+* **Uložené věci** se při otevření inventáře už nikdy nesmažou, ani když v configu ubereš sloty: vrátí se hráči.
+* **Sedlo, podkovy a armor** si drží skin i opotřebení. Vyndáním se už zadarmo neopraví.
+* **Ochočené zvíře,** za které jsi hrál a opustil ho, ukazovalo prázdný inventář. Teď ukazuje svůj.
+* **Náraz koně do zdi** se nikdy nespustil, protože se měřila už nastavená rychlost. Opraveno.
+* **Ovce nebo beran,** který shodil jezdce, zůstal ležet. Teď vstane, až pád skončí. Stejně skončí póza pasení.
+* **Spolujezdci** na hráči-zvířeti při nárazu spadnou také.
+* **Menu podrženého E** po vypnutí pluginu nezůstane na obrazovce.
+* **Neviditelný panel** hráče-zvířete neblokuje inventář ostatním ani sbírání věcí. Po 2 minutách se sám uloží a zavře.
+* **Zvíře naložené na transport** se otáčí s vozidlem.
+* **Skoky divokých zvířat:**
+  * po vypnutí pluginu se vrátí přesně původní nastavení, po zapnutí se zase vypnou;
+  * mrtvá zvířata se nehromadí v paměti.
+* **Bez sedla jezdit (config):** když v configu vypneš povinné sedlo, na hráče-zvíře jde nasednout i bez sedla.
+* **Inventář koně** přes `/bm bag` a Ctrl + E se ptá na stejná pravidla vlastnictví jako herní menu.
+
 ## Co je nejisté (ověříš jen ve hře)
 
 * **Ctrl + E jako zvíře (vlastní inventář):** hra v pohledu zvířete (divák) blokuje Tab inventář a nejspíš i tento panel. Když se nic neukáže:

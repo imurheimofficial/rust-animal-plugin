@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Oxide.Core;
 using Rust.Ai.Gen2;
 using UnityEngine;
 
@@ -65,7 +66,7 @@ namespace Oxide.Plugins
                     Item item = ItemFromRecord(pair.Value);
                     if (item != null && !item.MoveToContainer(box.inventory, pair.Key, true))
                     {
-                        item.Remove();
+                        GiveBack(player, item);             // no slot for it any more (fewer slots in the config): to the player, never lost
                     }
                 }
             }
@@ -201,13 +202,17 @@ namespace Oxide.Plugins
             {
                 return FormGearOf(d);
             }
+            TamedRecord rec = RecordOf(animal);
+            if (rec != null)
+            {
+                return rec.Gear;                    // a tamed animal keeps its own inventory, also when a player was it and left it
+            }
             LeftForm lf;
             if (animal.net != null && LeftForms.TryGetValue(animal.net.ID.Value, out lf))
             {
                 return lf.Gear;
             }
-            TamedRecord rec = RecordOf(animal);
-            return rec != null ? rec.Gear : null;
+            return null;
         }
 
         internal int SaddleOf(BaseEntity animal)
@@ -287,19 +292,7 @@ namespace Oxide.Plugins
             {
                 FinishBox(own);                      // a panel of the same player still counted as open (saved first)
             }
-            if (openGears.Contains(gear))
-            {
-                // the game of a player in animal form may not show the panel at all (the spectator view): such a panel never keeps others out
-                foreach (VirtualBox held in Boxes.Values.ToList())
-                {
-                    InventoryContext hc = held.Data as InventoryContext;
-                    Driver holder = held.Player != null ? DriverOf(held.Player) : null;
-                    if (hc != null && hc.Gear == gear && (held.Player == null || !held.Player.IsConnected || (holder != null && holder.Spectating)))
-                    {
-                        FinishBox(held);
-                    }
-                }
-            }
+            ReleaseStuckPanels(gear);
             if (openGears.Contains(gear))
             {
                 TellRaw(player, "Somebody is in its inventory right now.");
@@ -307,21 +300,9 @@ namespace Oxide.Plugins
             }
             SpeciesDef species = SpeciesOf(animal);
             var contents = new List<KeyValuePair<int, ItemRecord>>();
-            if (gear.Saddle > 0)
+            foreach (KeyValuePair<int, ItemRecord> worn in WornItems(gear))
             {
-                contents.Add(new KeyValuePair<int, ItemRecord>(SlotSaddle, new ItemRecord { Shortname = gear.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single" }));
-            }
-            if (gear.Shoes > 0)
-            {
-                contents.Add(new KeyValuePair<int, ItemRecord>(SlotShoes, new ItemRecord { Shortname = gear.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic" }));
-            }
-            if (gear.HasBag)
-            {
-                contents.Add(new KeyValuePair<int, ItemRecord>(SlotBag, new ItemRecord { Shortname = "horse.saddlebag" }));
-            }
-            if (gear.Armor > 0 && gear.Armor < ArmorItems.Length)
-            {
-                contents.Add(new KeyValuePair<int, ItemRecord>(SlotArmor, new ItemRecord { Shortname = ArmorItems[gear.Armor] }));
+                contents.Add(worn);
             }
             foreach (ItemRecord stored in gear.Bag)
             {
@@ -334,6 +315,22 @@ namespace Oxide.Plugins
                 openGears.Add(gear);
                 Tell(player, "GearOpen", species.Display, Cfg.Gear.BagSlots, Cfg.Gear.WoodArmorSlots);
             }
+        }
+
+        // The items of the four equipment slots: as they were put in (skin, condition), or plain ones for older records.
+        internal static List<KeyValuePair<int, ItemRecord>> WornItems(GearRecord g)
+        {
+            var list = new List<KeyValuePair<int, ItemRecord>>();
+            Action<int, string> add = (slot, shortname) =>
+            {
+                ItemRecord kept = g.Worn != null ? g.Worn.FirstOrDefault(r => r.Slot == slot && r.Shortname == shortname) : null;
+                list.Add(new KeyValuePair<int, ItemRecord>(slot, kept ?? new ItemRecord { Shortname = shortname, Slot = slot }));
+            };
+            if (g.Saddle > 0) add(SlotSaddle, g.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single");
+            if (g.Shoes > 0) add(SlotShoes, g.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic");
+            if (g.HasBag) add(SlotBag, "horse.saddlebag");
+            if (g.Armor > 0 && g.Armor < ArmorItems.Length) add(SlotArmor, ArmorItems[g.Armor]);
+            return list;
         }
 
         private bool InventoryAccept(VirtualBox vb, Item item, int slot)
@@ -377,6 +374,18 @@ namespace Oxide.Plugins
             g.Shoes = shoes == null ? 0 : shoes.info.shortname == "horse.shoes.advanced" ? 2 : 1;
             g.HasBag = bagItem != null && bagItem.info.shortname == "horse.saddlebag";
             g.Armor = armor != null ? ArmorIndex(armor.info.shortname) : 0;
+            if (g.Worn == null)
+            {
+                g.Worn = new List<ItemRecord>();
+            }
+            g.Worn.Clear();
+            foreach (Item worn in new[] { saddle, shoes, bagItem, armor })
+            {
+                if (worn != null)
+                {
+                    g.Worn.Add(RecordFromItem(worn, worn.position));
+                }
+            }
             int capacity = StorageOf(g);
             g.Bag.Clear();
             foreach (Item item in inv.itemList.ToList())
@@ -446,6 +455,11 @@ namespace Oxide.Plugins
             if (player == null || !Valid(entity))
             {
                 return false;
+            }
+            // the owner rules (this plugin's and other plugins') are asked first: the game's own method may not ask them itself
+            if (Interface.CallHook("CanLootEntity", player, entity) != null)
+            {
+                return true;                         // refused, and the refusal has been told already
             }
             StorageContainer storage = entity as StorageContainer;
             Type type = entity.GetType();
@@ -562,6 +576,34 @@ namespace Oxide.Plugins
             return AddToGear(FormGearOf(d), item, out why);
         }
 
+        // The game of a player in animal form may not show a panel at all (the spectator view), and a player who left cannot close his: such
+        // a panel is saved and closed as soon as somebody else needs the inventory, so that it never keeps others (or the pick-ups) out.
+        private static bool PanelMayBeUnseen(VirtualBox vb, Beastmaster bm)
+        {
+            if (vb.Player == null || !vb.Player.IsConnected)
+            {
+                return true;
+            }
+            Driver holder = bm.DriverOf(vb.Player);
+            return holder != null && holder.Spectating;
+        }
+
+        private void ReleaseStuckPanels(GearRecord g)
+        {
+            if (g == null || !openGears.Contains(g))
+            {
+                return;
+            }
+            foreach (VirtualBox held in Boxes.Values.ToList())
+            {
+                InventoryContext hc = held.Data as InventoryContext;
+                if (hc != null && hc.Gear == g && PanelMayBeUnseen(held, this))
+                {
+                    FinishBox(held);
+                }
+            }
+        }
+
         // An open panel of this inventory is closed first (its contents are saved), so that nothing is dropped and kept at the same time.
         internal void CloseInventoriesOf(GearRecord g)
         {
@@ -593,6 +635,7 @@ namespace Oxide.Plugins
                 why = "This animal has no inventory.";
                 return false;
             }
+            ReleaseStuckPanels(g);
             if (openGears.Contains(g))
             {
                 why = "Its inventory is open right now.";
@@ -632,14 +675,9 @@ namespace Oxide.Plugins
                 return;
             }
             CloseInventoriesOf(g);
-            var names = new List<string>();
-            if (g.Saddle > 0) names.Add(g.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single");
-            if (g.Shoes > 0) names.Add(g.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic");
-            if (g.HasBag) names.Add("horse.saddlebag");
-            if (g.Armor > 0 && g.Armor < ArmorItems.Length) names.Add(ArmorItems[g.Armor]);
-            foreach (string name in names)
+            foreach (KeyValuePair<int, ItemRecord> worn in WornItems(g))
             {
-                Item item = ItemManager.CreateByName(name, 1);
+                Item item = ItemFromRecord(worn.Value);
                 if (item != null)
                 {
                     item.Drop(pos, Vector3.up * 2f + UnityEngine.Random.insideUnitSphere);
@@ -658,6 +696,10 @@ namespace Oxide.Plugins
             g.HasBag = false;
             g.Armor = 0;
             g.Bag.Clear();
+            if (g.Worn != null)
+            {
+                g.Worn.Clear();
+            }
         }
 
         // Dying tamed animals drop what they carried (R3.5).
@@ -955,9 +997,14 @@ namespace Oxide.Plugins
                 // a panel the player's game never showed, or one that was closed without the end hook, ends here (its contents are saved)
                 foreach (VirtualBox vb in Bm.Boxes.Values.ToList())
                 {
-                    if (Time.realtimeSinceStartup - vb.Opened > 2f && (vb.Player == null || !vb.Player.IsConnected || vb.Player.inventory.loot.entitySource != vb.Box))
+                    float open = Time.realtimeSinceStartup - vb.Opened;
+                    if (open > 2f && (vb.Player == null || !vb.Player.IsConnected || vb.Player.inventory.loot.entitySource != vb.Box))
                     {
                         Bm.FinishBox(vb);
+                    }
+                    else if (open > 120f && PanelMayBeUnseen(vb, Bm))
+                    {
+                        Bm.FinishBox(vb);                    // a panel in the animal view that may never have been seen: saved after two minutes
                     }
                 }
                 var wanted = new HashSet<ulong>();

@@ -979,7 +979,7 @@ namespace Oxide.Plugins
             MenuState st = MenuOf(player);
             bool control = HasMenuAccess(player);
             string act = args[0].ToLowerInvariant();
-            if (!Active && act != "close" && act != "plugin" && act != "noop")
+            if (!Active && act != "close" && act != "plugin" && act != "noop" && act != "beast")
             {
                 return;
             }

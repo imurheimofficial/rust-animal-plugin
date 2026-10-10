@@ -41,7 +41,12 @@ namespace Oxide.Plugins
             {
                 return 0;
             }
-            return SaddleOf(host.Body);
+            int saddle = SaddleOf(host.Body);
+            if (!Cfg.Riding.RequireSaddle || !Cfg.Features.Gear)
+            {
+                return Mathf.Max(1, saddle);        // the server rides without saddles: one rider, two with a double saddle
+            }
+            return saddle;
         }
 
         // May this player climb on that animal form right now? (the horse form uses this in its vanilla mount hook, the others in TryFormHandle)
