@@ -242,16 +242,19 @@ namespace Oxide.Plugins
         // and counts as an attack; bulls and rams also break wooden barricades (R2.6).
         internal void ChargeTick(Driver d)
         {
-            if (Time.time < nextRamCheck || !Charges(d.Species) || d.Gait < 3 || d.Speed < 2.5f)
+            if (Time.time < nextRamCheck || !Charges(d.Species) || !d.AtFullSprint())
             {
-                return;
+                return;                                 // only the full sprint of the animal is a charge
             }
-            nextRamCheck = Time.time + 0.2f;
+            nextRamCheck = Time.time;                  // every physics step: at a gallop the nose covers the contact distance in a few steps only
             float k = ModelScale(d.Body);
+            Bounds bounds = d.Body.bounds;
             Vector3 heading = Quaternion.Euler(0f, d.Heading, 0f) * Vector3.forward;
-            Vector3 ahead = d.Body.transform.position + heading * (d.Body.bounds.extents.z * k + 0.5f) + Vector3.up * 0.9f * k;
+            // the tip of the nose: a charge counts only when the animal really touches the other one
+            Vector3 center = d.Body.transform.position + Vector3.up * bounds.center.y * k;
+            Vector3 nose = center + heading * ((bounds.center.z + bounds.extents.z) * k);
             var found = new List<BaseEntity>();
-            Vis.Entities(ahead, 1.0f * k, found);
+            Vis.Entities(nose, 1.6f * k, found);
             float now = Time.time;
             foreach (BaseEntity e in found)
             {
@@ -274,6 +277,13 @@ namespace Oxide.Plugins
                 if (victim == null && !(target is BaseNPC2 || target is RidableHorse))
                 {
                     continue;
+                }
+                Vector3 touch = target.ClosestPoint(nose);
+                Vector3 ahead = touch - center;
+                ahead.y = 0f;
+                if (Vector3.Distance(touch, nose) > Cfg.Combat.ChargeContact * k || (ahead.sqrMagnitude > 0.01f && Vector3.Angle(heading, ahead) > 55f))
+                {
+                    continue;                           // not touched yet, or beside the animal
                 }
                 if (victim != null && (victim == d.Player || victim.IsNpc && false))
                 {

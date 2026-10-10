@@ -464,69 +464,15 @@ namespace Oxide.Plugins
             Log(2, player.displayName + " used the aim tool '" + what + "' on " + target.ShortPrefabName);
         }
 
-        // ---------------------------------------------------------------- the bag of an animal form
-        // What an animal picks up (or is given) goes into its own bag, not into the human inventory. The bag stays with the animal when the player
-        // leaves it (X); as a human the owner opens it with Ctrl + E at the animal.
-
-        internal readonly Dictionary<ulong, List<ItemRecord>> FormBags = new Dictionary<ulong, List<ItemRecord>>();
-
-        internal bool AddToBag(BasePlayer player, Item item)
-        {
-            List<ItemRecord> bag;
-            if (!FormBags.TryGetValue(player.userID, out bag))
-            {
-                bag = new List<ItemRecord>();
-                FormBags[player.userID] = bag;
-            }
-            ItemRecord same = bag.FirstOrDefault(r => r.Shortname == item.info.shortname && r.Skin == item.skin && item.info.stackable > r.Amount + item.amount - 1 && r.Condition < 0f);
-            if (same != null)
-            {
-                same.Amount += item.amount;
-                item.Remove();
-                return true;
-            }
-            for (int slot = 0; slot < Cfg.Gear.BagSlots; slot++)
-            {
-                if (bag.All(r => r.Slot != slot))
-                {
-                    bag.Add(RecordFromItem(item, slot));
-                    item.Remove();
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        internal void OpenFormBag(BasePlayer player, LeftForm lf)
-        {
-            var contents = lf.Bag.Select(r => new KeyValuePair<int, ItemRecord>(r.Slot, r)).ToList();
-            VirtualBox vb = OpenBox(player, "formbag", Cfg.Gear.BagSlots, contents, lf, (box, item, slot) => slot >= 0, null, box => FormBagClosed(box, lf));
-            if (vb != null)
-            {
-                TellRaw(player, "The bag of your " + (lf.Animal != null ? SpeciesOf(lf.Animal) != null ? SpeciesOf(lf.Animal).Display.ToLowerInvariant() : "animal" : "animal") + ".");
-            }
-        }
-
-        private void FormBagClosed(VirtualBox vb, LeftForm lf)
-        {
-            lf.Bag.Clear();
-            foreach (Item item in vb.Box.inventory.itemList.ToList())
-            {
-                lf.Bag.Add(RecordFromItem(item, item.position));
-                item.Remove();
-            }
-        }
-
-        // ---------------------------------------------------------------- giving an item to a player who is an animal (it goes into his bag)
+        // ---------------------------------------------------------------- giving an item to an animal (it goes into its saddle bag)
 
         internal void GiveCommand(BasePlayer player, Action<string> reply)
         {
             BaseEntity target = (BaseEntity)AnimalInSight(player, 6f, 30f) ?? HorseInSight(player, 6f, 30f);
-            Driver host = target != null ? DriverOfAnimal(target) : null;
             Item held = player.GetActiveItem();
-            if (host == null || host.Kind != ControlKind.Form || host.Player == player)
+            if (target == null)
             {
-                reply("Look at an animal that is a player (within 6 m) and hold the item you want to give.");
+                reply("Look at an animal (within 6 m) and hold the item you want to give.");
                 return;
             }
             if (held == null)
@@ -535,13 +481,42 @@ namespace Oxide.Plugins
                 return;
             }
             string name = held.info.displayName.english;
-            if (!AddToBag(host.Player, held))
+            Driver host = DriverOfAnimal(target);
+            string why;
+            if (host != null && host.Kind == ControlKind.Form && host.Player != player)
             {
-                reply("Its bag is full.");
+                if (!FormHandledBy(host, player))
+                {
+                    reply("This animal does not take anything from you.");
+                    return;
+                }
+                if (!StoreForForm(host, held, out why))
+                {
+                    reply(why);
+                    return;
+                }
+                reply("You put " + name + " into the saddle bag of the " + host.Species.Display.ToLowerInvariant() + ".");
+                TellRaw(host.Player, player.displayName + " put " + name + " into your saddle bag.");
                 return;
             }
-            reply("You gave " + name + " to the " + host.Species.Display.ToLowerInvariant() + ".");
-            TellRaw(host.Player, player.displayName + " put " + name + " in your bag.");
+            if (target is RidableHorse)
+            {
+                reply("Hold E at the horse and open its inventory.");
+                return;
+            }
+            GearRecord gear;
+            string problem = InventoryProblem(player, target, out gear);
+            if (problem != null)
+            {
+                reply(problem);
+                return;
+            }
+            if (!AddToGear(gear, held, out why))
+            {
+                reply(why);
+                return;
+            }
+            reply("You put " + name + " into its saddle bag.");
         }
 
         // ---------------------------------------------------------------- naming a tamed animal

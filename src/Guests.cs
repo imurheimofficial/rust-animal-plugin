@@ -33,20 +33,21 @@ namespace Oxide.Plugins
             return rule != "team" || SameParty(host.Player, other);
         }
 
-        internal bool NeedsFood(SpeciesDef s)
+        // A player's animal carries riders when it has a saddle in its inventory: one with a single saddle, two with a double saddle (the double
+        // saddle fits the horse, bull, cow, ram, sheep and stag). The horse uses the game's own saddle and seats.
+        internal int MaxRiders(Driver host)
         {
-            return s != null && Cfg.Form.RideFedSpecies != null && Cfg.Form.RideFedSpecies.Contains(s.Id);
+            if (host == null || host.Body == null)
+            {
+                return 0;
+            }
+            return SaddleOf(host.Body);
         }
 
-        internal int MaxRiders(SpeciesDef s)
-        {
-            return Mathf.Max(0, NeedsFood(s) ? Cfg.Form.RidersFed : Cfg.Form.RidersOther);
-        }
-
-        // May this player climb on that animal form right now? (the horse form uses this in its vanilla mount hook, the others in TryBoard)
+        // May this player climb on that animal form right now? (the horse form uses this in its vanilla mount hook, the others in TryFormHandle)
         internal bool FormMountCheck(BasePlayer player, Driver host, bool tell)
         {
-            if (!FormHandledBy(host, player) || MaxRiders(host.Species) <= 0)
+            if (!FormHandledBy(host, player))
             {
                 if (tell)
                 {
@@ -54,34 +55,33 @@ namespace Oxide.Plugins
                 }
                 return false;
             }
-            if (NeedsFood(host.Species) && host.FedUntil <= Time.time)
+            if (host.Species == null || host.Species.Critter || host.Species.Ride == RideTier.None || !host.Species.Gear)
             {
                 if (tell)
                 {
-                    TellRaw(player, "It will only let you on after it has eaten: drop food in front of its head and wait until it has eaten it.");
+                    TellRaw(player, "A " + (host.Species != null ? host.Species.Display.ToLowerInvariant() : "creature") + " is too small to ride.");
+                }
+                return false;
+            }
+            if (MaxRiders(host) <= 0)
+            {
+                if (tell)
+                {
+                    TellRaw(player, "It has no saddle: put a saddle into its inventory (hold E at it, then Inventory) to ride it.");
                 }
                 return false;
             }
             return true;
         }
 
-        // The animal has eaten something that was lying on the ground: it is calm enough to be ridden for a while.
-        internal void FormFed(Driver d)
-        {
-            if (d != null && d.Kind == ControlKind.Form)
-            {
-                d.FedUntil = Time.time + Mathf.Max(30f, Cfg.Form.FedSeconds);
-            }
-        }
-
-        // E on somebody's animal form (the plugin's own seats for the Gen2 animals; the horse is mounted the game's way).
-        internal bool TryFormHandle(BasePlayer player, Driver host)
+        // E on somebody's animal form (the plugin's own seats for the Gen2 animals; the horse is mounted the game's way). Ctrl + E: the leash.
+        internal bool TryFormHandle(BasePlayer player, Driver host, bool leash)
         {
             if (host == null || host.Kind != ControlKind.Form || !host.Alive)
             {
                 return false;
             }
-            if (player.serverInput.IsDown(BUTTON.DUCK))
+            if (leash)
             {
                 ToggleLeash(player, host);
                 return true;
@@ -95,12 +95,7 @@ namespace Oxide.Plugins
             {
                 return true;
             }
-            if (host.Species.Critter || host.Species.Ride == RideTier.None)
-            {
-                TellRaw(player, "A " + host.Species.Display.ToLowerInvariant() + " is too small to ride.");
-                return true;
-            }
-            if (host.Guests.Count >= MaxRiders(host.Species))
+            if (host.Guests.Count >= MaxRiders(host))
             {
                 TellRaw(player, "There is no room left on the " + host.Species.Display.ToLowerInvariant() + ".");
                 return true;

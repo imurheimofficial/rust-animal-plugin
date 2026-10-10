@@ -406,6 +406,45 @@ namespace Oxide.Plugins
             }
         }
 
+        // The length of a clip in seconds (the in-place clip of root-motion data), read by reflection; 8 s when it cannot be read.
+        private static readonly Dictionary<UnityEngine.Object, float> clipLengths = new Dictionary<UnityEngine.Object, float>();
+
+        internal static float ClipLength(ClipRef clip)
+        {
+            if (clip == null || clip.Asset == null)
+            {
+                return 0f;
+            }
+            float length;
+            if (clipLengths.TryGetValue(clip.Asset, out length))
+            {
+                return length;
+            }
+            length = 8f;
+            try
+            {
+                object animation = clip.Asset;
+                if (clip.Asset is RootMotionData)
+                {
+                    animation = typeof(RootMotionData).GetField("inPlaceAnimation", AnyInstance)?.GetValue(clip.Asset) ?? clip.Asset;
+                }
+                PropertyInfo prop = animation.GetType().GetProperty("length", BindingFlags.Instance | BindingFlags.Public);
+                if (prop != null)
+                {
+                    object v = prop.GetValue(animation, null);
+                    if (v is float && (float)v > 0.05f)
+                    {
+                        length = (float)v;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+            }
+            clipLengths[clip.Asset] = length;
+            return length;
+        }
+
         internal ClipRef FindClip(BaseNPC2 animal, params string[] words)
         {
             foreach (string word in words)
@@ -489,26 +528,41 @@ namespace Oxide.Plugins
         internal static Vector3 BackPoint(BaseNPC2 animal)
         {
             Bounds b = animal.bounds;
-            Vector3 best = new Vector3(0f, b.max.y * 0.8f, b.center.z);
-            bool found = false;
-            if (animal.model != null && animal.model.boneTransforms != null)
+            Transform bone = BackBone(animal);
+            if (bone == null)
             {
-                foreach (Transform bone in animal.model.boneTransforms)
+                return new Vector3(0f, b.max.y * 0.8f, b.center.z);
+            }
+            Vector3 local = animal.transform.InverseTransformPoint(bone.position);
+            return new Vector3(0f, local.y, local.z);
+        }
+
+        // The spine bone in the middle of the back that sits highest: the saddle and the rider are fixed to it, so they move with the back
+        // when the animal walks and runs, the way the horse's rider does.
+        internal static Transform BackBone(BaseNPC2 animal)
+        {
+            if (animal == null || animal.model == null || animal.model.boneTransforms == null)
+            {
+                return null;
+            }
+            Bounds b = animal.bounds;
+            Transform best = null;
+            float bestY = float.MinValue;
+            foreach (Transform bone in animal.model.boneTransforms)
+            {
+                if (bone == null || bone.name.IndexOf("spine", StringComparison.OrdinalIgnoreCase) < 0)
                 {
-                    if (bone == null || bone.name.IndexOf("spine", StringComparison.OrdinalIgnoreCase) < 0)
-                    {
-                        continue;
-                    }
-                    Vector3 local = animal.transform.InverseTransformPoint(bone.position);
-                    if (Mathf.Abs(local.z - b.center.z) > b.extents.z * 0.6f)
-                    {
-                        continue;
-                    }
-                    if (!found || local.y > best.y)
-                    {
-                        best = new Vector3(0f, local.y, local.z);
-                        found = true;
-                    }
+                    continue;
+                }
+                Vector3 local = animal.transform.InverseTransformPoint(bone.position);
+                if (Mathf.Abs(local.z - b.center.z) > b.extents.z * 0.6f)
+                {
+                    continue;
+                }
+                if (local.y > bestY)
+                {
+                    bestY = local.y;
+                    best = bone;
                 }
             }
             return best;

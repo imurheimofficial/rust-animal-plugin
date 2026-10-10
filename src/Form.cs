@@ -17,7 +17,7 @@ namespace Oxide.Plugins
         {
             Vector3 at = d.Body.transform.position;
             BasePlayer hearer = d.Player;
-            timer.Once(0.1f, () => FormAppear(at, hearer));            // and the animal appears with the same effect, heard by the player too
+            timer.Once(0.1f, () => FormAppear(at, hearer, 0.35f));     // and the animal appears with the same effect, heard by the player too
             Data.Forms.Remove(d.Player.userID);
             FormSleepers.Remove(d.Player.userID);
         }
@@ -26,12 +26,12 @@ namespace Oxide.Plugins
         {
             BasePlayer player = d.Player;
             Vector3 spot = Valid(d.Body) ? d.Body.transform.position : player.transform.position;
-            FormSmoke(spot, player);
+            FormSmoke(spot, player, 0.3f);
             if (player != null && player.IsConnected && !player.IsDead() && reason != "animal died")
             {
                 Vector3 back = GroundNear(spot, d.Body != null && !d.Body.IsDestroyed ? d.Body.bounds.extents.x * ModelScale(d.Body) + 1.2f : 1.5f);
                 player.Teleport(back);
-                FormAppear(back, player);
+                FormAppear(back, player, 0.3f);
             }
             HudSwitch(player, true);
             Data.RitualCooldown[player.userID] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + Cfg.Form.Cooldown;
@@ -49,9 +49,32 @@ namespace Oxide.Plugins
                         Stable.Forget(d.Horse);
                         Data.Horses.Remove(d.Horse.skinID);
                     }
+                    GearRecord carried;
+                    if (RecordOf(d.Body) == null && FormGears.TryGetValue(player.userID, out carried))
+                    {
+                        DropGearRecord(carried, spot + Vector3.up * 0.6f);   // what the animal carried stays on the ground
+                        FormGears.Remove(player.userID);
+                    }
+                    RemoveSaddle(d.Body);
                     Data.Bosses.Remove(d.Body.skinID);
                     d.Body.Kill();
                 }
+            }
+        }
+
+        // The animal of a player died: what it carried falls next to its body.
+        internal void FormAnimalDied(Driver d)
+        {
+            if (d == null || d.Player == null || RecordOf(d.Body) != null)
+            {
+                return;                                 // a tamed animal drops its gear by its record (TameModule)
+            }
+            GearRecord carried;
+            if (FormGears.TryGetValue(d.Player.userID, out carried))
+            {
+                Vector3 at = d.Body != null && !d.Body.IsDestroyed ? d.Body.transform.position : d.Player.transform.position;
+                DropGearRecord(carried, at + Vector3.up * 0.6f);
+                FormGears.Remove(d.Player.userID);
             }
         }
 
@@ -91,7 +114,8 @@ namespace Oxide.Plugins
                 LoggedOut = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 Asleep = true,
                 Tag = tag,
-                OwnsAnimal = d.OwnsAnimal
+                OwnsAnimal = d.OwnsAnimal,
+                Gear = RecordOf(animal) == null && FormGears.ContainsKey(player.userID) ? FormGears[player.userID] : null
             };
             FormSleepers[player.userID] = animal;
             Log(2, player.displayName + " left in " + d.Species.Display + " form - the animal sleeps.");
@@ -169,6 +193,10 @@ namespace Oxide.Plugins
                     return;
                 }
                 player.limitNetworking = false;
+                if (rec.Gear != null)
+                {
+                    FormGears[player.userID] = rec.Gear;       // the inventory it carried
+                }
                 Driver d;
                 if (StartControl(player, animal, ControlKind.Form, true))
                 {
@@ -222,6 +250,7 @@ namespace Oxide.Plugins
                         {
                             animal.skinID = rec.Tag;
                             animal.Spawn();
+                            EnforceLook(animal, species, rec.Genes != 0UL && animal is LivestockAnimal ? (int?)unchecked((int)(uint)rec.Genes) : null);
                             animal.health = Mathf.Max(1f, rec.Health);
                             RidableHorse reborn = animal as RidableHorse;
                             if (reborn != null)
@@ -284,7 +313,7 @@ namespace Oxide.Plugins
         {
             public BaseCombatEntity Animal;
             public ulong Owner;
-            public List<ItemRecord> Bag = new List<ItemRecord>();
+            public GearRecord Gear = new GearRecord();       // its inventory (saddle, shoes, bag, armour, storage)
         }
 
         internal readonly Dictionary<ulong, LeftForm> LeftForms = new Dictionary<ulong, LeftForm>();
@@ -299,11 +328,11 @@ namespace Oxide.Plugins
         {
             BaseCombatEntity body = d.Body;
             var left = new LeftForm { Animal = body, Owner = d.Player.userID };
-            List<ItemRecord> carried;
-            if (FormBags.TryGetValue(d.Player.userID, out carried))
+            GearRecord carried;
+            if (RecordOf(body) == null && FormGears.TryGetValue(d.Player.userID, out carried) && carried != null)
             {
-                left.Bag = carried;                  // the bag stays with the animal
-                FormBags.Remove(d.Player.userID);
+                left.Gear = carried;                 // the inventory stays with the animal
+                FormGears.Remove(d.Player.userID);
             }
             LeftForms[body.net.ID.Value] = left;
             BaseNPC2 npc = body as BaseNPC2;
@@ -314,7 +343,7 @@ namespace Oxide.Plugins
             RidableHorse horse = body as RidableHorse;
             if (horse != null)
             {
-                SetSeats(horse, Mathf.Max(1, SeatsOf(horse)));       // the horse can be ridden by its owner
+                SetSeats(horse, HorseModule.SaddleSeats(horse));      // its owner rides it the game's way, when it has a saddle
             }
         }
 
@@ -329,15 +358,8 @@ namespace Oxide.Plugins
             {
                 FormSmoke(lf.Animal.transform.position);
             }
-            foreach (ItemRecord rec in lf.Bag)
-            {
-                Item item = ItemFromRecord(rec);
-                if (item != null)
-                {
-                    item.Drop(lf.Animal.transform.position + Vector3.up, Vector3.up);       // what the animal carried stays on the ground
-                }
-            }
-            lf.Bag.Clear();
+            DropGearRecord(lf.Gear, lf.Animal.transform.position + Vector3.up * 0.6f);      // what the animal carried stays on the ground
+            RemoveSaddle(lf.Animal);
             Despawn(lf.Animal);
         }
 
@@ -398,15 +420,21 @@ namespace Oxide.Plugins
                 {
                     return null;
                 }
+                if (!Bm.SwapAllowed(player))
+                {
+                    return true;
+                }
                 BaseNPC2 npc = best.Animal as BaseNPC2;
                 if (npc != null)
                 {
                     Bm.Unpark(npc, "left");
                 }
+                Bm.CloseInventoriesOf(best.Gear);
                 Bm.LeftForms.Remove(best.Animal.net.ID.Value);
-                List<ItemRecord> bagBack = best.Bag;
+                GearRecord gearBack = best.Gear;
                 BasePlayer p = player;
                 BaseCombatEntity animal = best.Animal;
+                Bm.FormGears[p.userID] = gearBack;            // it carries its inventory again
                 Bm.NextTick(() =>
                 {
                     if (Bm.StartControl(p, animal, ControlKind.Form, true))
@@ -416,7 +444,17 @@ namespace Oxide.Plugins
                         {
                             d.OwnsAnimal = true;
                         }
-                        Bm.FormBags[p.userID] = bagBack;      // it carries its bag again
+                    }
+                    else if (Valid(animal) && !animal.IsDead())
+                    {
+                        // it could not be taken again: it stays where it is, with its inventory
+                        Bm.FormGears.Remove(p.userID);
+                        Bm.LeftForms[animal.net.ID.Value] = new LeftForm { Animal = animal, Owner = p.userID, Gear = gearBack };
+                        BaseNPC2 parked = animal as BaseNPC2;
+                        if (parked != null)
+                        {
+                            Bm.Park(parked, "left");
+                        }
                     }
                 });
                 return true;

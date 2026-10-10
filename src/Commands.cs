@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using Oxide.Core;
@@ -358,10 +359,13 @@ namespace Oxide.Plugins
                 case "breed":
                     BreedCommand(player, reply);
                     return;
+                case "bag":
+                    BagCommand(player, reply);
+                    return;
                 case "ride":
                 case "form":
                     {
-                        BaseNPC2 animal = AnimalInSight(player, 12f);
+                        BaseCombatEntity animal = (BaseCombatEntity)AnimalInSight(player, 12f) ?? (sub == "form" ? HorseInSight(player, 12f) : null);
                         if (animal == null) { reply(L("NotLooking", player.UserIDString, 12)); return; }
                         bool ride = sub == "ride";
                         if (!ride && !IsAdmin(player) && !Has(player, PermTransform)) { reply(L("NoPermission")); return; }
@@ -374,6 +378,9 @@ namespace Oxide.Plugins
                     }
                 case "seat":
                     SeatCommand(player, args, reply);
+                    return;
+                case "saddle":
+                    SaddleCommand(player, args, reply);
                     return;
                 case "cmd":
                     CommandAnimals(player, args, reply);
@@ -426,15 +433,16 @@ namespace Oxide.Plugins
         private string KeysText()
         {
             return "As an animal: W/A/S/D move, Shift faster, Ctrl brake, S while running = 180 turn, Space jump (onto raised surfaces too), "
-                + "F attack (camera behind the animal = rear attack), E eat / drink / pick up / open, R another skin (cow, bull, sheep, ram, horse), G or Ctrl + G night vision (goggles in the inventory), "
-                + "B gestures (or /bm lie, sit, roar, look, stand), X back to human (X at the animal you left = become it again, E at it = ride it, Ctrl + E at it = its bag). "
-                + "Riding: the same keys, G or R switch first / third person, X get off. "
+                + "F attack (camera behind the animal = rear kick), E eat / drink / pick up / open, Ctrl + E your animal's inventory, R another skin (cow, bull, sheep, ram, horse), G or Ctrl + G night vision (goggles in the inventory), "
+                + "B gestures (or /bm lie, sit, roar, look, stand), X back to human (X at the animal you left = become it again, E at it = ride it with a saddle, Ctrl + E at it = its inventory). "
+                + "At an animal: E ride (with a saddle) or its inventory, Ctrl + E its inventory or a player's leash, hold E for all choices. "
+                + "Riding: the same keys, G or R switch first / third person, X get off. Running uses stamina (the yellow bar). "
                 + "Ctrl + R opens the menu (empty hands, riding or as an animal), also /bm. F5 and H work after a one-time bind f5 bm.menu and bind h bm.nv in the F1 console.";
         }
 
         private string HelpText()
         {
-            return "Beastmaster " + Version + "\n" + KeysText() + "\nCommands: /bm menu, species, keys, view, preset, cam, seat, revert, cmd follow|wait|guard|attack|release, ride, form, name, breed, give, feed, nv"
+            return "Beastmaster " + Version + "\n" + KeysText() + "\nCommands: /bm menu, species, keys, view, preset, cam, seat, saddle, bag, revert, cmd follow|wait|guard|attack|release, ride, form, name, breed, give, feed, nv"
                 + (Cfg.Features.Spawning ? ", spawn <species> [count] [tamed|wild] (also /sp)" : string.Empty) + "\nAdmin: bm.enable, bm.disable, bm.grant, bm.revoke, bm.access, bm.grantgroup, bm.revokegroup, bm.clear, bm.reload, bm.selftest, bm.debug, bm.boss, bm.horses, bm.run.";
         }
 
@@ -535,10 +543,7 @@ namespace Oxide.Plugins
             entity.skinID = tag;
             Data.Spawned.Add(tag);
             entity.Spawn();
-            if (species.Id == "ram")
-            {
-                MakeMale(entity as LivestockAnimal);
-            }
+            EnforceLook(entity, species);           // a sheep is a sheep, a ram a ram, a cow a cow, a bull a bull
             RidableHorse horse = entity as RidableHorse;
             if (horse != null && Stable != null)
             {
@@ -614,12 +619,100 @@ namespace Oxide.Plugins
         // The seat prefabs to try for riders on animals (the right look differs per species; set Riding.SeatPrefab in the config).
         private static readonly string[] SeatCandidates =
         {
-            "assets/prefabs/vehicle/seats/snowmobilepassengerseat.prefab",
             "assets/prefabs/vehicle/seats/horsesaddle.prefab",
+            "assets/prefabs/vehicle/seats/snowmobilepassengerseat.prefab",
             "assets/prefabs/vehicle/seats/motorbikepassengerseat.prefab",
             "assets/prefabs/vehicle/seats/bikepassengerseat.prefab",
             "assets/prefabs/vehicle/seats/sledseatfront.prefab",
         };
+
+        // /bm saddle lift|scale|turn <value> | reset (admins): the saddle model on the back of the species one looks at, rides or is, saved per
+        // species, so that it can be fitted by eye in the game.
+        private void SaddleCommand(BasePlayer player, string[] args, Action<string> reply)
+        {
+            if (!IsAdmin(player))
+            {
+                reply(L("NoPermission"));
+                return;
+            }
+            Driver d = DriverOf(player);
+            BaseEntity target = d != null ? (BaseEntity)d.Body : AnimalInSight(player, 12f, 30f);
+            SpeciesDef sp = target != null ? SpeciesOf(target) : null;
+            if (sp == null || target is RidableHorse || !sp.Gear)
+            {
+                reply("Look at an animal that can wear a saddle (the horse shows its own), ride it or be it.");
+                return;
+            }
+            SpeciesOverride o;
+            if (!Cfg.Species.TryGetValue(sp.Id, out o))
+            {
+                o = new SpeciesOverride();
+                Cfg.Species[sp.Id] = o;
+            }
+            string what = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
+            float v;
+            switch (what)
+            {
+                case "lift":
+                    if (args.Length < 2 || !float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out v))
+                    {
+                        reply("Usage: /bm saddle lift <metres> - added to the height it has now, e.g. 0.03 or -0.03.");
+                        return;
+                    }
+                    o.SaddleLift = (o.SaddleLift ?? 0f) + v;
+                    break;
+                case "scale":
+                    if (args.Length < 2 || !float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out v))
+                    {
+                        reply("Usage: /bm saddle scale <factor> - 1 = the size the plugin works out, e.g. 0.9 or 1.15.");
+                        return;
+                    }
+                    o.SaddleScale = Mathf.Clamp(v, 0.2f, 3f);
+                    break;
+                case "turn":
+                    {
+                        float x, y, z;
+                        if (args.Length < 4 || !float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out x)
+                            || !float.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out y) || !float.TryParse(args[3], NumberStyles.Float, CultureInfo.InvariantCulture, out z))
+                        {
+                            reply("Usage: /bm saddle turn <x> <y> <z> - degrees added to the turn of the model, e.g. 0 180 0 or -90 0 0.");
+                            return;
+                        }
+                        o.SaddleTurn = x.ToString(CultureInfo.InvariantCulture) + " " + y.ToString(CultureInfo.InvariantCulture) + " " + z.ToString(CultureInfo.InvariantCulture);
+                        break;
+                    }
+                case "reset":
+                    o.SaddleLift = null;
+                    o.SaddleScale = null;
+                    o.SaddleTurn = null;
+                    break;
+                default:
+                    reply("Saddle of the " + sp.Display.ToLowerInvariant() + ": lift " + (o.SaddleLift ?? 0f).ToString("0.00", CultureInfo.InvariantCulture) + " m, scale " + (o.SaddleScale ?? 1f).ToString("0.00", CultureInfo.InvariantCulture)
+                        + ", turn " + (string.IsNullOrEmpty(o.SaddleTurn) ? "0 0 0" : o.SaddleTurn) + ". Change it with /bm saddle lift <m> | scale <factor> | turn <x> <y> <z> | reset (saved for the species).");
+                    return;
+            }
+            SaveConfig();
+            RefreshSaddlesOf(sp);
+            reply("Saddle of the " + sp.Display.ToLowerInvariant() + ": lift " + (o.SaddleLift ?? 0f).ToString("0.00", CultureInfo.InvariantCulture) + " m, scale " + (o.SaddleScale ?? 1f).ToString("0.00", CultureInfo.InvariantCulture)
+                + ", turn " + (string.IsNullOrEmpty(o.SaddleTurn) ? "0 0 0" : o.SaddleTurn) + " (saved).");
+        }
+
+        // The configured seat, or - when this game build has no such prefab - the first candidate it has.
+        internal string UsableSeat(string prefab)
+        {
+            if (!string.IsNullOrEmpty(prefab) && GameManager.server.FindPrefab(prefab) != null)
+            {
+                return prefab;
+            }
+            foreach (string candidate in SeatCandidates)
+            {
+                if (GameManager.server.FindPrefab(candidate) != null)
+                {
+                    return candidate;
+                }
+            }
+            return prefab;
+        }
 
         private void SeatCommand(BasePlayer player, string[] args, Action<string> reply)
         {

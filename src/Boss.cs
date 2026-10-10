@@ -165,10 +165,7 @@ namespace Oxide.Plugins
                 var info = new BossInfo { Kind = kind, Mini = mini };
                 Bm.Data.Bosses[tag] = info;
                 e.Spawn();
-                if (kind == "ram")
-                {
-                    MakeMale(e as LivestockAnimal);
-                }
+                Bm.EnforceLook(e, sp);
                 Setup(e, info, true);
                 Bm.RunEffect(Bm.Cfg.Boss.SpawnEffect, pos);
                 // no chat line: the appearance of a boss is a surprise for the players (the burst of fire and the roar are heard and seen)

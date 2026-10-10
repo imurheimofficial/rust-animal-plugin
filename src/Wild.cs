@@ -42,7 +42,6 @@ namespace Oxide.Plugins
             }
 
             private readonly Dictionary<ulong, Reaction> reactions = new Dictionary<ulong, Reaction>();
-            private readonly Dictionary<ulong, float> rolled = new Dictionary<ulong, float>();
             private float nextRelations;
 
             public override void OnDisable()
@@ -59,6 +58,18 @@ namespace Oxide.Plugins
 
             public override object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
             {
+                if (info != null && entity != null && (entity is BasePlayer || Bm.DriverOfAnimal(entity) != null))
+                {
+                    BaseNPC2 biter = info.Initiator as BaseNPC2;
+                    if (biter != null && Bm.DriverOfAnimal(biter) == null)
+                    {
+                        NoteAggression(biter, entity);          // a wild animal attacked a player (or the animal of one)
+                    }
+                    if (!(entity is BaseNPC2))
+                    {
+                        return null;
+                    }
+                }
                 BaseNPC2 npc = entity as BaseNPC2;
                 if (npc == null || info == null || !Bm.Cfg.Features.WildDefence)
                 {
@@ -82,22 +93,35 @@ namespace Oxide.Plugins
                 bool always = Bm.Cfg.Wild.AlwaysDefend.Contains(species.Id);
                 bool may = always || Bm.Cfg.Wild.MayDefend.Count == 0 || Bm.Cfg.Wild.MayDefend.Contains(species.Id);
                 float now = Time.time;
-                float last;
                 ulong key = npc.net.ID.Value;
-                if (rolled.TryGetValue(key, out last) && now - last < 20f)
+                // the decision of an animal sticks: one that fights keeps fighting, one that runs keeps running - no attack and run off at once
+                Decision decided;
+                if (decisions.TryGetValue(key, out decided) && now < decided.Until)
                 {
+                    decided.Until = now + (decided.Defend ? Bm.Cfg.Wild.DefendSeconds : Bm.Cfg.Wild.FleeSeconds);
+                    Follower current = Bm.FollowerOf(npc);
+                    if (decided.Defend && (current == null || current.Reason != "defend"))
+                    {
+                        Defend(npc, by);
+                    }
+                    else if (!decided.Defend && (current == null || current.Reason != "scared"))
+                    {
+                        Scare(npc, by);
+                    }
                     return null;
                 }
-                rolled[key] = now;
-                if (rolled.Count > 400)
+                if (decisions.Count > 400)
                 {
-                    foreach (ulong old in rolled.Where(kv => now - kv.Value > 60f).Select(kv => kv.Key).ToList())
+                    foreach (ulong old in decisions.Where(kv => now > kv.Value.Until + 30f).Select(kv => kv.Key).ToList())
                     {
-                        rolled.Remove(old);
+                        decisions.Remove(old);
                     }
                 }
-                // the animals on the list always fight back; the others run, and now and then they fight as well
-                if (always || (may && UnityEngine.Random.Range(0f, 100f) < Bm.Cfg.Wild.DefendChance))
+                // the animals on the list always fight back, an animal that has just attacked this player goes on attacking; the others run,
+                // and now and then they fight as well
+                bool defend = always || AttackedRecently(npc, by, now) || (may && UnityEngine.Random.Range(0f, 100f) < Bm.Cfg.Wild.DefendChance);
+                decisions[key] = new Decision { Defend = defend, Until = now + (defend ? Bm.Cfg.Wild.DefendSeconds : Bm.Cfg.Wild.FleeSeconds) };
+                if (defend)
                 {
                     Defend(npc, by);
                 }
@@ -106,6 +130,40 @@ namespace Oxide.Plugins
                     Scare(npc, by);
                 }
                 return null;
+            }
+
+            private sealed class Decision
+            {
+                public bool Defend;
+                public float Until;
+            }
+
+            private readonly Dictionary<ulong, Decision> decisions = new Dictionary<ulong, Decision>();
+            private readonly Dictionary<string, float> aggressors = new Dictionary<string, float>();
+
+            private static string PairKey(BaseEntity animal, BaseEntity victim)
+            {
+                return animal.net.ID.Value + ">" + (victim.net != null ? victim.net.ID.Value : 0UL);
+            }
+
+            private bool AttackedRecently(BaseNPC2 npc, BaseCombatEntity victim, float now)
+            {
+                float at;
+                return victim != null && victim.net != null && aggressors.TryGetValue(PairKey(npc, victim), out at) && now - at < 30f;
+            }
+
+            // A wild animal hurts somebody: remembered, so that it keeps attacking when it is hit back.
+            internal void NoteAggression(BaseNPC2 npc, BaseCombatEntity victim)
+            {
+                if (npc == null || victim == null || npc.net == null || victim.net == null)
+                {
+                    return;
+                }
+                if (aggressors.Count > 500)
+                {
+                    aggressors.Clear();
+                }
+                aggressors[PairKey(npc, victim)] = Time.time;
             }
 
             // Who hurt the animal: a player, or the animal body a player rides or has become.

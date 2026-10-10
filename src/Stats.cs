@@ -10,7 +10,7 @@ namespace Oxide.Plugins
     public partial class Beastmaster
     {
         // ---------------------------------------------------------------- the needs of an animal form (R9.22 - R9.26)
-        // Health, Stamina, Hunger and Thirst of the animal are shown on a small panel. Eating and drinking restore them: the Use key at food on the
+        // Health, hunger and thirst of the animal are shown in the game's own bars, the stamina in a bar above them. Eating and drinking restore them: the Use key at food on the
         // ground, at a corpse (carnivores), at water or at grass (herbivores), and the items of the inventory that are on the animal's diet.
         // The needs are gentle: nothing dies of hunger unless the server owner switches that on. The human body's own needs stay frozen.
 
@@ -20,17 +20,11 @@ namespace Oxide.Plugins
         {
             public float Hunger = 100f;
             public float Thirst = 100f;
-            public float Stamina = 100f;
             public float NextBite;
-            public float NextHud;
             public float HealBudget;            // health the animal may still gain this second from food (heal-per-second cap)
             public float HealWindow;
-            public float LastSpend;
             public bool Saved;                  // the human's own calories and hydration, put back when the form ends
             public float HumanCalories, HumanHydration;
-            public bool HudDrawn;
-            public int HudValue;
-            public float HudAt;
         }
 
         // The climate and the needs together slow an animal that is hungry, thirsty or worn out.
@@ -53,10 +47,58 @@ namespace Oxide.Plugins
             }
         }
 
+        // Out of breath (stamina): no jumps, a trot at most.
+        internal bool OutOfBreath(Driver d)
+        {
+            return Needs != null && Needs.Exhausted(d);
+        }
+
         // The Use key with nothing else to use: eat or drink what is in front of the animal's head.
         internal bool TryEat(Driver d)
         {
             return Needs != null && Needs.Eat(d);
+        }
+
+        // E at food, water or grass: the animal lowers its head (the game's own grazing and drinking pose of livestock, the eating clip of the
+        // others) until it walks off or a few seconds have passed.
+        internal void StartFeedPose(Driver d, string word)
+        {
+            if (d == null || d.Animal == null)
+            {
+                return;                  // the horse has no eating pose to show
+            }
+            d.InterruptClip();
+            LivestockAnimal ls = d.Animal as LivestockAnimal;
+            if (ls != null)
+            {
+                ls.SetGrazing(word != "drink");
+                ls.SetDrinking(word == "drink");
+            }
+            List<ClipRef> clips = Clips(d.Animal).Where(c => Has(c, word) && !Has(c, "death") && !Has(c, "turn") && !Has(c, "walk") && !Has(c, "run")).ToList();
+            if (clips.Count == 0)
+            {
+                clips = Clips(d.Animal).Where(c => (Has(c, "eat") || Has(c, "graze") || Has(c, "drink") || Has(c, "food")) && !Has(c, "death") && !Has(c, "turn") && !Has(c, "walk") && !Has(c, "run")).ToList();
+            }
+            if (clips.Count > 0)
+            {
+                d.PlayIdleClip(clips[UnityEngine.Random.Range(0, clips.Count)]);
+            }
+            d.FeedPoseUntil = Time.time + 3f;
+        }
+
+        internal void EndFeedPose(Driver d)
+        {
+            if (d == null || d.FeedPoseUntil <= 0f)
+            {
+                return;
+            }
+            d.FeedPoseUntil = 0f;
+            LivestockAnimal ls = d.Animal as LivestockAnimal;
+            if (ls != null && Valid(ls))
+            {
+                ls.SetGrazing(false);
+                ls.SetDrinking(false);
+            }
         }
 
         // Headless test of the diets: who eats what, with the food values read from the item definitions.
@@ -118,7 +160,7 @@ namespace Oxide.Plugins
                     ["DrinkSalt"] = "Salt water cannot be drunk. Find a river, a lake or a pond.",
                     ["StatHungry"] = "You are starving - find food.",
                     ["StatThirsty"] = "You are parched - find water.",
-                    ["StatTired"] = "You are out of breath.",
+                    ["StatTired"] = "Out of breath: walk or stand a moment to get the stamina back.",
                 };
             }
 
@@ -137,6 +179,7 @@ namespace Oxide.Plugins
                     }
                 }
                 stats.Clear();
+                bars.Clear();
             }
 
             public override void Unload()
@@ -173,25 +216,113 @@ namespace Oxide.Plugins
                 return f;
             }
 
+            // ---------------------------------------------------------------- stamina (ridden animals and animal forms, like the horse)
+
+            internal sealed class Breath
+            {
+                public float Value = 100f;
+                public bool Exhausted;
+                public float LastSpend;
+                public float Seen;
+            }
+
+            // Kept per animal, so that a tired animal stays tired when its rider gets off and on again.
+            private readonly Dictionary<ulong, Breath> breaths = new Dictionary<ulong, Breath>();
+
+            private Breath BreathOf(Driver d)
+            {
+                if (d == null || d.Body == null || d.Body.net == null)
+                {
+                    return null;
+                }
+                ulong id = d.Body.net.ID.Value;
+                Breath b;
+                float now = Time.time;
+                if (!breaths.TryGetValue(id, out b))
+                {
+                    b = new Breath { Seen = now };
+                    breaths[id] = b;
+                }
+                else if (now - b.Seen > 2f)
+                {
+                    // the animal rested while nobody drove it
+                    b.Value = Mathf.Min(100f, b.Value + Mathf.Max(0f, Bm.Cfg.Stamina.Recover) * (now - b.Seen));
+                    if (b.Value >= Bm.Cfg.Stamina.RecoverTo)
+                    {
+                        b.Exhausted = false;
+                    }
+                }
+                b.Seen = now;
+                return b;
+            }
+
+            public float StaminaOf(Driver d)
+            {
+                Breath b = Bm.Cfg.Stamina.Enabled ? BreathOf(d) : null;
+                return b != null ? b.Value : 100f;
+            }
+
+            public bool Exhausted(Driver d)
+            {
+                Breath b = Bm.Cfg.Stamina.Enabled ? BreathOf(d) : null;
+                return b != null && b.Exhausted;
+            }
+
+            // The highest gait the animal can keep up: out of breath, a trot.
             public int GaitCap(Driver d)
             {
-                FormStats s;
-                if (d.Kind != ControlKind.Form || !Bm.Cfg.Form.Needs || !stats.TryGetValue(d.Player.userID, out s))
-                {
-                    return 5;
-                }
-                return s.Stamina < 5f ? 2 : 5;
+                return Exhausted(d) ? 2 : 5;
             }
 
             public void Spend(Driver d, float amount)
             {
-                if (d.Kind != ControlKind.Form || !Bm.Cfg.Form.Needs)
+                if (!Bm.Cfg.Stamina.Enabled || amount <= 0f)
                 {
                     return;
                 }
-                FormStats s = Of(d.Player);
-                s.Stamina = Mathf.Max(0f, s.Stamina - amount);
-                s.LastSpend = Time.time;
+                Breath b = BreathOf(d);
+                if (b == null)
+                {
+                    return;
+                }
+                b.Value = Mathf.Max(0f, b.Value - amount);
+                b.LastSpend = Time.time;
+                if (!b.Exhausted && b.Value <= Bm.Cfg.Stamina.ExhaustedBelow)
+                {
+                    b.Exhausted = true;
+                    Bm.Tell(d.Player, "StatTired");
+                }
+            }
+
+            // Running uses the breath, walking and standing give it back.
+            private void Breathe(Driver d, float now, float dt)
+            {
+                StaminaCfg c = Bm.Cfg.Stamina;
+                Breath b = BreathOf(d);
+                if (b == null)
+                {
+                    return;
+                }
+                // what the animal really does counts (a gait chosen while standing or backing up costs nothing)
+                float speed = Mathf.Abs(d.Speed);
+                float use = d.Standing || d.Speed < 0f ? 0f
+                    : speed >= d.GaitSpeed(5) * 0.9f ? c.FullSprint
+                    : speed >= d.GaitSpeed(4) * 0.9f ? c.Sprint
+                    : speed >= d.GaitSpeed(3) * 0.9f ? c.Run : 0f;
+                if (use > 0f)
+                {
+                    Spend(d, use * dt);
+                    return;
+                }
+                if (now - b.LastSpend < c.RecoverDelay)
+                {
+                    return;
+                }
+                b.Value = Mathf.Min(100f, b.Value + Mathf.Max(0f, c.Recover) * dt * (d.Standing ? 1.3f : 1f));
+                if (b.Exhausted && b.Value >= c.RecoverTo)
+                {
+                    b.Exhausted = false;
+                }
             }
 
             // ---------------------------------------------------------------- ticking: drains, recovery, the panel
@@ -200,19 +331,49 @@ namespace Oxide.Plugins
             {
                 float dt = lastTick > 0f ? Mathf.Min(now - lastTick, 1f) : 0.25f;
                 lastTick = now;
-                if (Bm.Drivers.Count == 0 && stats.Count == 0)
+                if (Bm.Drivers.Count == 0 && stats.Count == 0 && bars.Count == 0)
                 {
                     return;
                 }
                 var present = new HashSet<ulong>();
+                var shown = new HashSet<ulong>();
                 foreach (Driver d in Bm.Drivers.Values.ToList())
                 {
-                    if (d == null || !d.Alive || d.Kind != ControlKind.Form || d.Player == null || !Valid(d.Body))
+                    if (d == null || !d.Alive || d.Player == null || !Valid(d.Body))
+                    {
+                        continue;
+                    }
+                    if (d.FeedPoseUntil > 0f && now > d.FeedPoseUntil)
+                    {
+                        Bm.EndFeedPose(d);
+                    }
+                    if (Bm.Cfg.Stamina.Enabled)
+                    {
+                        Breathe(d, now, dt);
+                    }
+                    if (DrawBars(d, now))
+                    {
+                        shown.Add(d.Player.userID);
+                    }
+                    if (d.Kind != ControlKind.Form)
                     {
                         continue;
                     }
                     present.Add(d.Player.userID);
                     Update(d, now, dt);
+                }
+                foreach (ulong id in bars.Keys.Where(k => !shown.Contains(k)).ToList())
+                {
+                    BasePlayer gone = BasePlayer.FindByID(id);
+                    if (gone != null && gone.IsConnected)
+                    {
+                        CuiHelper.DestroyUi(gone, Hud);
+                    }
+                    bars.Remove(id);
+                }
+                foreach (ulong id in breaths.Where(kv => now - kv.Value.Seen > 900f).Select(kv => kv.Key).ToList())
+                {
+                    breaths.Remove(id);
                 }
                 foreach (ulong id in stats.Keys.Where(k => !present.Contains(k)).ToList())
                 {
@@ -236,11 +397,6 @@ namespace Oxide.Plugins
                 FormStats s = Of(p);
                 if (!Bm.Cfg.Form.Needs)
                 {
-                    if (now >= s.NextHud)
-                    {
-                        s.NextHud = now + 1f;
-                        CuiHelper.DestroyUi(p, Hud);
-                    }
                     return;
                 }
                 // the game's own bars (health, food, water) show the animal's: the human's values are kept aside and put back later
@@ -257,94 +413,127 @@ namespace Oxide.Plugins
                     p.metabolism.isDirty = true;
                 }
                 float rate = Bm.Cfg.Form.NeedsRate;
-                bool wasHungry = s.Hunger <= 0.5f, wasThirsty = s.Thirst <= 0.5f, wasTired = s.Stamina < 5f;
+                bool wasHungry = s.Hunger <= 0.5f, wasThirsty = s.Thirst <= 0.5f;
                 s.Hunger = Mathf.Max(0f, s.Hunger - 0.045f * rate * dt);
                 s.Thirst = Mathf.Max(0f, s.Thirst - 0.07f * rate * dt);
-                int gait = d.Gait;
-                float drain = d.Standing ? 0f : gait >= 5 ? 3.5f : gait == 4 ? 2.2f : gait == 3 ? 0.8f : 0f;
-                if (drain > 0f)
-                {
-                    s.Stamina = Mathf.Max(0f, s.Stamina - drain * dt);
-                    s.LastSpend = now;
-                }
-                s.Stamina = 100f;                        // there is no stamina: an animal runs as long as it likes
                 if (Bm.Cfg.Form.StarveDamage && (s.Hunger <= 0f || s.Thirst <= 0f) && Valid(d.Body))
                 {
                     d.Body.Hurt(0.6f * dt, Rust.DamageType.Hunger, null, false);
                 }
                 if (s.Hunger <= 0.5f && !wasHungry) Bm.Tell(p, "StatHungry");
                 if (s.Thirst <= 0.5f && !wasThirsty) Bm.Tell(p, "StatThirsty");
-                if (s.Stamina < 5f && !wasTired) Bm.Tell(p, "StatTired");
-                if (now >= s.NextHud)
-                {
-                    s.NextHud = now + 0.4f;
-                    CuiHelper.DestroyUi(p, Hud);                // the game's own bars show the animal: health, food and water
-                }
             }
 
-            // Health, food and water of the animal are in the game's own bars; the one thing the game has no bar for, the stamina, gets a bar of the same
-            // size above them. It is drawn once and then only updated, so that it does not flicker.
-            private void DrawHud(Driver d, FormStats s)
+            // ---------------------------------------------------------------- the bars
+            // The stamina gets a bar above the game's own bars, the way the horse shows its own; a rider also sees the health of the animal (an
+            // animal form sees its health in the game's own health bar). Drawn once, then only updated, so that nothing flickers.
+
+            private sealed class BarState
+            {
+                public int Stamina = -1;
+                public int Health = -1;
+                public bool Rider;
+                public float At;
+            }
+
+            private readonly Dictionary<ulong, BarState> bars = new Dictionary<ulong, BarState>();
+
+            private const string StaminaColor = "0.86 0.76 0.24 0.85";
+            private const string HealthColor = "0.47 0.69 0.24 0.85";
+
+            // True = the bars of this player are up.
+            private bool DrawBars(Driver d, float now)
             {
                 BasePlayer p = d.Player;
-                int value = Mathf.RoundToInt(Mathf.Clamp(s.Stamina, 0f, 100f));
-                float now = Time.time;
-                if (!d.Spectating)
+                if (!Bm.Cfg.Stamina.Enabled || !Bm.Cfg.Stamina.ShowBar || !p.IsConnected || (d.Kind == ControlKind.Form && !d.Spectating))
                 {
-                    if (s.HudDrawn)
-                    {
-                        CuiHelper.DestroyUi(p, Hud);
-                        s.HudDrawn = false;
-                    }
-                    return;
+                    return false;
                 }
-                if (s.HudDrawn && value == s.HudValue && now - s.HudAt < 30f)
+                bool rider = d.Kind != ControlKind.Form;
+                int stamina = Mathf.RoundToInt(Mathf.Clamp(StaminaOf(d), 0f, 100f));
+                int health = rider ? Mathf.RoundToInt(Mathf.Clamp01(d.Body.health / Mathf.Max(1f, d.Body.MaxHealth())) * 100f) : 0;
+                BarState st;
+                bool fresh = !bars.TryGetValue(p.userID, out st) || st.Rider != rider || now - st.At >= 30f;
+                if (!fresh && st.Stamina == stamina && st.Health == health)
                 {
-                    return;
+                    return true;
                 }
-                float frac = value / 100f;
                 var c = new CuiElementContainer();
-                if (!s.HudDrawn || now - s.HudAt >= 30f)
+                if (fresh)
                 {
+                    st = new BarState { Rider = rider, At = now };
+                    bars[p.userID] = st;
                     c.Add(new CuiPanel
                     {
-                        Image = { Color = "0.09 0.10 0.08 0.45" },
-                        RectTransform = { AnchorMin = "1 0", AnchorMax = "1 0", OffsetMin = "-311 150", OffsetMax = "-29 184" }
+                        Image = { Color = "0 0 0 0" },
+                        RectTransform = { AnchorMin = "1 0", AnchorMax = "1 0", OffsetMin = "-311 150", OffsetMax = rider ? "-29 212" : "-29 178" }
                     }, "Overlay", Hud);
-                    c.Add(new CuiElement
+                    AddBar(c, "stamina", "STAMINA", StaminaColor, stamina, rider ? 0.55f : 0f, 1f);
+                    if (rider)
                     {
-                        Name = Hud + ".fill",
-                        Parent = Hud,
-                        Components = { new CuiImageComponent { Color = "0.86 0.76 0.24 0.85" }, new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = Pt(frac, 1f) } }
-                    });
-                    c.Add(new CuiElement
-                    {
-                        Name = Hud + ".num",
-                        Parent = Hud,
-                        Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 18, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.03 0", AnchorMax = "1 1" } }
-                    });
+                        AddBar(c, "health", (d.Species != null ? d.Species.Display.ToUpperInvariant() : "ANIMAL") + " HEALTH", HealthColor, health, 0f, 0.45f);
+                    }
                     CuiHelper.DestroyUi(p, Hud);
                     CuiHelper.AddUi(p, c);
-                    s.HudDrawn = true;
-                    s.HudAt = now;
                 }
                 else
                 {
-                    c.Add(new CuiElement
+                    UpdateBar(c, "stamina", StaminaColor, stamina);
+                    if (rider)
                     {
-                        Name = Hud + ".fill",
-                        Update = true,
-                        Components = { new CuiImageComponent { Color = "0.86 0.76 0.24 0.85" }, new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = Pt(frac, 1f) } }
-                    });
-                    c.Add(new CuiElement
-                    {
-                        Name = Hud + ".num",
-                        Update = true,
-                        Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 18, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.03 0", AnchorMax = "1 1" } }
-                    });
+                        UpdateBar(c, "health", HealthColor, health);
+                    }
                     CuiHelper.AddUi(p, c);
                 }
-                s.HudValue = value;
+                st.Stamina = stamina;
+                st.Health = health;
+                return true;
+            }
+
+            private static void AddBar(CuiElementContainer c, string id, string label, string color, int value, float y0, float y1)
+            {
+                string name = Hud + "." + id;
+                c.Add(new CuiElement
+                {
+                    Name = name,
+                    Parent = Hud,
+                    Components = { new CuiImageComponent { Color = "0.09 0.10 0.08 0.45" }, new CuiRectTransformComponent { AnchorMin = Pt(0f, y0), AnchorMax = Pt(1f, y1) } }
+                });
+                c.Add(new CuiElement
+                {
+                    Name = name + ".fill",
+                    Parent = name,
+                    Components = { new CuiImageComponent { Color = color }, new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = Pt(value / 100f, 1f) } }
+                });
+                c.Add(new CuiElement
+                {
+                    Name = name + ".num",
+                    Parent = name,
+                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 16, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.03 0", AnchorMax = "0.5 1" } }
+                });
+                c.Add(new CuiElement
+                {
+                    Name = name + ".label",
+                    Parent = name,
+                    Components = { new CuiTextComponent { Text = label, FontSize = 11, Align = TextAnchor.MiddleRight, Color = "1 1 1 0.8" }, new CuiRectTransformComponent { AnchorMin = "0.3 0", AnchorMax = "0.97 1" } }
+                });
+            }
+
+            private static void UpdateBar(CuiElementContainer c, string id, string color, int value)
+            {
+                string name = Hud + "." + id;
+                c.Add(new CuiElement
+                {
+                    Name = name + ".fill",
+                    Update = true,
+                    Components = { new CuiImageComponent { Color = color }, new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = Pt(value / 100f, 1f) } }
+                });
+                c.Add(new CuiElement
+                {
+                    Name = name + ".num",
+                    Update = true,
+                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 16, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.03 0", AnchorMax = "0.5 1" } }
+                });
             }
 
             // The human's own food and water come back when the animal form ends.
@@ -389,7 +578,6 @@ namespace Oxide.Plugins
                         if (Consumable(dropped.item, out calories, out hydration, out health) && OnDiet(sp, dropped.item.info.shortname))
                         {
                             Feed(d, s, calories, hydration, health, "Ate");
-                            Bm.FormFed(d);
                             if (dropped.item.amount > 1)
                             {
                                 dropped.item.amount -= 1;
@@ -483,19 +671,7 @@ namespace Oxide.Plugins
             private void Bite(Driver d, FormStats s, string word)
             {
                 s.NextBite = Time.time + Bm.Cfg.Form.BiteCooldown;
-                if (d.Animal == null)
-                {
-                    return;                  // the horse has no eating clip to play
-                }
-                List<ClipRef> clips = Bm.Clips(d.Animal).Where(c => Has(c, word) && !Has(c, "death") && !Has(c, "turn")).ToList();
-                if (clips.Count == 0)
-                {
-                    clips = Bm.Clips(d.Animal).Where(c => (Has(c, "eat") || Has(c, "graze") || Has(c, "drink") || Has(c, "head")) && !Has(c, "death") && !Has(c, "turn")).ToList();
-                }
-                if (clips.Count > 0)
-                {
-                    PlayClip(d.Animal, clips[UnityEngine.Random.Range(0, clips.Count)]);
-                }
+                Bm.StartFeedPose(d, word);
             }
 
             // Food values come from the item definitions, so changed or modded items work (R9.25).

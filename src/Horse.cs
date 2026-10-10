@@ -229,6 +229,8 @@ namespace Oxide.Plugins
             public float AttackUntil;
             public float SpeedMult = 1f;             // bosses run faster
             public float Damage;                     // bosses hit harder (0 = the configured horse attack)
+            public float PassUntil;                  // after a hit the charging horse runs on past its victim, then turns for the next run
+            public Vector3 PassTo;
             public bool WasLeading;                  // the vanilla rope was on last tick
             public BasePlayer LastLeader;
             public float StopRequested;              // the leader asked to let go (so the rope breaking is no accident)
@@ -623,11 +625,17 @@ namespace Oxide.Plugins
                     s.Drive.Stop();
                     return false;
                 }
-                if (dist <= 3.4f)
+                if (dist <= 3.4f && !Bm.IsFormPlayer(leader))
                 {
                     s.Tether = null;
                     s.Drive.Stop();
                     h.SetLeading(leader);
+                    return true;
+                }
+                if (dist <= 3.4f)
+                {
+                    s.Mode = "tether";
+                    s.Drive.Stop();                     // an animal form leads without a visible rope: the horse just stays close
                     return true;
                 }
                 s.Mode = "tether";
@@ -711,21 +719,48 @@ namespace Oxide.Plugins
 
             // ---------------------------------------------------------------- charging and striking
 
+            // An aggressive horse attacks like a ram: it gallops straight into its victim, the impact hurts and knocks a player down, it runs on
+            // past and turns for the next run. No rearing up and no screaming on the way (that looked wrong); its own hoof beats and snorts stay.
             private void Charge(HorseState s, BaseCombatEntity target, float now)
             {
-                Vector3 to = target.transform.position - s.Horse.transform.position;
-                to.y = 0f;
+                RidableHorse h = s.Horse;
                 s.Mode = "charge";
-                if (to.magnitude > 3.2f)
+                float speed = Bm.Cfg.Horse.FleeSpeed * s.SpeedMult;
+                if (now < s.PassUntil)
                 {
-                    s.Drive.StopDistance = 2.5f;
-                    s.Drive.MoveTo(target.transform.position, Bm.Cfg.Horse.FleeSpeed * s.SpeedMult);
+                    s.Drive.StopDistance = 1f;
+                    s.Drive.MoveTo(s.PassTo, speed);
                     return;
                 }
-                s.Drive.Stop();
-                Strike(s, target, now);
+                Vector3 center;
+                Vector3 nose = AttackTip(h, h.transform.eulerAngles.y, false, out center);
+                Vector3 touch = target.ClosestPoint(nose);
+                Vector3 ahead = touch - center;
+                ahead.y = 0f;
+                Vector3 fwd = h.transform.forward;
+                fwd.y = 0f;
+                bool inFront = ahead.sqrMagnitude < 0.01f || Vector3.Angle(fwd, ahead) < 60f;
+                if (inFront && Vector3.Distance(touch, nose) <= Bm.Cfg.Combat.ChargeContact + 0.45f && now >= s.NextAttack)
+                {
+                    s.NextAttack = now + Bm.Cfg.Horse.AttackCooldown;
+                    float damage = s.Damage > 0f ? s.Damage : Bm.Cfg.Horse.AttackDamage;
+                    target.Hurt(new HitInfo(h, target, Rust.DamageType.Blunt, damage * Bm.Cfg.Combat.DamageScale, touch));
+                    Bm.BumpSound(touch, "generic");
+                    Bm.BossHit(h, target);
+                    BasePlayer victim = target as BasePlayer;
+                    if (victim != null && !victim.IsDead() && !victim.isMounted)
+                    {
+                        victim.Ragdoll(fwd.normalized * 6f + Vector3.up * 3f, true, false, false, h);
+                    }
+                    s.PassTo = GroundAt(h.transform.position + fwd.normalized * 12f);
+                    s.PassUntil = now + 1.4f;
+                    return;
+                }
+                s.Drive.StopDistance = 0.2f;
+                s.Drive.MoveTo(target.transform.position, speed);         // straight into it
             }
 
+            // F as the horse: rear up and strike what is in front.
             public void Strike(HorseState s, BaseCombatEntity target, float now)
             {
                 if (now < s.NextAttack)
@@ -733,62 +768,54 @@ namespace Oxide.Plugins
                     return;
                 }
                 s.NextAttack = now + Bm.Cfg.Horse.AttackCooldown;
-                Vector3 to = target.transform.position - s.Horse.transform.position;
-                to.y = 0f;
-                if (to.sqrMagnitude > 0.01f)
-                {
-                    s.Horse.transform.rotation = Quaternion.Euler(0f, Yaw(to), 0f);
-                }
-                if (Bm.Cfg.Horse.RearUpAttack)
-                {
-                    RpcGroup(s.Horse, "CLIENT_Stand");
-                }
                 RidableHorse horse = s.Horse;
-                Bm.timer.Once(Bm.Cfg.Horse.RearUpAttack ? 0.8f : 0.1f, () =>
+                Bm.timer.Once(0.1f, () =>
                 {
-                    if (!Valid(horse) || horse.IsDead())
+                    if (Valid(horse) && !horse.IsDead())
                     {
-                        return;
+                        HitZone(horse, s.Damage > 0f ? s.Damage : Bm.Cfg.Horse.AttackDamage, target, false, false);
                     }
-                    HitFront(horse, s.Damage > 0f ? s.Damage : Bm.Cfg.Horse.AttackDamage, target);
                 });
             }
 
-            // Damage to everything the horse faces within 4 m (the aimed target and others in the cone).
-            internal void HitFront(RidableHorse horse, float damage, BaseCombatEntity preferred, bool anyAnimal = false)
+            // Damage right at the nose of the horse (or right behind it for a kick): the aimed target and, for a player's horse, everything there.
+            internal void HitZone(RidableHorse horse, float damage, BaseCombatEntity preferred, bool anyAnimal, bool rear)
             {
-                Vector3 pos = horse.transform.position;
-                Vector3 fwd = horse.transform.forward;
-                fwd.y = 0f;
+                Vector3 center;
+                Vector3 tip = AttackTip(horse, horse.transform.eulerAngles.y, rear, out center);
+                Vector3 facing = horse.transform.forward * (rear ? -1f : 1f);
+                facing.y = 0f;
+                float reach = Bm.Cfg.Combat.HitReach * ModelScale(horse) + 0.2f;
                 var near = new List<BaseCombatEntity>();
-                float reach = ModelScale(horse);
-                Vis.Entities(pos, 4.2f * reach, near);
+                Vis.Entities(tip, reach + 2f, near);
                 foreach (BaseCombatEntity e in near)
                 {
-                    if (e == null || e == horse || !Alive(e) || e is BaseCorpse || (e is RidableHorse))
+                    if (e == null || e == horse || !Alive(e) || e is BaseCorpse || (e is RidableHorse && e != preferred))
                     {
                         continue;
                     }
                     BasePlayer p = e as BasePlayer;
-                    if (p != null && (p.InSafeZone() || (Instance != null && Instance.IsFormPlayer(p) && Instance.Cfg.Form.Untargetable)))
+                    if (p != null && (p.InSafeZone() || p.GetMounted() != null && HorseOfSeat(p.GetMounted()) == horse || (Instance != null && Instance.IsFormPlayer(p) && Instance.Cfg.Form.Untargetable)))
                     {
                         continue;
                     }
-                    if ((e is BaseNPC2 && Bm.IsTamed(e)) || Bm.IsBossPair(horse, e))
+                    if ((e is BaseNPC2 && Bm.IsTamed(e) && e != preferred) || Bm.IsBossPair(horse, e))
                     {
                         continue;
                     }
                     if (p == null && e != preferred && !anyAnimal)
                     {
-                        continue;       // a charging horse hurts the players around it and its target, not every animal that stands near
+                        continue;
                     }
-                    Vector3 to = e.transform.position - pos;
+                    Vector3 point = e.ClosestPoint(tip);
+                    Vector3 to = point - center;
                     to.y = 0f;
-                    if (e != preferred && Vector3.Angle(fwd, to) > 70f)
+                    if (Vector3.Distance(point, tip) > reach || (to.sqrMagnitude > 0.01f && Vector3.Angle(facing, to) > 70f))
                     {
                         continue;
                     }
-                    e.Hurt(new HitInfo(horse, e, Rust.DamageType.Blunt, damage * Bm.Cfg.Combat.DamageScale, e.transform.position));
+                    e.Hurt(new HitInfo(horse, e, Rust.DamageType.Blunt, damage * Bm.Cfg.Combat.DamageScale, point));
+                    Bm.HitSound(e, point);
                     Bm.BossHit(horse, e);
                 }
             }
@@ -925,8 +952,22 @@ namespace Oxide.Plugins
                     horse.SetLeading(null);
                 }
                 horse.DismountAllPlayers();
-                // the player is the horse: riders get the seats once it has eaten (the mount hook checks that), the driver seat is the player's view
-                SetSeats(horse, Mathf.Clamp(Bm.Cfg.Form.RidersFed, 0, 2));
+                // the player is the horse: riders get the seats its saddle gives (none without one), the game keeps that up when a saddle is fitted
+                SetSeats(horse, SaddleSeats(horse));
+            }
+
+            // The seats the saddle in the horse's equipment gives: 0, 1 (single) or 2 (double).
+            public static int SaddleSeats(RidableHorse horse)
+            {
+                int seats = 0;
+                if (horse != null && horse.equipmentInventory != null)
+                {
+                    foreach (Item it in horse.equipmentInventory.itemList)
+                    {
+                        seats = Mathf.Max(seats, horse.GetSaddleItemSeatCount(it));
+                    }
+                }
+                return seats;
             }
 
             public void ReleaseControl(RidableHorse horse)
@@ -941,15 +982,7 @@ namespace Oxide.Plugins
                 {
                     // the seats follow the saddle again
                     horse.DismountAllPlayers();
-                    int seats = 0;
-                    if (horse.equipmentInventory != null)
-                    {
-                        foreach (Item it in horse.equipmentInventory.itemList)
-                        {
-                            seats = Mathf.Max(seats, horse.GetSaddleItemSeatCount(it));
-                        }
-                    }
-                    SetSeats(horse, seats);
+                    SetSeats(horse, SaddleSeats(horse));
                 }
             }
 
@@ -1000,7 +1033,19 @@ namespace Oxide.Plugins
                 {
                     if (Valid(horse) && !horse.IsDead())
                     {
-                        HitFront(horse, Bm.Cfg.Horse.AttackDamage, null, true);
+                        HitZone(horse, Bm.Cfg.Horse.AttackDamage, null, true, false);
+                    }
+                });
+            }
+
+            // F as the horse with the camera behind it: a kick behind (the game has no kick animation for the horse - the hit and its sound).
+            public void PlayerKickBack(RidableHorse horse, Driver d)
+            {
+                Bm.timer.Once(0.15f, () =>
+                {
+                    if (Valid(horse) && !horse.IsDead())
+                    {
+                        HitZone(horse, Bm.Cfg.Horse.AttackDamage, null, true, true);
                     }
                 });
             }
@@ -1138,7 +1183,7 @@ namespace Oxide.Plugins
                 Driver formHost = Bm.DriverOfAnimal(horse);
                 if (formHost != null && formHost.Kind == ControlKind.Form)
                 {
-                    // a player is the horse: others ride it after it has eaten, never as its driver
+                    // a player is the horse: others ride it when it has a saddle (the game gives it the seats of the saddle), never as its driver
                     return Bm.FormMountCheck(player, formHost, true) ? null : (object)false;
                 }
                 if (s.Asleep(Time.time) || s.Frozen)
@@ -1169,12 +1214,27 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            // The gear panel of a managed horse: owner and team only, never while it is wild or asleep.
+            // The gear panel of a managed horse: owner and team only, never while it is wild or asleep. A horse that is a player: that player
+            // (Ctrl + E) and whom the server lets handle it; the horse a player has left: that player.
             public override object CanLootEntity(BasePlayer player, BaseEntity entity)
             {
                 RidableHorse horse = entity as RidableHorse;
                 HorseState s = horse != null ? StateOf(horse) : null;
                 if (s == null || (Bm.Cfg.Riding.AdminBypass && Bm.IsAdmin(player)))
+                {
+                    return null;
+                }
+                Driver formHost = Bm.DriverOfAnimal(horse);
+                if (formHost != null && formHost.Kind == ControlKind.Form)
+                {
+                    if (formHost.Player == player || Bm.FormHandledBy(formHost, player))
+                    {
+                        return null;
+                    }
+                    Bm.Tell(player, "HorseNoLoot");
+                    return false;
+                }
+                if (Bm.LeftOwnedBy(horse, player))
                 {
                     return null;
                 }
@@ -1309,7 +1369,7 @@ namespace Oxide.Plugins
                 {
                     if (Valid(horse) && !horse.IsDead())
                     {
-                        HitFront(horse, Bm.Cfg.Horse.AttackDamage, null, true);
+                        HitZone(horse, Bm.Cfg.Horse.AttackDamage, null, true, false);
                     }
                 });
                 return true;

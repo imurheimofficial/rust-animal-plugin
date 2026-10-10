@@ -75,7 +75,8 @@ namespace Oxide.Plugins
                 }
                 if (LeftOwnedBy(animal, player))
                 {
-                    return null;                       // the animal the player has just left carries him
+                    // the animal the player has just left carries him, once it has a saddle (like the horse)
+                    return !Cfg.Riding.RequireSaddle || SaddleOf(animal) > 0 || !species.Gear || (Cfg.Riding.AdminBypass && IsAdmin(player)) ? null : "NeedSaddle";
                 }
                 if (!Cfg.Features.Riding)
                 {
@@ -107,7 +108,7 @@ namespace Oxide.Plugins
                 {
                     return "NotYours";
                 }
-                if (Cfg.Riding.RequireSaddle && (rec == null || rec.Gear.Saddle <= 0))
+                if (Cfg.Riding.RequireSaddle && species.Gear && SaddleOf(animal) <= 0)
                 {
                     return "NeedSaddle";
                 }
@@ -197,33 +198,30 @@ namespace Oxide.Plugins
             Drivers.Clear();
         }
 
-        // E on a saddled animal mounts it; crouch + E opens the gear panel (see Gear).
-        internal bool TryMountFromUse(BasePlayer player)
+        // X (the vanilla seat-swap key) switches between the human and the animal. Pressed again and again, every switch runs to its end first
+        // (the views, the effects and their sounds): a new switch is accepted only a moment after the last one.
+        private readonly Dictionary<ulong, float> lastSwap = new Dictionary<ulong, float>();
+
+        internal bool SwapAllowed(BasePlayer player)
         {
-            if (!Cfg.Features.Riding || !Has(player, PermUse))
+            float last;
+            if (lastSwap.TryGetValue(player.userID, out last) && Time.realtimeSinceStartup - last < 1.2f)
             {
                 return false;
             }
-            BaseNPC2 animal = AnimalInSight(player, Cfg.Riding.MountDistance, 20f);
-            if (animal == null || DriverOfAnimal(animal) != null)
+            lastSwap[player.userID] = Time.realtimeSinceStartup;
+            return true;
+        }
+
+        // A player thrown off an animal (a crash, a fall): flung forward and down, the way a horse throws its rider.
+        internal void ThrowPlayer(BasePlayer player, Vector3 forward)
+        {
+            if (player == null || !player.IsConnected || player.IsDead() || player.isMounted)
             {
-                return false;
+                return;
             }
-            SpeciesDef species = SpeciesOf(animal);
-            if (species == null || species.Ride == RideTier.None)
-            {
-                return false;
-            }
-            TamedRecord rec = RecordOf(animal);
-            if (species.Ride == RideTier.Standard && (rec == null || rec.Gear.Saddle <= 0))
-            {
-                return false;   // not ours to handle: tamed animals without a saddle open their gear panel instead
-            }
-            if (player.serverInput.IsDown(BUTTON.DUCK))
-            {
-                return false;   // crouch + E = gear panel
-            }
-            return StartControl(player, animal, ControlKind.Ride);
+            player.Ragdoll(forward * 4f + Vector3.up * 2.5f, true, false, false, null);
+            player.Hurt(new HitInfo(null, player, Rust.DamageType.Fall, 5f, player.transform.position));
         }
 
         internal static void SetThirdPersonFlag(BasePlayer player, bool on)
@@ -294,6 +292,10 @@ namespace Oxide.Plugins
                         d.Attack();
                         return true;
                     case "vehicle.swapseats":
+                        if (!Bm.SwapAllowed(player))
+                        {
+                            return true;
+                        }
                         BasePlayer p = player;
                         Bm.NextTick(() => Bm.StopControl(p, "key X"));
                         return true;
@@ -471,6 +473,7 @@ namespace Oxide.Plugins
             public BaseMountable Seat;
             public bool SwappingSeats;
             public bool Spectating;
+            public float FeedPoseUntil;     // the grazing or drinking pose of E at food or water, until then (0 = none)
             public bool OwnsAnimal;         // the animal was made for this form and vanishes in smoke when the form ends
             public int Gait = 1;
             public bool Alive => !released;
@@ -490,8 +493,9 @@ namespace Oxide.Plugins
             private bool jumping;
             private Vector3 jumpFrom, jumpTo;
             private float jumpTime, jumpDuration, jumpHeight;
-            private Vector3 seatOffset;
-            private float seatLift;
+            private Vector3 seatOffset;          // where the seat sits, in the animal's own space (without the lift)
+            private Vector3 seatBaseLocal;       // the same in the space of the seat's parent (the spine bone, or the animal)
+            private float seatLift;              // metres the seat is lifted so that the rider never ends up under the ground
             private float waterFactor, nextWaterCheck;
             private bool deepWater, swimSet;
             private float nextLook;
@@ -507,7 +511,6 @@ namespace Oxide.Plugins
             private float poseUntil;
             private int gestureIndex;
             // handled by others
-            public float FedUntil;                                       // animal forms: carries riders until then
             public BasePlayer Leader;                                    // the plugin's leash: who leads this form
             public readonly List<BaseMountable> Guests = new List<BaseMountable>();
 
@@ -735,7 +738,7 @@ namespace Oxide.Plugins
 
             private bool MountSeat()
             {
-                string prefab = Kind == ControlKind.Ride ? bm.Cfg.Riding.SeatPrefab : bm.Cfg.Camera.FirstPersonSeat;
+                string prefab = Kind == ControlKind.Ride ? bm.UsableSeat(bm.Cfg.Riding.SeatPrefab) : bm.Cfg.Camera.FirstPersonSeat;
                 BaseEntity seatEntity = GameManager.server.CreateEntity(prefab, Body.transform.position, Body.transform.rotation);
                 BaseMountable seat = seatEntity as BaseMountable;
                 if (seat == null)
@@ -749,20 +752,11 @@ namespace Oxide.Plugins
                 }
                 Vector3 eyeLocal = seat.transform.InverseTransformPoint(seat.GetEyeOverride().position);
                 Vector3 anchorLocal = seat.mountAnchor != null ? seat.transform.InverseTransformPoint(seat.mountAnchor.position) : Vector3.zero;
-                seat.SetParent(Body, false, false);
-                float animalScale = ModelScale(Body);
-                if (animalScale > 1.001f)
-                {
-                    // a bigger animal (a boss): the seat is placed by the animal's scale - the height of the back - but keeps normal size
-                    // itself, so that the rider is not enlarged with it
-                    seat.networkEntityScale = true;
-                    seat.transform.localScale = Vector3.one / animalScale;
-                }
                 Quaternion rotation = Quaternion.Euler(0f, -yawOffset, 0f);
-                seat.transform.localRotation = rotation;
                 seatOffset = SeatOffset(rotation * eyeLocal, rotation * anchorLocal) + Vector3.up * bm.SeatLiftOf(Species);
                 seatLift = RequiredLift();
-                seat.transform.localPosition = seatOffset + Vector3.up * seatLift;
+                seatBaseLocal = FixSeat(seat, seatOffset, rotation, Kind == ControlKind.Ride);
+                ApplySeatLift(seat);
                 bm.OwnSeats.Add(seat);
                 seat.Spawn();
                 Rigidbody body = seat.GetComponent<Rigidbody>();
@@ -804,6 +798,71 @@ namespace Oxide.Plugins
                 return head - eye;
             }
 
+            // Fixes a seat (not spawned yet) to the animal: on the spine bone for riders, so that the rider moves with the back the way he does on
+            // the horse, else on the animal itself. The seat keeps its normal size whatever the scale of the bone or the animal (a boss).
+            // Returns the seat's position in its parent's space.
+            private Vector3 FixSeat(BaseMountable seat, Vector3 local, Quaternion localRotation, bool onSpine)
+            {
+                Transform bone = onSpine && bm.Cfg.Riding.SeatOnSpine ? BackBone(Animal) : null;
+                if (bone != null)
+                {
+                    seat.transform.SetPositionAndRotation(Body.transform.TransformPoint(local), Body.transform.rotation * localRotation);
+                    seat.SetParent(Body, bone.name, true, false);
+                }
+                else
+                {
+                    seat.SetParent(Body, false, false);
+                    seat.transform.localRotation = localRotation;
+                    seat.transform.localPosition = local;
+                }
+                Transform parent = seat.transform.parent;
+                float parentScale = parent != null ? parent.lossyScale.x : 1f;
+                if (parentScale > 0.0001f && Mathf.Abs(parentScale - 1f) > 0.001f)
+                {
+                    seat.networkEntityScale = true;
+                    seat.transform.localScale = Vector3.one / parentScale;
+                }
+                return seat.transform.localPosition;
+            }
+
+            // The seat at its place plus the lift (the lift is straight up in the world, whatever the bone's own axes are).
+            private void ApplySeatLift(BaseMountable seat)
+            {
+                Transform parent = seat.transform.parent;
+                Vector3 up = parent != null ? parent.InverseTransformVector(Vector3.up) : Vector3.up;
+                seat.transform.localPosition = seatBaseLocal + up * seatLift;
+            }
+
+            private Vector3 SeatBaseWorld()
+            {
+                if (Seat != null && !Seat.IsDestroyed && Seat.transform.parent != null)
+                {
+                    return Seat.transform.parent.TransformPoint(seatBaseLocal);
+                }
+                return Body.transform.TransformPoint(seatOffset);
+            }
+
+            // A rider looks to the sides at most, like on the horse: a head turned further round is turned back.
+            private float nextViewClamp;
+
+            private void ClampRiderView()
+            {
+                float limit = bm.Cfg.Riding.ViewClamp;
+                if (limit <= 0f || limit >= 180f || Time.time < nextViewClamp || Player == null || !Player.isMounted)
+                {
+                    return;
+                }
+                Vector3 look = Player.eyes.HeadForward();
+                float rel = Mathf.DeltaAngle(moveYaw, Yaw(look));
+                if (Mathf.Abs(rel) <= limit + 3f)
+                {
+                    return;
+                }
+                nextViewClamp = Time.time + 0.2f;
+                float pitch = -Mathf.Asin(Mathf.Clamp(look.y, -1f, 1f)) * Mathf.Rad2Deg;
+                ForceView(Mathf.Sign(rel) * limit, pitch);
+            }
+
             // The game's spectator camera on the animal. The spectating state hides the human completely - even for the player himself -
             // and keeps AI and turrets away; the body is parented to the animal at the camera's pivot so the camera follows it.
             private void BeginSpectate()
@@ -828,7 +887,10 @@ namespace Oxide.Plugins
                     var strategy = new BasePlayer.SpectatorSubStrategy();
                     strategy.SpectatedPlayer = Player;
                     Player.net.SubStrategy = strategy;
-                    Player.net.InvalidateSubscriptions(2);
+                    if (bm.Cfg.Camera.RefreshSubscriptions)
+                    {
+                        Player.net.InvalidateSubscriptions(2);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -843,7 +905,10 @@ namespace Oxide.Plugins
                     if (Player.net != null && Player.net.SubStrategy is BasePlayer.SpectatorSubStrategy)
                     {
                         Player.net.SubStrategy = Network.Server.DefaultSubscriberStrategy;
-                        Player.net.InvalidateSubscriptions(2);
+                        if (bm.Cfg.Camera.RefreshSubscriptions)
+                        {
+                            Player.net.InvalidateSubscriptions(2);
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -878,7 +943,7 @@ namespace Oxide.Plugins
                     pivot = new Vector3(b.center.x, Mathf.Max(b.max.y * bm.Cfg.Camera.PivotHeight * scale + lift, 0.5f), b.center.z);
                     pivot -= Quaternion.Euler(0f, -yawOffset, 0f) * Vector3.forward * bm.Cfg.Camera.ThirdBack;
                 }
-                Player.transform.localPosition = pivot - PlayerEyes.EyeOffset;
+                Player.transform.localPosition = pivot - PlayerEyes.EyeOffset + (duckHeld ? Vector3.up * bm.Cfg.Camera.DuckLift : Vector3.zero);
                 Player.transform.localRotation = Quaternion.Euler(0f, -yawOffset, 0f);
                 Player.SendNetworkUpdateImmediate();
                 if (snapView)
@@ -966,21 +1031,84 @@ namespace Oxide.Plugins
                 return (buttons & (int)b) != 0;
             }
 
+            // ------------------------------------------------------------ where the camera looks
+            // The game does not run the normal tick of a spectating player, so its eyes (Player.eyes) keep the direction they had when the
+            // form began: the old code read that stale direction and played the rear kick when the player looked forward, and the head of
+            // the animal stared to the side. The angles of the player's input are fresh; they are relative to the animal the hidden body
+            // is parented to. In case a game build sends them in world space, the frame is learnt from how they behave while the animal turns.
+            private float aimYaw, aimPitch, lastAimYaw, lastBodyYaw;
+            private bool aimSeen;
+            private int aimWorldVotes, aimLocalVotes;
+
+            private void TrackAim(Vector3 aim)
+            {
+                float bodyYaw = Body.transform.eulerAngles.y;
+                if (aimSeen)
+                {
+                    float dBody = Mathf.DeltaAngle(lastBodyYaw, bodyYaw);
+                    float dAim = Mathf.DeltaAngle(lastAimYaw, aim.y);
+                    float turn = Mathf.Abs(dBody);
+                    if (turn > 1.5f)
+                    {
+                        if (Mathf.Abs(dAim - dBody) < turn * 0.3f)
+                        {
+                            aimWorldVotes = Mathf.Min(aimWorldVotes + 1, 60);
+                        }
+                        else if (Mathf.Abs(dAim) < turn * 0.3f)
+                        {
+                            aimLocalVotes = Mathf.Min(aimLocalVotes + 1, 60);
+                        }
+                    }
+                }
+                aimSeen = true;
+                lastAimYaw = aim.y;
+                lastBodyYaw = bodyYaw;
+                aimYaw = aim.y;
+                aimPitch = aim.x > 180f ? aim.x - 360f : aim.x;
+            }
+
+            private bool AimIsWorld => aimWorldVotes > aimLocalVotes + 3;
+
+            // The direction of the camera in the world.
+            public Vector3 CameraForward()
+            {
+                if (!Spectating || !aimSeen)
+                {
+                    return Player.eyes.HeadForward();
+                }
+                float yaw = AimIsWorld ? aimYaw : Body.transform.eulerAngles.y + aimYaw;
+                return Quaternion.Euler(Mathf.Clamp(aimPitch, -89f, 89f), yaw, 0f) * Vector3.forward;
+            }
+
+            // Ctrl is the brake: the game's client still lowers the camera of a crouching player, so while Ctrl is held the hidden body is
+            // lifted by the same height and the camera stays where it was.
+            private bool duckHeld;
+
             public void ReadInput(InputState input)
             {
                 int now = input.current.buttons;
                 int prev = inputSeen ? lastButtons : now;      // a key still held from before the control began is no new press
                 inputSeen = true;
                 lastButtons = now;
+                TrackAim(input.current.aimAngles);
                 Func<BUTTON, bool> pressed = b => IsSet(now, b) && !IsSet(prev, b);
                 fwd = IsSet(now, BUTTON.FORWARD);
                 back = IsSet(now, BUTTON.BACKWARD);
                 left = IsSet(now, BUTTON.LEFT);
                 right = IsSet(now, BUTTON.RIGHT);
                 bool duck = IsSet(now, BUTTON.DUCK);
+                if (duck != duckHeld)
+                {
+                    duckHeld = duck;
+                    if (Spectating && !released)
+                    {
+                        ApplyPreset(false);
+                    }
+                }
                 if (fwd || back || left || right)
                 {
                     InterruptClip();                       // walking or running takes over from the idle animation
+                    bm.EndFeedPose(this);
                 }
                 if (PoseName != null && (fwd || back || left || right || pressed(BUTTON.JUMP) || pressed(BUTTON.FIRE_THIRD)))
                 {
@@ -1028,7 +1156,7 @@ namespace Oxide.Plugins
                 }
                 if (Kind == ControlKind.Form && Spectating && pressed(BUTTON.USE))
                 {
-                    bm.InteractFrom(this);
+                    bm.InteractFrom(this, duck);           // E: doors, loot, food, things; Ctrl + E: the animal's inventory
                 }
             }
 
@@ -1148,6 +1276,7 @@ namespace Oxide.Plugins
                         case 4: speed = Species.Sprint; break;
                         default: speed = Species.Top; break;
                     }
+                    speed += (Animal != null ? bm.GearSpeedBonus(Animal) : 0f) * (gait / 5f);     // horseshoes, saddle bag, armour
                 }
                 else
                 {
@@ -1250,6 +1379,10 @@ namespace Oxide.Plugins
                 }
                 BasePlayer player = Player;
                 bool link = Kind == ControlKind.Form && bm.Cfg.Form.LinkHealth;
+                if (Kind == ControlKind.Form)
+                {
+                    bm.FormAnimalDied(this);                // what it carried falls next to its body
+                }
                 bm.Drivers.Remove(player.userID);
                 Release("animal died");
                 if (link && player != null && !player.IsDead())
@@ -1281,18 +1414,28 @@ namespace Oxide.Plugins
                 {
                     return;
                 }
+                // the camera is a circle round the animal: the front half attacks to the front, the rear half kicks behind (hoofed animals)
+                float camYaw = Yaw(CameraForward());
+                bool rear = KicksBehind(Species) && Mathf.Abs(Mathf.DeltaAngle(moveYaw, camYaw)) > bm.Cfg.Combat.RearAngle;
                 if (Horse != null)
                 {
-                    HorseAttack();
+                    HorseAttack(rear);
                     return;
                 }
                 InterruptClip();
-                float camYaw = Yaw(Player.eyes.rotation * Vector3.forward);
-                bool rear = Mathf.Abs(Mathf.DeltaAngle(moveYaw, camYaw)) > bm.Cfg.Combat.RearAngle;
+                ClearPose();
                 List<ClipRef> all = bm.Clips(Animal);
-                // the camera is a circle round the animal: the front half plays the attacks to the front, the rear half the kicks and bites behind
-                List<ClipRef> clips = rear ? all.Where(c => (Has(c, "behind") || Has(c, "kick")) && !Has(c, "death")).ToList() : new List<ClipRef>();
-                if (!rear)
+                List<ClipRef> clips;
+                if (rear)
+                {
+                    // the kick of the cow; the sheep and the ram stamp, the stag strikes with its own attack - their models have no kick
+                    clips = all.Where(c => (Has(c, "behind") || Has(c, "kick")) && !Has(c, "death")).ToList();
+                    if (clips.Count == 0)
+                    {
+                        clips = all.Where(c => Has(c, "stomp") && !Has(c, "death")).ToList();
+                    }
+                }
+                else
                 {
                     clips = all.Where(c => AttackWords.Any(w => Has(c, w)) && !Has(c, "death") && !Has(c, "behind") && !Has(c, "kick")).ToList();
                 }
@@ -1323,7 +1466,7 @@ namespace Oxide.Plugins
                 }
                 PlayClip(Animal, clip);
                 bm.AnimalVoice(Body, Species, "attack");          // the stag's clips carry no sound of their own
-                bm.StatsSpend(this, 4f);
+                bm.StatsSpend(this, bm.Cfg.Stamina.Attack);
                 nextAttack = Time.time + Mathf.Max(bm.Cfg.Combat.Cooldown, p.Delay + 0.4f);
                 float heading = moveYaw;
                 Invoke(() =>
@@ -1337,6 +1480,20 @@ namespace Oxide.Plugins
                         }
                     }
                 }, p.Delay);
+            }
+
+            // The hoofed animals kick behind them; the others always attack to the front.
+            internal static bool KicksBehind(SpeciesDef s)
+            {
+                if (s == null)
+                {
+                    return false;
+                }
+                switch (s.Id)
+                {
+                    case "cow": case "bull": case "calf": case "sheep": case "ram": case "lamb": case "stag": case "doe": case "horse": return true;
+                    default: return false;
+                }
             }
 
             public void OnGesture(string gesture)
@@ -1380,13 +1537,18 @@ namespace Oxide.Plugins
                 InterruptClip();
                 idleState = PlayClipState(Animal, clip);
                 idleStarted = Time.time;
+                idleEnds = idleStarted + ClipLength(clip) - 0.05f;
             }
+
+            private float idleEnds;
 
             public void InterruptClip()
             {
                 if (idleState != null)
                 {
-                    if (Time.time - idleStarted < 8f)
+                    // only a montage that still plays is stopped (a finished one is back in the game's pool and must not be returned twice);
+                    // its real length is known now, so long idles (16 s for the stag and the boar) give way to walking too
+                    if (Time.time < idleEnds)
                     {
                         StopClipState(Animal, ref idleState);
                     }
@@ -1483,7 +1645,7 @@ namespace Oxide.Plugins
                     return false;
                 }
                 bool rear = behindDriver || Guests.Count > 0;
-                string prefab = rear ? bm.Cfg.Riding.RearSeatPrefab : bm.Cfg.Riding.SeatPrefab;
+                string prefab = bm.UsableSeat(rear ? bm.Cfg.Riding.RearSeatPrefab : bm.Cfg.Riding.SeatPrefab);
                 BaseEntity entity = GameManager.server.CreateEntity(prefab, Body.transform.position, Body.transform.rotation);
                 BaseMountable seat = entity as BaseMountable;
                 if (seat == null)
@@ -1496,20 +1658,12 @@ namespace Oxide.Plugins
                 }
                 Quaternion rotation = Quaternion.Euler(0f, -yawOffset, 0f);
                 Vector3 anchor = seat.mountAnchor != null ? rotation * seat.transform.InverseTransformPoint(seat.mountAnchor.position) : Vector3.zero;
-                seat.SetParent(Body, false, false);
-                float k = ModelScale(Body);
-                if (k > 1.001f)
-                {
-                    seat.networkEntityScale = true;
-                    seat.transform.localScale = Vector3.one / k;
-                }
-                seat.transform.localRotation = rotation;
                 Vector3 place = BackPoint(Animal) - anchor + Vector3.up * bm.SeatLiftOf(Species);
                 if (rear)
                 {
-                    place += rotation * Vector3.back * Mathf.Max(0.55f, Body.bounds.extents.z * 0.5f);
+                    place += rotation * Vector3.back * Mathf.Max(0.5f, Body.bounds.extents.z * 0.42f);
                 }
-                seat.transform.localPosition = place;
+                FixSeat(seat, place, rotation, true);         // on the spine too: the second rider rocks with the back as well
                 bm.OwnSeats.Add(seat);
                 seat.Spawn();
                 Rigidbody rb = seat.GetComponent<Rigidbody>();
@@ -1604,6 +1758,10 @@ namespace Oxide.Plugins
                 {
                     return;
                 }
+                if (bm.OutOfBreath(this))
+                {
+                    return;                                 // out of breath: no jumps until the stamina is back
+                }
                 if (Horse != null)
                 {
                     HorseJump();
@@ -1676,27 +1834,51 @@ namespace Oxide.Plugins
                         height = Mathf.Min(height, 0.35f * k);
                     }
                 }
-                if (!jumpCollision && !platformLanding)
+                if (jumpCollision)
                 {
-                    // something to stand on where the jump ends (a low floor, a crate, a rock the sphere sailed over)?
-                    RaycastHit stand;
-                    float ground = TerrainMeta.HeightMap.GetHeight(to);
-                    if (Physics.Raycast(to + Vector3.up * (clear + 2f), Vector3.down, out stand, clear + 5f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore)
-                        && stand.normal.y >= 0.35f && stand.point.y > ground + 0.12f && stand.point.y <= jumpFrom.y + clear + 0.1f
-                        && !Physics.CheckCapsule(stand.point + Vector3.up * 0.5f, stand.point + Vector3.up * Mathf.Max(0.9f, Body.bounds.size.y * k * 0.6f), 0.3f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore))
-                    {
-                        to = stand.point + Vector3.up * 0.05f;
-                        height = Mathf.Max(height, stand.point.y - jumpFrom.y + 0.4f * k);
-                        platformLanding = true;
-                    }
-                }
-                if (!jumpCollision && !platformLanding)
-                {
-                    to.y = Mathf.Max(TerrainMeta.HeightMap.GetHeight(to), jumpFrom.y - 3f);
+                    to.y = jumpFrom.y;
+                    platformLanding = offMesh;              // a jump from a roof into a wall falls back onto that roof, not through it
                 }
                 else
                 {
-                    to.y = Mathf.Max(TerrainMeta.HeightMap.GetHeight(to), jumpFrom.y - 0.5f);
+                    // where the jump ends there must be a surface the animal can stand on (the terrain, a floor, a roof, a crate, the top of a rock)
+                    // and room for its body: a spot inside or under a rock or an object that is too high is never a landing - the jump is
+                    // shortened to the last good spot before it, and when there is none the animal runs into it
+                    Vector3 landing;
+                    bool onObject;
+                    if (ValidLanding(to, clear, k, out landing, out onObject))
+                    {
+                        to = landing;
+                        platformLanding = onObject;
+                    }
+                    else
+                    {
+                        bool found = false;
+                        Vector3 flat = to - jumpFrom;
+                        flat.y = 0f;
+                        for (float d = flat.magnitude - 0.3f; d > 0.25f; d -= 0.3f)
+                        {
+                            if (ValidLanding(jumpFrom + forward * d, clear, k, out landing, out onObject))
+                            {
+                                to = landing;
+                                platformLanding = onObject;
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found)
+                        {
+                            jumpCollision = true;
+                            jumpHitPoint = to + Vector3.up * 0.5f;
+                            to = jumpFrom;
+                            platformLanding = offMesh;
+                            height = Mathf.Min(height, 0.35f * k);
+                        }
+                    }
+                    if (!jumpCollision)
+                    {
+                        height = Mathf.Max(height, to.y - jumpFrom.y + 0.4f * k);
+                    }
                 }
                 jumpTo = to;
                 jumpHeight = height;
@@ -1705,8 +1887,42 @@ namespace Oxide.Plugins
                 jumping = true;
                 nextJump = Time.time + bm.Cfg.Movement.JumpCooldown;
                 agent.IsJumping = true;
-                bm.StatsSpend(this, 5f);
+                bm.StatsSpend(this, bm.Cfg.Stamina.Jump);
                 bm.LandSound(jumpFrom);                         // the push-off
+            }
+
+            // A spot the animal can land on: the highest walkable surface there that it can reach (searched from just above the height it can
+            // jump to, so a roof overhead does not count), not too far down, and room for the body above it (not inside a rock or an object).
+            private bool ValidLanding(Vector3 at, float clear, float k, out Vector3 landing, out bool onObject)
+            {
+                landing = at;
+                onObject = false;
+                float terrain = TerrainMeta.HeightMap.GetHeight(at);
+                float top = jumpFrom.y + clear + 0.5f;
+                float bottom = Mathf.Min(terrain, jumpFrom.y - 3.5f) - 0.5f;
+                Vector3 surface = new Vector3(at.x, terrain, at.z);
+                RaycastHit g;
+                if (top > bottom && Physics.Raycast(new Vector3(at.x, top, at.z), Vector3.down, out g, top - bottom, ObstacleMaskOf() | LayerMask.GetMask("Terrain"), QueryTriggerInteraction.Ignore))
+                {
+                    if (g.normal.y < 0.35f)
+                    {
+                        return false;                       // a wall or a steep face: nothing to stand on
+                    }
+                    surface = g.point;
+                    onObject = !(g.collider is TerrainCollider) && g.point.y > terrain + 0.12f;
+                }
+                if (surface.y < jumpFrom.y - 3.5f || surface.y > jumpFrom.y + clear + 0.1f)
+                {
+                    return false;
+                }
+                float bodyHeight = Mathf.Max(0.9f, Body.bounds.size.y * k * 0.6f);
+                float r = Mathf.Clamp(Mathf.Min(Body.bounds.extents.x, Body.bounds.extents.z) * 0.5f * k, 0.15f, 0.45f);
+                if (Physics.CheckCapsule(surface + Vector3.up * (r + 0.15f), surface + Vector3.up * Mathf.Max(bodyHeight, r + 0.3f), r, ObstacleMaskOf(), QueryTriggerInteraction.Ignore))
+                {
+                    return false;                           // inside a rock, under a low roof, in a wall
+                }
+                landing = surface + Vector3.up * 0.03f;
+                return true;
             }
 
             // The first walkable raised surface behind the front edge of an obstacle, with room above it for the animal.
@@ -1812,19 +2028,96 @@ namespace Oxide.Plugins
                 }
             }
 
-            // A jump into something too high: the animal hits it, hurts itself a little, whimpers and falls (with the sound of the hit and of the thing it hit).
+            // A jump or a full sprint into something solid: the animal hits it, hurts itself a little and falls (with the sound of the hit and of
+            // the thing it hit). A rider is thrown off, like from a horse.
             private void Crash()
             {
                 jumpCollision = false;
                 currentSpeed = 0f;
                 Gait = 1;
-                fallenUntil = Time.time + 2.2f;
+                fallenUntil = Time.time + 2.4f;
                 bm.BumpSound(jumpHitPoint, jumpHitSurface);
-                if (Animal != null && !bm.Play(Animal, "knockdown", "knock", "stumble", "hurt", "pain"))
-                {
-                    bm.Play(Animal, "sleep", "lie", "rest");        // an animal without a fall clip (the stag) goes down in its lying pose
-                }
+                FallAnimation(false);
                 Body.Hurt(Mathf.Max(2f, Body.MaxHealth() * bm.Cfg.Movement.CrashDamagePercent / 100f), Rust.DamageType.Blunt, null, false);
+                ThrowRider();
+            }
+
+            // The fall of each kind: the horse's own ragdoll; the knock-down of the cow, bull and calf; the sheep, ram and lamb have no
+            // knock-down, so they fall with their death animation and lie for a moment; the stag and the boar go down in their lying pose.
+            private bool restingFromFall;
+
+            private void FallAnimation(bool downhill)
+            {
+                if (Horse != null)
+                {
+                    Horse.RagdollHorse();
+                    return;
+                }
+                if (Animal == null)
+                {
+                    return;
+                }
+                InterruptClip();
+                ClearPose();
+                ClipRef knock = bm.Clips(Animal).FirstOrDefault(c => Has(c, downhill ? "canter_knockdown" : "stand_knockdown"))
+                    ?? bm.Clips(Animal).FirstOrDefault(c => Has(c, "knockdown") || Has(c, "stumble"));
+                if (knock != null)
+                {
+                    PlayClip(Animal, knock);
+                    return;
+                }
+                LivestockAnimal livestock = Animal as LivestockAnimal;
+                ClipRef down = bm.Clips(Animal).FirstOrDefault(c => Has(c, downhill ? "canter_death" : "death_front"))
+                    ?? bm.Clips(Animal).FirstOrDefault(c => Has(c, "death_front") || Has(c, "canter_death"));
+                if (livestock != null && down != null)
+                {
+                    PlayClip(Animal, down);
+                    livestock.SetResting(true);              // it lies there for a moment and gets up with the game's own animation
+                    restingFromFall = true;
+                    return;
+                }
+                if (!bm.Play(Animal, "sleep", "lie", "rest") && livestock != null)
+                {
+                    livestock.SetResting(true);
+                    restingFromFall = true;
+                }
+            }
+
+            private void EndFallPose()
+            {
+                if (!restingFromFall)
+                {
+                    return;
+                }
+                restingFromFall = false;
+                LivestockAnimal livestock = Animal as LivestockAnimal;
+                if (livestock != null && Valid(livestock))
+                {
+                    livestock.SetResting(false);
+                }
+            }
+
+            // A crash or a fall throws the rider (and the passengers) off, the way a horse does.
+            private void ThrowRider()
+            {
+                if (Kind != ControlKind.Ride || released || Player == null)
+                {
+                    return;
+                }
+                BasePlayer rider = Player;
+                Vector3 forward = Quaternion.Euler(0f, moveYaw, 0f) * Vector3.forward;
+                foreach (BaseMountable guestSeat in Guests.ToList())
+                {
+                    BasePlayer guest = guestSeat != null && !guestSeat.IsDestroyed ? guestSeat.GetMounted() : null;
+                    if (guest != null)
+                    {
+                        BasePlayer thrown = guest;
+                        guestSeat.DismountAllPlayers();
+                        bm.NextTick(() => bm.ThrowPlayer(thrown, forward));
+                    }
+                }
+                bm.StopControl(rider, "thrown off");
+                bm.NextTick(() => bm.ThrowPlayer(rider, forward));
             }
 
             // The horse: an impulse over what its physics lets it clear, with a push-off and a landing sound.
@@ -1840,15 +2133,25 @@ namespace Oxide.Plugins
                 nextJump = Time.time + bm.Cfg.Movement.JumpCooldown;
                 horseAir = true;
                 horseAirSince = Time.time;
-                bm.StatsSpend(this, 5f);
+                bm.StatsSpend(this, bm.Cfg.Stamina.Jump);
                 bm.LandSound(Body.transform.position);
             }
 
-            private void HorseAttack()
+            // F as the horse: rear up and strike to the front, or - with the camera behind it - kick behind (the horse has no kick animation:
+            // the hit and its sound only).
+            private void HorseAttack(bool rear)
             {
                 nextAttack = Time.time + bm.Cfg.Horse.AttackCooldown;
-                bm.StatsSpend(this, 4f);
-                if (bm.Stable != null)
+                bm.StatsSpend(this, bm.Cfg.Stamina.Attack);
+                if (bm.Stable == null)
+                {
+                    return;
+                }
+                if (rear)
+                {
+                    bm.Stable.PlayerKickBack(Horse, this);
+                }
+                else
                 {
                     bm.Stable.PlayerStrike(Horse, this);
                 }
@@ -1857,9 +2160,9 @@ namespace Oxide.Plugins
             // Running down a very steep slope: the animal may stumble and fall (and sometimes does not get up), like the horse.
             private void CheckSlope(float dt)
             {
-                if (bm.Cfg.Movement.SlopeFallChance <= 0f || Time.time < slopeCheckAt || currentSpeed < GaitSpeed(3) * 0.9f)
+                if (bm.Cfg.Movement.SlopeFallChance <= 0f || Time.time < slopeCheckAt || !AtFullSprint())
                 {
-                    return;
+                    return;                                     // only a full sprint down a steep slope ends in a fall
                 }
                 slopeCheckAt = Time.time + 0.5f;
                 Vector3 pos = Body.transform.position;
@@ -1874,23 +2177,26 @@ namespace Oxide.Plugins
                 {
                     return;
                 }
-                fallenUntil = Time.time + 2.6f;
+                fallenUntil = Time.time + 2.8f;
                 currentSpeed = 0f;
                 Gait = 1;
-                if (Horse != null)
+                FallAnimation(true);                            // the horse's own fall; the others with the fall of their kind
+                if (Horse == null)
                 {
-                    Horse.RagdollHorse();                       // the horse's own fall, with its sounds
-                }
-                else
-                {
-                    bm.Play(Animal, "knockdown", "knock", "stumble", "death_front", "canter_death");
                     bm.BumpSound(pos + Vector3.up * 0.5f, "dirt");
                 }
                 Body.Hurt(Mathf.Max(3f, Body.MaxHealth() * bm.Cfg.Movement.CrashDamagePercent / 100f), Rust.DamageType.Fall, null, false);
+                ThrowRider();
                 if (UnityEngine.Random.value < bm.Cfg.Movement.SlopeFallDeathChance)
                 {
                     Body.Hurt(Body.health + 1f, Rust.DamageType.Fall);
                 }
+            }
+
+            // The fastest gait of the animal, nearly at its top speed: only then does it crash into walls, run into others and fall on slopes.
+            public bool AtFullSprint()
+            {
+                return Gait >= 5 && Mathf.Abs(currentSpeed) >= GaitSpeed(5) * 0.8f;
             }
 
             // Is there an object surface ahead that is a little higher than where the animal stands (a roof, a ramp, a floor edge, a crate)?
@@ -1918,7 +2224,12 @@ namespace Oxide.Plugins
                 seatOffset += Vector3.up * delta;
                 if (Seat != null && !Seat.IsDestroyed)
                 {
-                    Seat.transform.localPosition = seatOffset + Vector3.up * seatLift;
+                    // moved straight up or down in the world (the seat may hang on a bone with axes of its own); the height stays as set
+                    Transform parent = Seat.transform.parent;
+                    Vector3 world = Vector3.up * delta * ModelScale(Body);
+                    seatBaseLocal += parent != null ? parent.InverseTransformVector(world) : world;
+                    seatLift = RequiredLift();
+                    ApplySeatLift(Seat);
                     Seat.SendNetworkUpdate();
                 }
             }
@@ -1996,6 +2307,22 @@ namespace Oxide.Plugins
 
             // ------------------------------------------------------------ the physics tick
 
+            // The heading of the animal is the plugin's: the navigation agent (sliding along a wall) and the root motion of the game's clips
+            // (an idle, a fall) may turn the body between two physics steps, and the camera of the animal form turns with the body. The heading
+            // is set again at the end of every frame, so the camera never swings round on its own.
+            private void LateUpdate()
+            {
+                if (released || Animal == null || Body == null || Body.IsDestroyed || Body.IsDead())
+                {
+                    return;
+                }
+                Quaternion want = Quaternion.Euler(0f, moveYaw + yawOffset, 0f);
+                if (Quaternion.Angle(Body.transform.rotation, want) > 0.5f)
+                {
+                    Body.transform.rotation = want;
+                }
+            }
+
             private void FixedUpdate()
             {
                 if (released)
@@ -2031,6 +2358,10 @@ namespace Oxide.Plugins
                     TickJump(dt);
                     KeepAboveTerrain();
                     return;
+                }
+                if (restingFromFall && Time.time >= fallenUntil - 0.8f)
+                {
+                    EndFallPose();                      // gets up in time to walk on when the fall is over
                 }
                 if (Time.time < fallenUntil)
                 {
@@ -2143,7 +2474,7 @@ namespace Oxide.Plugins
                     Vector3 wallPoint;
                     string wallSurface;
                     step = bm.WallSlide(Body, pos, step, ref currentSpeed, out hitWall, out wallPoint, out wallSurface);       // no walking through walls
-                    if (hitWall && speedBefore > GaitSpeed(3) * 0.75f && Time.time >= nextWallCrash)
+                    if (hitWall && speedBefore > GaitSpeed(5) * 0.8f && Gait >= 5 && Time.time >= nextWallCrash)
                     {
                         nextWallCrash = Time.time + 3f;
                         jumpHitPoint = wallPoint;
@@ -2236,6 +2567,7 @@ namespace Oxide.Plugins
                 Vector3 v = horseBody.linearVelocity;
                 horseBody.linearVelocity = new Vector3(forward.x * currentSpeed, v.y, forward.z * currentSpeed);
                 bm.LeashHorse(this, horseBody);
+                HorseWallCheck(dt);
                 if (horseBody.IsSleeping())
                 {
                     horseBody.WakeUp();
@@ -2257,6 +2589,48 @@ namespace Oxide.Plugins
                 CheckSlope(dt);
             }
 
+            // The horse at a full gallop that is stopped dead by a wall or an object: it falls (its own ragdoll) and hurts itself, like the
+            // other animals. A player or an animal in the way is no wall - running into them is an attack.
+            private float horseStall;
+
+            private void HorseWallCheck(float dt)
+            {
+                if (!AtFullSprint() || Time.time < nextWallCrash || horseBody == null)
+                {
+                    horseStall = 0f;
+                    return;
+                }
+                Vector3 v = horseBody.linearVelocity;
+                v.y = 0f;
+                horseStall = v.magnitude < Mathf.Abs(currentSpeed) * 0.35f ? horseStall + dt : 0f;
+                if (horseStall < 0.2f)
+                {
+                    return;
+                }
+                horseStall = 0f;
+                Vector3 forward = Horse.transform.forward;
+                forward.y = 0f;
+                RaycastHit hit;
+                if (!Physics.SphereCast(Horse.transform.position + Vector3.up * 1.1f, 0.4f, forward.normalized, out hit, 2.6f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore) || hit.normal.y > 0.35f)
+                {
+                    return;
+                }
+                BaseEntity thing = hit.GetEntity();
+                if (thing is BasePlayer || thing is BaseNPC2 || thing is RidableHorse)
+                {
+                    return;
+                }
+                nextWallCrash = Time.time + 3f;
+                jumpHitPoint = hit.point;
+                jumpHitSurface = Beastmaster.ColliderSurface(hit.collider);
+                currentSpeed = 0f;
+                Gait = 1;
+                fallenUntil = Time.time + 2.8f;
+                bm.BumpSound(jumpHitPoint, jumpHitSurface);
+                Horse.RagdollHorse();
+                Body.Hurt(Mathf.Max(2f, Body.MaxHealth() * bm.Cfg.Movement.CrashDamagePercent / 100f), Rust.DamageType.Blunt, null, false);
+            }
+
             // The head turns slowly toward where the camera looks, less the faster the animal runs, never past its neck.
             // The FSM normally drives this through NPCNetworking, which does not tick while the AI is parked.
             private void UpdateLook(float speedFrac)
@@ -2267,10 +2641,15 @@ namespace Oxide.Plugins
                 }
                 nextLook = Time.time + 0.1f;
                 Quaternion body = Quaternion.Euler(0f, moveYaw + yawOffset, 0f);
-                Vector3 local = Quaternion.Inverse(body) * Player.eyes.HeadForward();
+                Vector3 local = Quaternion.Inverse(body) * CameraForward();
                 float yaw = Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg;
                 float pitch = -Mathf.Asin(Mathf.Clamp(local.y, -1f, 1f)) * Mathf.Rad2Deg;
-                float maxYaw = Mathf.Lerp(70f, 12f, speedFrac);
+                if (Mathf.Abs(yaw) > 120f)
+                {
+                    yaw = 0f;                           // the camera behind the animal: it looks ahead, never over its own back
+                    pitch = 0f;
+                }
+                float maxYaw = Mathf.Lerp(70f, 35f, speedFrac);
                 Vector3 desired = body * Quaternion.Euler(Mathf.Clamp(pitch, -25f, 30f), Mathf.Clamp(yaw, -maxYaw, maxYaw), 0f) * Vector3.forward;
                 Vector3 smoothed = Vector3.RotateTowards(lookDir, desired, 70f * Mathf.Deg2Rad * 0.1f, 0f);
                 if (Vector3.Angle(smoothed, lookDir) < 0.5f)
@@ -2282,17 +2661,18 @@ namespace Oxide.Plugins
                 Animal.SendNetworkUpdate();
             }
 
-            // The body sits at the seat's position. Antihack (InsideTerrain) kills and kicks a player whose position is more
-            // than 0.3 m under the terrain - the OnPlayerViolation hook can stop the kick but not the kill - so the seat never
-            // dips under the surface: on small creatures, slopes and jump arcs it is lifted a little instead.
+            // The body sits at the seat's position. Antihack (InsideTerrain) kills and kicks a player whose position is more than 0.3 m under
+            // the terrain - the OnPlayerViolation hook can stop the kick but not the kill. The seat stays where it was set (/bm seat up|down
+            // included); only when it would really sink that deep (a tiny creature in a hollow, a jump arc into a slope) is it lifted, and
+            // it goes back down as soon as that is over.
             private float RequiredLift()
             {
-                Vector3 seatBase = Body.transform.TransformPoint(seatOffset);
+                Vector3 seatBase = SeatBaseWorld();
                 if (TerrainMeta.HeightMap == null || (TerrainMeta.Collision != null && TerrainMeta.Collision.GetIgnore(seatBase)))
                 {
                     return 0f;
                 }
-                return Mathf.Max(0f, TerrainMeta.HeightMap.GetHeight(seatBase) + 0.15f - seatBase.y) / ModelScale(Body);
+                return Mathf.Max(0f, TerrainMeta.HeightMap.GetHeight(seatBase) - 0.2f - seatBase.y);
             }
 
             private void KeepAboveTerrain()
@@ -2301,11 +2681,15 @@ namespace Oxide.Plugins
                 {
                     return;
                 }
+                if (Kind == ControlKind.Ride)
+                {
+                    ClampRiderView();
+                }
                 float lift = RequiredLift();
-                if (lift > seatLift || lift < seatLift - 0.1f)
+                if (lift > seatLift + 0.01f || (seatLift > 0f && lift < seatLift - 0.05f))
                 {
                     seatLift = lift;
-                    Seat.transform.localPosition = seatOffset + Vector3.up * seatLift;
+                    ApplySeatLift(Seat);
                     Seat.SendNetworkUpdate();
                 }
             }

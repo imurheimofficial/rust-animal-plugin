@@ -3,8 +3,9 @@
 Ride, tame, command and *become* animals on a Rust server (Oxide / Carbon).
 Deliverable: one C# file, `dist/Beastmaster.cs`, uploaded to the server at wespner.eu.
 
-**Status:** version 1.1.0 (2026-10-10) - every requested feature is built; the audit of this version and what only a real
-player can confirm are in [docs/AUDIT.md](docs/AUDIT.md). Install: [INSTALL.md](INSTALL.md).
+**Status:** version 1.2.0 (2026-10-10) - the owner's test of 1.1.0 is worked through: the horse's inventory on every animal, saddles
+on the back, stamina, seats fixed to the spine, camera-true attacks and more. The changes, what is uncertain and what to test are in
+[docs/AUDIT.md](docs/AUDIT.md). Install: [INSTALL.md](INSTALL.md).
 
 ## Rules set by the owner
 1. Everything the player sees is **English** - menu, help, chat, UI, config comments.
@@ -16,7 +17,7 @@ player can confirm are in [docs/AUDIT.md](docs/AUDIT.md). Install: [INSTALL.md](
 | File | What it is |
 |---|---|
 | [INSTALL.md](INSTALL.md) | Installing, permissions, commands, updating |
-| [docs/AUDIT.md](docs/AUDIT.md) | The audit of version 1.1.0: the bugs found, how they were fixed, what to test |
+| [docs/AUDIT.md](docs/AUDIT.md) | The changes of 1.2.0 and the audit of 1.1.0 (Czech): what was fixed, what is uncertain, what to test |
 | [docs/STATUS.md](docs/STATUS.md) | Build status against the specification |
 | [docs/SPEC.md](docs/SPEC.md) | What to build: every requirement from the brief, numbered |
 | [docs/RESEARCH.md](docs/RESEARCH.md) | What was verified against the real game/server, engine limits |

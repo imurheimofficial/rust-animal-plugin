@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------------------------------
 // Beastmaster - generated file. DO NOT EDIT: edit src/*.cs and run tools/build.ps1.
-// Modules: Beastmaster.cs, Animals.cs, Boss.cs, Climate.cs, Combat.cs, Commands.cs, Config.cs, Control.cs, Data.cs, Follower.cs, Form.cs, Gear.cs, Guests.cs, Horse.cs, Interact.cs, Lang.cs, Lead.cs, Menu.cs, Movement.cs, Play.cs, Ritual.cs, Species.cs, Spray.cs, Stats.cs, Tame.cs, TameFlows.cs, Tests.cs, Util.cs, Wild.cs
+// Modules: Beastmaster.cs, Animals.cs, Boss.cs, Climate.cs, Combat.cs, Commands.cs, Config.cs, Control.cs, Data.cs, Follower.cs, Form.cs, Gear.cs, Guests.cs, Horse.cs, Interact.cs, Lang.cs, Lead.cs, Life.cs, Menu.cs, Movement.cs, Play.cs, Ritual.cs, Species.cs, Spray.cs, Stats.cs, Tame.cs, TameFlows.cs, Tests.cs, Util.cs, Wild.cs
 // ------------------------------------------------------------------------------------------
 using System.Collections.Generic;
 using System.Globalization;
@@ -20,7 +20,7 @@ using UnityEngine;
 namespace Oxide.Plugins
 {
     // ======================================== Beastmaster.cs
-    [Info("Beastmaster", "Claude", "1.1.0")]
+    [Info("Beastmaster", "Claude", "1.2.0")]
     [Description("Ride, tame, command and become animals: horses, livestock, predators and small creatures.")]
     public partial class Beastmaster : RustPlugin
     {
@@ -1128,6 +1128,45 @@ namespace Oxide.Plugins
             }
         }
 
+        // The length of a clip in seconds (the in-place clip of root-motion data), read by reflection; 8 s when it cannot be read.
+        private static readonly Dictionary<UnityEngine.Object, float> clipLengths = new Dictionary<UnityEngine.Object, float>();
+
+        internal static float ClipLength(ClipRef clip)
+        {
+            if (clip == null || clip.Asset == null)
+            {
+                return 0f;
+            }
+            float length;
+            if (clipLengths.TryGetValue(clip.Asset, out length))
+            {
+                return length;
+            }
+            length = 8f;
+            try
+            {
+                object animation = clip.Asset;
+                if (clip.Asset is RootMotionData)
+                {
+                    animation = typeof(RootMotionData).GetField("inPlaceAnimation", AnyInstance)?.GetValue(clip.Asset) ?? clip.Asset;
+                }
+                PropertyInfo prop = animation.GetType().GetProperty("length", BindingFlags.Instance | BindingFlags.Public);
+                if (prop != null)
+                {
+                    object v = prop.GetValue(animation, null);
+                    if (v is float && (float)v > 0.05f)
+                    {
+                        length = (float)v;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+            }
+            clipLengths[clip.Asset] = length;
+            return length;
+        }
+
         internal ClipRef FindClip(BaseNPC2 animal, params string[] words)
         {
             foreach (string word in words)
@@ -1211,26 +1250,41 @@ namespace Oxide.Plugins
         internal static Vector3 BackPoint(BaseNPC2 animal)
         {
             Bounds b = animal.bounds;
-            Vector3 best = new Vector3(0f, b.max.y * 0.8f, b.center.z);
-            bool found = false;
-            if (animal.model != null && animal.model.boneTransforms != null)
+            Transform bone = BackBone(animal);
+            if (bone == null)
             {
-                foreach (Transform bone in animal.model.boneTransforms)
+                return new Vector3(0f, b.max.y * 0.8f, b.center.z);
+            }
+            Vector3 local = animal.transform.InverseTransformPoint(bone.position);
+            return new Vector3(0f, local.y, local.z);
+        }
+
+        // The spine bone in the middle of the back that sits highest: the saddle and the rider are fixed to it, so they move with the back
+        // when the animal walks and runs, the way the horse's rider does.
+        internal static Transform BackBone(BaseNPC2 animal)
+        {
+            if (animal == null || animal.model == null || animal.model.boneTransforms == null)
+            {
+                return null;
+            }
+            Bounds b = animal.bounds;
+            Transform best = null;
+            float bestY = float.MinValue;
+            foreach (Transform bone in animal.model.boneTransforms)
+            {
+                if (bone == null || bone.name.IndexOf("spine", StringComparison.OrdinalIgnoreCase) < 0)
                 {
-                    if (bone == null || bone.name.IndexOf("spine", StringComparison.OrdinalIgnoreCase) < 0)
-                    {
-                        continue;
-                    }
-                    Vector3 local = animal.transform.InverseTransformPoint(bone.position);
-                    if (Mathf.Abs(local.z - b.center.z) > b.extents.z * 0.6f)
-                    {
-                        continue;
-                    }
-                    if (!found || local.y > best.y)
-                    {
-                        best = new Vector3(0f, local.y, local.z);
-                        found = true;
-                    }
+                    continue;
+                }
+                Vector3 local = animal.transform.InverseTransformPoint(bone.position);
+                if (Mathf.Abs(local.z - b.center.z) > b.extents.z * 0.6f)
+                {
+                    continue;
+                }
+                if (local.y > bestY)
+                {
+                    bestY = local.y;
+                    best = bone;
                 }
             }
             return best;
@@ -1432,10 +1486,7 @@ namespace Oxide.Plugins
                 var info = new BossInfo { Kind = kind, Mini = mini };
                 Bm.Data.Bosses[tag] = info;
                 e.Spawn();
-                if (kind == "ram")
-                {
-                    MakeMale(e as LivestockAnimal);
-                }
+                Bm.EnforceLook(e, sp);
                 Setup(e, info, true);
                 Bm.RunEffect(Bm.Cfg.Boss.SpawnEffect, pos);
                 // no chat line: the appearance of a boss is a surprise for the players (the burst of fire and the roar are heard and seen)
@@ -2365,14 +2416,17 @@ namespace Oxide.Plugins
         internal string ResolveHits(BaseNPC2 animal, BasePlayer owner, float heading, AttackParams p, bool rear)
         {
             var summary = new List<string>();
-            Bounds b = animal.bounds;
             float k = ModelScale(animal);          // a bigger animal (a boss) reaches further
             Vector3 facing = Quaternion.Euler(0f, heading, 0f) * (rear ? Vector3.back : Vector3.forward);
-            Vector3 origin = animal.transform.position + Vector3.up * b.center.y * k + facing * (rear ? b.extents.z * 0.5f : b.extents.z * 0.8f) * k;
+            Vector3 center;
+            // the hit lands right at the nose (or, for a kick, right behind the tail) - never a metre in front of the animal
+            Vector3 origin = AttackTip(animal, heading, rear, out center);
+            float reach = (p.Range > 0f && p.Range < Cfg.Combat.HitReach ? p.Range : Cfg.Combat.HitReach) * k;
             var found = new List<BaseEntity>();
-            Vis.Entities(origin, p.Range * k + 1.5f, found);
+            Vis.Entities(origin, reach + 2f * k, found);
             var done = new HashSet<BaseEntity>();
             float scale = Cfg.Combat.DamageScale * ClimateDamageFactor(animal) * BossDamageFactor(animal, p.Damage);
+            float halfAngle = rear ? 70f : Mathf.Clamp(p.Angle, 30f, 70f);
             foreach (BaseEntity e in found)
             {
                 if (!Valid(e) || e == animal || (owner != null && e == owner) || e.GetParentEntity() == animal || !done.Add(e))
@@ -2380,9 +2434,9 @@ namespace Oxide.Plugins
                     continue;
                 }
                 Vector3 point = e.ClosestPoint(origin);
-                Vector3 v = point - origin;
+                Vector3 v = point - center;
                 v.y = 0f;
-                if (v.magnitude > p.Range * k || (p.Angle < 180f && v.sqrMagnitude > 0.01f && Vector3.Angle(facing, v) > p.Angle))
+                if (Vector3.Distance(point, origin) > reach || (v.sqrMagnitude > 0.01f && Vector3.Angle(facing, v) > halfAngle))
                 {
                     continue;
                 }
@@ -2422,6 +2476,17 @@ namespace Oxide.Plugins
                 }
             }
             return string.Join(", ", summary.ToArray());
+        }
+
+        // The tip of the attack: the nose of the animal, or the end of its body behind it for a kick, at the height of the middle of the body.
+        internal static Vector3 AttackTip(BaseEntity animal, float heading, bool rear, out Vector3 center)
+        {
+            Bounds b = animal.bounds;
+            float k = ModelScale(animal);
+            Quaternion rot = Quaternion.Euler(0f, heading, 0f);
+            center = animal.transform.position + Vector3.up * b.center.y * k;
+            float along = rear ? (b.center.z - b.extents.z) : (b.center.z + b.extents.z);
+            return center + rot * Vector3.forward * (along * k);
         }
 
         // The sound of what was hit: the thud of flesh, or of the wood, rock or metal of an object (the game's own impact effects).
@@ -2533,7 +2598,7 @@ namespace Oxide.Plugins
             {
                 return;
             }
-            AttackParams p = new AttackParams { Damage = 3f, Delay = 0f, Type = Rust.DamageType.Bite, Range = 1.0f, Angle = 60f, Push = Vector2.zero };
+            AttackParams p = new AttackParams { Damage = 3f, Delay = 0f, Type = Rust.DamageType.Bite, Range = 0.35f, Angle = 60f, Push = Vector2.zero };
             string summary = ResolveHits(d.Animal, d.Player, d.Heading, p, false);
             if (!string.IsNullOrEmpty(summary))
             {
@@ -2549,12 +2614,13 @@ namespace Oxide.Plugins
             {
                 return d.Heading;
             }
-            Bounds b = d.Animal.bounds;
             float heading = d.Heading;
             Vector3 facing = Quaternion.Euler(0f, heading, 0f) * Vector3.forward;
-            Vector3 origin = d.Animal.transform.position + Vector3.up * b.center.y;
+            Vector3 origin;
+            Vector3 nose = AttackTip(d.Animal, heading, false, out origin);
+            float reach = Vector3.Distance(new Vector3(nose.x, origin.y, nose.z), origin) + Cfg.Combat.HitReach * ModelScale(d.Animal) + 0.4f;
             var found = new List<BaseEntity>();
-            Vis.Entities(origin, p.Range + b.extents.z + 1.2f, found);
+            Vis.Entities(origin, reach + 1f, found);
             BaseEntity best = null;
             float bestScore = float.MaxValue;
             foreach (BaseEntity e in found)
@@ -2571,7 +2637,7 @@ namespace Oxide.Plugins
                 }
                 Vector3 to = e.ClosestPoint(origin) - origin;
                 to.y = 0f;
-                if (to.magnitude > p.Range + b.extents.z)
+                if (to.magnitude > reach)
                 {
                     continue;
                 }
@@ -3004,10 +3070,13 @@ namespace Oxide.Plugins
                 case "breed":
                     BreedCommand(player, reply);
                     return;
+                case "bag":
+                    BagCommand(player, reply);
+                    return;
                 case "ride":
                 case "form":
                     {
-                        BaseNPC2 animal = AnimalInSight(player, 12f);
+                        BaseCombatEntity animal = (BaseCombatEntity)AnimalInSight(player, 12f) ?? (sub == "form" ? HorseInSight(player, 12f) : null);
                         if (animal == null) { reply(L("NotLooking", player.UserIDString, 12)); return; }
                         bool ride = sub == "ride";
                         if (!ride && !IsAdmin(player) && !Has(player, PermTransform)) { reply(L("NoPermission")); return; }
@@ -3020,6 +3089,9 @@ namespace Oxide.Plugins
                     }
                 case "seat":
                     SeatCommand(player, args, reply);
+                    return;
+                case "saddle":
+                    SaddleCommand(player, args, reply);
                     return;
                 case "cmd":
                     CommandAnimals(player, args, reply);
@@ -3072,15 +3144,16 @@ namespace Oxide.Plugins
         private string KeysText()
         {
             return "As an animal: W/A/S/D move, Shift faster, Ctrl brake, S while running = 180 turn, Space jump (onto raised surfaces too), "
-                + "F attack (camera behind the animal = rear attack), E eat / drink / pick up / open, R another skin (cow, bull, sheep, ram, horse), G or Ctrl + G night vision (goggles in the inventory), "
-                + "B gestures (or /bm lie, sit, roar, look, stand), X back to human (X at the animal you left = become it again, E at it = ride it, Ctrl + E at it = its bag). "
-                + "Riding: the same keys, G or R switch first / third person, X get off. "
+                + "F attack (camera behind the animal = rear kick), E eat / drink / pick up / open, Ctrl + E your animal's inventory, R another skin (cow, bull, sheep, ram, horse), G or Ctrl + G night vision (goggles in the inventory), "
+                + "B gestures (or /bm lie, sit, roar, look, stand), X back to human (X at the animal you left = become it again, E at it = ride it with a saddle, Ctrl + E at it = its inventory). "
+                + "At an animal: E ride (with a saddle) or its inventory, Ctrl + E its inventory or a player's leash, hold E for all choices. "
+                + "Riding: the same keys, G or R switch first / third person, X get off. Running uses stamina (the yellow bar). "
                 + "Ctrl + R opens the menu (empty hands, riding or as an animal), also /bm. F5 and H work after a one-time bind f5 bm.menu and bind h bm.nv in the F1 console.";
         }
 
         private string HelpText()
         {
-            return "Beastmaster " + Version + "\n" + KeysText() + "\nCommands: /bm menu, species, keys, view, preset, cam, seat, revert, cmd follow|wait|guard|attack|release, ride, form, name, breed, give, feed, nv"
+            return "Beastmaster " + Version + "\n" + KeysText() + "\nCommands: /bm menu, species, keys, view, preset, cam, seat, saddle, bag, revert, cmd follow|wait|guard|attack|release, ride, form, name, breed, give, feed, nv"
                 + (Cfg.Features.Spawning ? ", spawn <species> [count] [tamed|wild] (also /sp)" : string.Empty) + "\nAdmin: bm.enable, bm.disable, bm.grant, bm.revoke, bm.access, bm.grantgroup, bm.revokegroup, bm.clear, bm.reload, bm.selftest, bm.debug, bm.boss, bm.horses, bm.run.";
         }
 
@@ -3181,10 +3254,7 @@ namespace Oxide.Plugins
             entity.skinID = tag;
             Data.Spawned.Add(tag);
             entity.Spawn();
-            if (species.Id == "ram")
-            {
-                MakeMale(entity as LivestockAnimal);
-            }
+            EnforceLook(entity, species);           // a sheep is a sheep, a ram a ram, a cow a cow, a bull a bull
             RidableHorse horse = entity as RidableHorse;
             if (horse != null && Stable != null)
             {
@@ -3260,12 +3330,100 @@ namespace Oxide.Plugins
         // The seat prefabs to try for riders on animals (the right look differs per species; set Riding.SeatPrefab in the config).
         private static readonly string[] SeatCandidates =
         {
-            "assets/prefabs/vehicle/seats/snowmobilepassengerseat.prefab",
             "assets/prefabs/vehicle/seats/horsesaddle.prefab",
+            "assets/prefabs/vehicle/seats/snowmobilepassengerseat.prefab",
             "assets/prefabs/vehicle/seats/motorbikepassengerseat.prefab",
             "assets/prefabs/vehicle/seats/bikepassengerseat.prefab",
             "assets/prefabs/vehicle/seats/sledseatfront.prefab",
         };
+
+        // /bm saddle lift|scale|turn <value> | reset (admins): the saddle model on the back of the species one looks at, rides or is, saved per
+        // species, so that it can be fitted by eye in the game.
+        private void SaddleCommand(BasePlayer player, string[] args, Action<string> reply)
+        {
+            if (!IsAdmin(player))
+            {
+                reply(L("NoPermission"));
+                return;
+            }
+            Driver d = DriverOf(player);
+            BaseEntity target = d != null ? (BaseEntity)d.Body : AnimalInSight(player, 12f, 30f);
+            SpeciesDef sp = target != null ? SpeciesOf(target) : null;
+            if (sp == null || target is RidableHorse || !sp.Gear)
+            {
+                reply("Look at an animal that can wear a saddle (the horse shows its own), ride it or be it.");
+                return;
+            }
+            SpeciesOverride o;
+            if (!Cfg.Species.TryGetValue(sp.Id, out o))
+            {
+                o = new SpeciesOverride();
+                Cfg.Species[sp.Id] = o;
+            }
+            string what = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
+            float v;
+            switch (what)
+            {
+                case "lift":
+                    if (args.Length < 2 || !float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out v))
+                    {
+                        reply("Usage: /bm saddle lift <metres> - added to the height it has now, e.g. 0.03 or -0.03.");
+                        return;
+                    }
+                    o.SaddleLift = (o.SaddleLift ?? 0f) + v;
+                    break;
+                case "scale":
+                    if (args.Length < 2 || !float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out v))
+                    {
+                        reply("Usage: /bm saddle scale <factor> - 1 = the size the plugin works out, e.g. 0.9 or 1.15.");
+                        return;
+                    }
+                    o.SaddleScale = Mathf.Clamp(v, 0.2f, 3f);
+                    break;
+                case "turn":
+                    {
+                        float x, y, z;
+                        if (args.Length < 4 || !float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out x)
+                            || !float.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out y) || !float.TryParse(args[3], NumberStyles.Float, CultureInfo.InvariantCulture, out z))
+                        {
+                            reply("Usage: /bm saddle turn <x> <y> <z> - degrees added to the turn of the model, e.g. 0 180 0 or -90 0 0.");
+                            return;
+                        }
+                        o.SaddleTurn = x.ToString(CultureInfo.InvariantCulture) + " " + y.ToString(CultureInfo.InvariantCulture) + " " + z.ToString(CultureInfo.InvariantCulture);
+                        break;
+                    }
+                case "reset":
+                    o.SaddleLift = null;
+                    o.SaddleScale = null;
+                    o.SaddleTurn = null;
+                    break;
+                default:
+                    reply("Saddle of the " + sp.Display.ToLowerInvariant() + ": lift " + (o.SaddleLift ?? 0f).ToString("0.00", CultureInfo.InvariantCulture) + " m, scale " + (o.SaddleScale ?? 1f).ToString("0.00", CultureInfo.InvariantCulture)
+                        + ", turn " + (string.IsNullOrEmpty(o.SaddleTurn) ? "0 0 0" : o.SaddleTurn) + ". Change it with /bm saddle lift <m> | scale <factor> | turn <x> <y> <z> | reset (saved for the species).");
+                    return;
+            }
+            SaveConfig();
+            RefreshSaddlesOf(sp);
+            reply("Saddle of the " + sp.Display.ToLowerInvariant() + ": lift " + (o.SaddleLift ?? 0f).ToString("0.00", CultureInfo.InvariantCulture) + " m, scale " + (o.SaddleScale ?? 1f).ToString("0.00", CultureInfo.InvariantCulture)
+                + ", turn " + (string.IsNullOrEmpty(o.SaddleTurn) ? "0 0 0" : o.SaddleTurn) + " (saved).");
+        }
+
+        // The configured seat, or - when this game build has no such prefab - the first candidate it has.
+        internal string UsableSeat(string prefab)
+        {
+            if (!string.IsNullOrEmpty(prefab) && GameManager.server.FindPrefab(prefab) != null)
+            {
+                return prefab;
+            }
+            foreach (string candidate in SeatCandidates)
+            {
+                if (GameManager.server.FindPrefab(candidate) != null)
+                {
+                    return candidate;
+                }
+            }
+            return prefab;
+        }
 
         private void SeatCommand(BasePlayer player, string[] args, Action<string> reply)
         {
@@ -3348,6 +3506,8 @@ namespace Oxide.Plugins
             [JsonProperty("Movement")] public MovementCfg Movement = new MovementCfg();
             [JsonProperty("Combat")] public CombatCfg Combat = new CombatCfg();
             [JsonProperty("Animal form")] public FormCfg Form = new FormCfg();
+            [JsonProperty("Stamina (like the horse's)")] public StaminaCfg Stamina = new StaminaCfg();
+            [JsonProperty("Animal life (prompts, dung, eggs, wild jumps)")] public LifeCfg Life = new LifeCfg();
             [JsonProperty("Taming")] public TamingCfg Taming = new TamingCfg();
             [JsonProperty("Gear")] public GearCfg Gear = new GearCfg();
             [JsonProperty("Transformation ritual")] public RitualCfg Ritual = new RitualCfg();
@@ -3406,8 +3566,10 @@ namespace Oxide.Plugins
             [JsonProperty("Riding needs a tamed animal (standard species)")] public bool RequireTame = true;
             [JsonProperty("Riding needs a saddle in the animal's gear (standard species)")] public bool RequireSaddle = true;
             [JsonProperty("Who may ride an owned animal (owner, team, friends, clan, anyone)")] public string Ownership = "team";
-            [JsonProperty("Seat used for riders on non-horse animals")] public string SeatPrefab = "assets/prefabs/vehicle/seats/snowmobilepassengerseat.prefab";
-            [JsonProperty("Seat of the second rider (double saddle)")] public string RearSeatPrefab = "assets/prefabs/vehicle/seats/snowmobilepassengerseat.prefab";
+            [JsonProperty("Seat used for riders on non-horse animals (the horse's saddle seat: the rider sits the way he sits on a horse)")] public string SeatPrefab = "assets/prefabs/vehicle/seats/horsesaddle.prefab";
+            [JsonProperty("Seat of the second rider (double saddle)")] public string RearSeatPrefab = "assets/prefabs/vehicle/seats/horsesaddle.prefab";
+            [JsonProperty("The rider's seat is fixed to the animal's spine, so the rider moves with its back like on the horse")] public bool SeatOnSpine = true;
+            [JsonProperty("A rider can turn his head this far to each side (degrees, like on the horse; 0 = no limit)")] public float ViewClamp = 100f;
             [JsonProperty("Maximum distance to mount (m)")] public float MountDistance = 3.5f;
             [JsonProperty("Block riding in safe zones")] public bool BlockInSafeZone = false;
             [JsonProperty("Maximum riders on the whole server (0 = unlimited)")] public int MaxRiders = 0;
@@ -3424,6 +3586,8 @@ namespace Oxide.Plugins
             [JsonProperty("First person: height of the eyes as a share of the animal's height")] public float EyeHeight = 0.98f;
             [JsonProperty("First person: how far forward the eyes sit (share of the distance from the middle of the body to the nose)")] public float EyeForward = 0.58f;
             [JsonProperty("Height of the camera pivot as a share of the animal's height (every species also has its own factor)")] public float PivotHeight = 0.95f;
+            [JsonProperty("Animal form: the game lowers the camera of a crouching player; Ctrl (the brake) lifts the hidden body by this much so the camera stays (m)")] public float DuckLift = 0.6f;
+            [JsonProperty("Animal form: refresh the network subscriptions when the form begins and ends (makes the game load the surroundings again; switch on only if other players stay unseen in animal form)")] public bool RefreshSubscriptions = false;
             [JsonProperty("First person of the animal form (spectate = the human is completely invisible, seat = hidden seat, legs may show)")] public string FirstPersonMode = "spectate";
             [JsonProperty("Seat of the hidden body when the first person mode is seat")] public string FirstPersonSeat = "assets/bundled/prefabs/static/chair.invisible.static.prefab";
         }
@@ -3441,6 +3605,8 @@ namespace Oxide.Plugins
             [JsonProperty("Speed bonus of basic horseshoes (m/s)")] public float ShoesBasic = 1.5f;
             [JsonProperty("Speed bonus of high quality horseshoes (m/s)")] public float ShoesAdvanced = 2.5f;
             [JsonProperty("Speed change of the saddle bag (m/s)")] public float SaddleBag = -1.0f;
+            [JsonProperty("Speed change of the wooden and of the roadsign horse armour (m/s)")] public float ArmorWood = -2.25f;
+            public float ArmorRoadsign = -4.5f;
             [JsonProperty("Turn rate in degrees per second at standstill / at full speed")] public float TurnRateSlow = 150f;
             public float TurnRateFast = 105f;
             [JsonProperty("Water: slows animals like the horse")] public bool WaterSlowdown = true;
@@ -3472,7 +3638,9 @@ namespace Oxide.Plugins
             [JsonProperty("Auto aim: widest angle to a target (degrees)")] public float AutoAimAngle = 100f;
             [JsonProperty("Never hit team members and friends")] public bool SparePartyMembers = true;
             [JsonProperty("Never hit anything in a safe zone")] public bool SparesSafeZone = true;
-            [JsonProperty("Damage of running into a player or an animal at a run (bull, ram, cow, sheep, stag, boar, horse)")] public float ChargeDamage = 22f;
+            [JsonProperty("Damage of running into a player or an animal at a full sprint (bull, ram, cow, sheep, stag, boar, horse)")] public float ChargeDamage = 22f;
+            [JsonProperty("A charge counts when the nose is this close to the other body (m)")] public float ChargeContact = 0.35f;
+            [JsonProperty("An attack reaches this far beyond the nose (or the tail, for a kick) (m)")] public float HitReach = 0.6f;
             [JsonProperty("Stag: effect prefab of its call when it attacks (empty = search the game for a stag sound)")] public string StagAttackSound = string.Empty;
             [JsonProperty("Stag: effect prefab of its call when it is hurt (empty = search the game for a stag sound, else the thud of the hit)")] public string StagHurtSound = string.Empty;
         }
@@ -3503,12 +3671,38 @@ namespace Oxide.Plugins
             [JsonProperty("Salt water quenches thirst this much (share of fresh water; 0 = only fresh water can be drunk)")] public float SeaWaterShare = 0f;
             [JsonProperty("Four key hint cells beside the hotbar (F attack, Ctrl brake, Shift sprint, Space jump)")] public bool KeyHints = true;
             [JsonProperty("Who may ride, lead, milk and shear an animal form (anyone, team, nobody)")] public string HandledBy = "anyone";
-            [JsonProperty("These animal forms carry riders only after they have eaten food that lay in front of them", ObjectCreationHandling = ObjectCreationHandling.Replace)]
-            public List<string> RideFedSpecies = new List<string> { "horse", "bull", "cow", "ram", "sheep", "stag" };
-            [JsonProperty("Riders on a fed animal form")] public int RidersFed = 2;
-            [JsonProperty("Riders on the other animal forms")] public int RidersOther = 1;
-            [JsonProperty("Seconds a fed animal form stays ready to carry riders")] public float FedSeconds = 300f;
             [JsonProperty("Length of the leash of an animal form (m)")] public float LeashLength = 5f;
+        }
+
+        // Running tires an animal the way it tires the horse: a full sprint lasts a quarter of a minute or so, walking and standing give the breath
+        // back. Out of breath, the animal trots at most until enough has come back. Ridden animals and animal forms alike; the bar is shown.
+        internal partial class StaminaCfg
+        {
+            [JsonProperty("Animals have stamina (riding and animal form)")] public bool Enabled = true;
+            [JsonProperty("Stamina used per second at the full sprint (of 100)")] public float FullSprint = 6f;
+            [JsonProperty("Stamina used per second at a sprint")] public float Sprint = 3f;
+            [JsonProperty("Stamina used per second at a run")] public float Run = 0.8f;
+            [JsonProperty("Stamina won back per second while walking or standing")] public float Recover = 7f;
+            [JsonProperty("Seconds after the last effort before the stamina comes back")] public float RecoverDelay = 1.2f;
+            [JsonProperty("Stamina a jump costs")] public float Jump = 8f;
+            [JsonProperty("Stamina an attack costs")] public float Attack = 4f;
+            [JsonProperty("Out of breath below this stamina (a trot at most, no jumps)")] public float ExhaustedBelow = 5f;
+            [JsonProperty("Stamina needed to run again after being out of breath")] public float RecoverTo = 25f;
+            [JsonProperty("Show the stamina bar (and the animal's health while riding) above the game's own bars")] public bool ShowBar = true;
+        }
+
+        internal partial class LifeCfg
+        {
+            [JsonProperty("Show on the screen of an animal form what E does (open, loot, eat, drink, lead)")] public bool Prompts = true;
+            [JsonProperty("A played animal leaves dung now and then")] public bool Dung = true;
+            [JsonProperty("Species that leave dung", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> DungSpecies = new List<string> { "horse", "cow", "bull", "calf", "sheep", "ram", "lamb" };
+            [JsonProperty("Minutes between two droppings, at least")] public float DungMinMinutes = 4f;
+            [JsonProperty("Minutes between two droppings, at most")] public float DungMaxMinutes = 9f;
+            [JsonProperty("Item of the dung")] public string DungItem = "horsedung";
+            [JsonProperty("A played chicken lays eggs now and then (very rarely, sometimes more at once)")] public bool Eggs = true;
+            [JsonProperty("Chance (%) per minute that a played chicken lays")] public float EggChancePerMinute = 2f;
+            [JsonProperty("Item of the egg")] public string EggItem = "egg";
+            [JsonProperty("Wild animals do not jump over obstacles (only an animal a player controls jumps)")] public bool NoWildJumps = true;
         }
 
         internal partial class TamingCfg
@@ -3534,10 +3728,19 @@ namespace Oxide.Plugins
             [JsonProperty("Gestures on foot command nearby owned animals (ok = wait, wave = follow, thumbs up = guard, point = attack)")] public bool GestureCommands = true;
         }
 
+        // Every animal has the inventory of the horse: saddle, horseshoes, saddle bag and horse armour, plus the storage the bag and the wooden
+        // armour give.
         internal partial class GearCfg
         {
-            [JsonProperty("Bag slots")] public int BagSlots = 18;
-            [JsonProperty("Only owner and team may open the bag")] public bool BagPrivate = true;
+            [JsonProperty("Storage slots a saddle bag gives")] public int BagSlots = 12;
+            [JsonProperty("Storage slots the wooden horse armour gives")] public int WoodArmorSlots = 6;
+            [JsonProperty("Only owner and team may open the inventory of a tamed animal")] public bool BagPrivate = true;
+            [JsonProperty("Damage the wooden horse armour takes off (0-1)")] public float ArmorWoodProtection = 0.25f;
+            [JsonProperty("Damage the roadsign horse armour takes off (0-1)")] public float ArmorRoadsignProtection = 0.4f;
+            [JsonProperty("A saddle in the inventory is seen on the animal's back (the horse shows its own)")] public bool ShowSaddle = true;
+            [JsonProperty("The saddle on the back: turn of the model (x y z, degrees)")] public string SaddleRotation = "0 0 0";
+            [JsonProperty("The saddle on the back: height above the spine (m)")] public float SaddleLift = 0.06f;
+            [JsonProperty("The saddle on the back: size on a horse-sized animal (it is scaled with the animal's length)")] public float SaddleScale = 1f;
         }
 
         internal partial class RitualCfg
@@ -3709,6 +3912,9 @@ namespace Oxide.Plugins
             [JsonProperty("Camera pivot height multiplier")] public float? PivotScale;
             [JsonProperty("Camera height added in metres (what /bm cam save stores)")] public float? PivotLift;
             [JsonProperty("Height of the rider's seat added in metres (what /bm seat up|down stores)")] public float? SeatLift;
+            [JsonProperty("The saddle on the back: height added (m), size factor, turn added (x y z)")] public float? SaddleLift;
+            public float? SaddleScale;
+            public string SaddleTurn;
         }
     }
 
@@ -3781,7 +3987,8 @@ namespace Oxide.Plugins
                 }
                 if (LeftOwnedBy(animal, player))
                 {
-                    return null;                       // the animal the player has just left carries him
+                    // the animal the player has just left carries him, once it has a saddle (like the horse)
+                    return !Cfg.Riding.RequireSaddle || SaddleOf(animal) > 0 || !species.Gear || (Cfg.Riding.AdminBypass && IsAdmin(player)) ? null : "NeedSaddle";
                 }
                 if (!Cfg.Features.Riding)
                 {
@@ -3813,7 +4020,7 @@ namespace Oxide.Plugins
                 {
                     return "NotYours";
                 }
-                if (Cfg.Riding.RequireSaddle && (rec == null || rec.Gear.Saddle <= 0))
+                if (Cfg.Riding.RequireSaddle && species.Gear && SaddleOf(animal) <= 0)
                 {
                     return "NeedSaddle";
                 }
@@ -3903,33 +4110,30 @@ namespace Oxide.Plugins
             Drivers.Clear();
         }
 
-        // E on a saddled animal mounts it; crouch + E opens the gear panel (see Gear).
-        internal bool TryMountFromUse(BasePlayer player)
+        // X (the vanilla seat-swap key) switches between the human and the animal. Pressed again and again, every switch runs to its end first
+        // (the views, the effects and their sounds): a new switch is accepted only a moment after the last one.
+        private readonly Dictionary<ulong, float> lastSwap = new Dictionary<ulong, float>();
+
+        internal bool SwapAllowed(BasePlayer player)
         {
-            if (!Cfg.Features.Riding || !Has(player, PermUse))
+            float last;
+            if (lastSwap.TryGetValue(player.userID, out last) && Time.realtimeSinceStartup - last < 1.2f)
             {
                 return false;
             }
-            BaseNPC2 animal = AnimalInSight(player, Cfg.Riding.MountDistance, 20f);
-            if (animal == null || DriverOfAnimal(animal) != null)
+            lastSwap[player.userID] = Time.realtimeSinceStartup;
+            return true;
+        }
+
+        // A player thrown off an animal (a crash, a fall): flung forward and down, the way a horse throws its rider.
+        internal void ThrowPlayer(BasePlayer player, Vector3 forward)
+        {
+            if (player == null || !player.IsConnected || player.IsDead() || player.isMounted)
             {
-                return false;
+                return;
             }
-            SpeciesDef species = SpeciesOf(animal);
-            if (species == null || species.Ride == RideTier.None)
-            {
-                return false;
-            }
-            TamedRecord rec = RecordOf(animal);
-            if (species.Ride == RideTier.Standard && (rec == null || rec.Gear.Saddle <= 0))
-            {
-                return false;   // not ours to handle: tamed animals without a saddle open their gear panel instead
-            }
-            if (player.serverInput.IsDown(BUTTON.DUCK))
-            {
-                return false;   // crouch + E = gear panel
-            }
-            return StartControl(player, animal, ControlKind.Ride);
+            player.Ragdoll(forward * 4f + Vector3.up * 2.5f, true, false, false, null);
+            player.Hurt(new HitInfo(null, player, Rust.DamageType.Fall, 5f, player.transform.position));
         }
 
         internal static void SetThirdPersonFlag(BasePlayer player, bool on)
@@ -4000,6 +4204,10 @@ namespace Oxide.Plugins
                         d.Attack();
                         return true;
                     case "vehicle.swapseats":
+                        if (!Bm.SwapAllowed(player))
+                        {
+                            return true;
+                        }
                         BasePlayer p = player;
                         Bm.NextTick(() => Bm.StopControl(p, "key X"));
                         return true;
@@ -4177,6 +4385,7 @@ namespace Oxide.Plugins
             public BaseMountable Seat;
             public bool SwappingSeats;
             public bool Spectating;
+            public float FeedPoseUntil;     // the grazing or drinking pose of E at food or water, until then (0 = none)
             public bool OwnsAnimal;         // the animal was made for this form and vanishes in smoke when the form ends
             public int Gait = 1;
             public bool Alive => !released;
@@ -4196,8 +4405,9 @@ namespace Oxide.Plugins
             private bool jumping;
             private Vector3 jumpFrom, jumpTo;
             private float jumpTime, jumpDuration, jumpHeight;
-            private Vector3 seatOffset;
-            private float seatLift;
+            private Vector3 seatOffset;          // where the seat sits, in the animal's own space (without the lift)
+            private Vector3 seatBaseLocal;       // the same in the space of the seat's parent (the spine bone, or the animal)
+            private float seatLift;              // metres the seat is lifted so that the rider never ends up under the ground
             private float waterFactor, nextWaterCheck;
             private bool deepWater, swimSet;
             private float nextLook;
@@ -4213,7 +4423,6 @@ namespace Oxide.Plugins
             private float poseUntil;
             private int gestureIndex;
             // handled by others
-            public float FedUntil;                                       // animal forms: carries riders until then
             public BasePlayer Leader;                                    // the plugin's leash: who leads this form
             public readonly List<BaseMountable> Guests = new List<BaseMountable>();
 
@@ -4441,7 +4650,7 @@ namespace Oxide.Plugins
 
             private bool MountSeat()
             {
-                string prefab = Kind == ControlKind.Ride ? bm.Cfg.Riding.SeatPrefab : bm.Cfg.Camera.FirstPersonSeat;
+                string prefab = Kind == ControlKind.Ride ? bm.UsableSeat(bm.Cfg.Riding.SeatPrefab) : bm.Cfg.Camera.FirstPersonSeat;
                 BaseEntity seatEntity = GameManager.server.CreateEntity(prefab, Body.transform.position, Body.transform.rotation);
                 BaseMountable seat = seatEntity as BaseMountable;
                 if (seat == null)
@@ -4455,20 +4664,11 @@ namespace Oxide.Plugins
                 }
                 Vector3 eyeLocal = seat.transform.InverseTransformPoint(seat.GetEyeOverride().position);
                 Vector3 anchorLocal = seat.mountAnchor != null ? seat.transform.InverseTransformPoint(seat.mountAnchor.position) : Vector3.zero;
-                seat.SetParent(Body, false, false);
-                float animalScale = ModelScale(Body);
-                if (animalScale > 1.001f)
-                {
-                    // a bigger animal (a boss): the seat is placed by the animal's scale - the height of the back - but keeps normal size
-                    // itself, so that the rider is not enlarged with it
-                    seat.networkEntityScale = true;
-                    seat.transform.localScale = Vector3.one / animalScale;
-                }
                 Quaternion rotation = Quaternion.Euler(0f, -yawOffset, 0f);
-                seat.transform.localRotation = rotation;
                 seatOffset = SeatOffset(rotation * eyeLocal, rotation * anchorLocal) + Vector3.up * bm.SeatLiftOf(Species);
                 seatLift = RequiredLift();
-                seat.transform.localPosition = seatOffset + Vector3.up * seatLift;
+                seatBaseLocal = FixSeat(seat, seatOffset, rotation, Kind == ControlKind.Ride);
+                ApplySeatLift(seat);
                 bm.OwnSeats.Add(seat);
                 seat.Spawn();
                 Rigidbody body = seat.GetComponent<Rigidbody>();
@@ -4510,6 +4710,71 @@ namespace Oxide.Plugins
                 return head - eye;
             }
 
+            // Fixes a seat (not spawned yet) to the animal: on the spine bone for riders, so that the rider moves with the back the way he does on
+            // the horse, else on the animal itself. The seat keeps its normal size whatever the scale of the bone or the animal (a boss).
+            // Returns the seat's position in its parent's space.
+            private Vector3 FixSeat(BaseMountable seat, Vector3 local, Quaternion localRotation, bool onSpine)
+            {
+                Transform bone = onSpine && bm.Cfg.Riding.SeatOnSpine ? BackBone(Animal) : null;
+                if (bone != null)
+                {
+                    seat.transform.SetPositionAndRotation(Body.transform.TransformPoint(local), Body.transform.rotation * localRotation);
+                    seat.SetParent(Body, bone.name, true, false);
+                }
+                else
+                {
+                    seat.SetParent(Body, false, false);
+                    seat.transform.localRotation = localRotation;
+                    seat.transform.localPosition = local;
+                }
+                Transform parent = seat.transform.parent;
+                float parentScale = parent != null ? parent.lossyScale.x : 1f;
+                if (parentScale > 0.0001f && Mathf.Abs(parentScale - 1f) > 0.001f)
+                {
+                    seat.networkEntityScale = true;
+                    seat.transform.localScale = Vector3.one / parentScale;
+                }
+                return seat.transform.localPosition;
+            }
+
+            // The seat at its place plus the lift (the lift is straight up in the world, whatever the bone's own axes are).
+            private void ApplySeatLift(BaseMountable seat)
+            {
+                Transform parent = seat.transform.parent;
+                Vector3 up = parent != null ? parent.InverseTransformVector(Vector3.up) : Vector3.up;
+                seat.transform.localPosition = seatBaseLocal + up * seatLift;
+            }
+
+            private Vector3 SeatBaseWorld()
+            {
+                if (Seat != null && !Seat.IsDestroyed && Seat.transform.parent != null)
+                {
+                    return Seat.transform.parent.TransformPoint(seatBaseLocal);
+                }
+                return Body.transform.TransformPoint(seatOffset);
+            }
+
+            // A rider looks to the sides at most, like on the horse: a head turned further round is turned back.
+            private float nextViewClamp;
+
+            private void ClampRiderView()
+            {
+                float limit = bm.Cfg.Riding.ViewClamp;
+                if (limit <= 0f || limit >= 180f || Time.time < nextViewClamp || Player == null || !Player.isMounted)
+                {
+                    return;
+                }
+                Vector3 look = Player.eyes.HeadForward();
+                float rel = Mathf.DeltaAngle(moveYaw, Yaw(look));
+                if (Mathf.Abs(rel) <= limit + 3f)
+                {
+                    return;
+                }
+                nextViewClamp = Time.time + 0.2f;
+                float pitch = -Mathf.Asin(Mathf.Clamp(look.y, -1f, 1f)) * Mathf.Rad2Deg;
+                ForceView(Mathf.Sign(rel) * limit, pitch);
+            }
+
             // The game's spectator camera on the animal. The spectating state hides the human completely - even for the player himself -
             // and keeps AI and turrets away; the body is parented to the animal at the camera's pivot so the camera follows it.
             private void BeginSpectate()
@@ -4534,7 +4799,10 @@ namespace Oxide.Plugins
                     var strategy = new BasePlayer.SpectatorSubStrategy();
                     strategy.SpectatedPlayer = Player;
                     Player.net.SubStrategy = strategy;
-                    Player.net.InvalidateSubscriptions(2);
+                    if (bm.Cfg.Camera.RefreshSubscriptions)
+                    {
+                        Player.net.InvalidateSubscriptions(2);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -4549,7 +4817,10 @@ namespace Oxide.Plugins
                     if (Player.net != null && Player.net.SubStrategy is BasePlayer.SpectatorSubStrategy)
                     {
                         Player.net.SubStrategy = Network.Server.DefaultSubscriberStrategy;
-                        Player.net.InvalidateSubscriptions(2);
+                        if (bm.Cfg.Camera.RefreshSubscriptions)
+                        {
+                            Player.net.InvalidateSubscriptions(2);
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -4584,7 +4855,7 @@ namespace Oxide.Plugins
                     pivot = new Vector3(b.center.x, Mathf.Max(b.max.y * bm.Cfg.Camera.PivotHeight * scale + lift, 0.5f), b.center.z);
                     pivot -= Quaternion.Euler(0f, -yawOffset, 0f) * Vector3.forward * bm.Cfg.Camera.ThirdBack;
                 }
-                Player.transform.localPosition = pivot - PlayerEyes.EyeOffset;
+                Player.transform.localPosition = pivot - PlayerEyes.EyeOffset + (duckHeld ? Vector3.up * bm.Cfg.Camera.DuckLift : Vector3.zero);
                 Player.transform.localRotation = Quaternion.Euler(0f, -yawOffset, 0f);
                 Player.SendNetworkUpdateImmediate();
                 if (snapView)
@@ -4672,21 +4943,84 @@ namespace Oxide.Plugins
                 return (buttons & (int)b) != 0;
             }
 
+            // ------------------------------------------------------------ where the camera looks
+            // The game does not run the normal tick of a spectating player, so its eyes (Player.eyes) keep the direction they had when the
+            // form began: the old code read that stale direction and played the rear kick when the player looked forward, and the head of
+            // the animal stared to the side. The angles of the player's input are fresh; they are relative to the animal the hidden body
+            // is parented to. In case a game build sends them in world space, the frame is learnt from how they behave while the animal turns.
+            private float aimYaw, aimPitch, lastAimYaw, lastBodyYaw;
+            private bool aimSeen;
+            private int aimWorldVotes, aimLocalVotes;
+
+            private void TrackAim(Vector3 aim)
+            {
+                float bodyYaw = Body.transform.eulerAngles.y;
+                if (aimSeen)
+                {
+                    float dBody = Mathf.DeltaAngle(lastBodyYaw, bodyYaw);
+                    float dAim = Mathf.DeltaAngle(lastAimYaw, aim.y);
+                    float turn = Mathf.Abs(dBody);
+                    if (turn > 1.5f)
+                    {
+                        if (Mathf.Abs(dAim - dBody) < turn * 0.3f)
+                        {
+                            aimWorldVotes = Mathf.Min(aimWorldVotes + 1, 60);
+                        }
+                        else if (Mathf.Abs(dAim) < turn * 0.3f)
+                        {
+                            aimLocalVotes = Mathf.Min(aimLocalVotes + 1, 60);
+                        }
+                    }
+                }
+                aimSeen = true;
+                lastAimYaw = aim.y;
+                lastBodyYaw = bodyYaw;
+                aimYaw = aim.y;
+                aimPitch = aim.x > 180f ? aim.x - 360f : aim.x;
+            }
+
+            private bool AimIsWorld => aimWorldVotes > aimLocalVotes + 3;
+
+            // The direction of the camera in the world.
+            public Vector3 CameraForward()
+            {
+                if (!Spectating || !aimSeen)
+                {
+                    return Player.eyes.HeadForward();
+                }
+                float yaw = AimIsWorld ? aimYaw : Body.transform.eulerAngles.y + aimYaw;
+                return Quaternion.Euler(Mathf.Clamp(aimPitch, -89f, 89f), yaw, 0f) * Vector3.forward;
+            }
+
+            // Ctrl is the brake: the game's client still lowers the camera of a crouching player, so while Ctrl is held the hidden body is
+            // lifted by the same height and the camera stays where it was.
+            private bool duckHeld;
+
             public void ReadInput(InputState input)
             {
                 int now = input.current.buttons;
                 int prev = inputSeen ? lastButtons : now;      // a key still held from before the control began is no new press
                 inputSeen = true;
                 lastButtons = now;
+                TrackAim(input.current.aimAngles);
                 Func<BUTTON, bool> pressed = b => IsSet(now, b) && !IsSet(prev, b);
                 fwd = IsSet(now, BUTTON.FORWARD);
                 back = IsSet(now, BUTTON.BACKWARD);
                 left = IsSet(now, BUTTON.LEFT);
                 right = IsSet(now, BUTTON.RIGHT);
                 bool duck = IsSet(now, BUTTON.DUCK);
+                if (duck != duckHeld)
+                {
+                    duckHeld = duck;
+                    if (Spectating && !released)
+                    {
+                        ApplyPreset(false);
+                    }
+                }
                 if (fwd || back || left || right)
                 {
                     InterruptClip();                       // walking or running takes over from the idle animation
+                    bm.EndFeedPose(this);
                 }
                 if (PoseName != null && (fwd || back || left || right || pressed(BUTTON.JUMP) || pressed(BUTTON.FIRE_THIRD)))
                 {
@@ -4734,7 +5068,7 @@ namespace Oxide.Plugins
                 }
                 if (Kind == ControlKind.Form && Spectating && pressed(BUTTON.USE))
                 {
-                    bm.InteractFrom(this);
+                    bm.InteractFrom(this, duck);           // E: doors, loot, food, things; Ctrl + E: the animal's inventory
                 }
             }
 
@@ -4854,6 +5188,7 @@ namespace Oxide.Plugins
                         case 4: speed = Species.Sprint; break;
                         default: speed = Species.Top; break;
                     }
+                    speed += (Animal != null ? bm.GearSpeedBonus(Animal) : 0f) * (gait / 5f);     // horseshoes, saddle bag, armour
                 }
                 else
                 {
@@ -4956,6 +5291,10 @@ namespace Oxide.Plugins
                 }
                 BasePlayer player = Player;
                 bool link = Kind == ControlKind.Form && bm.Cfg.Form.LinkHealth;
+                if (Kind == ControlKind.Form)
+                {
+                    bm.FormAnimalDied(this);                // what it carried falls next to its body
+                }
                 bm.Drivers.Remove(player.userID);
                 Release("animal died");
                 if (link && player != null && !player.IsDead())
@@ -4987,18 +5326,28 @@ namespace Oxide.Plugins
                 {
                     return;
                 }
+                // the camera is a circle round the animal: the front half attacks to the front, the rear half kicks behind (hoofed animals)
+                float camYaw = Yaw(CameraForward());
+                bool rear = KicksBehind(Species) && Mathf.Abs(Mathf.DeltaAngle(moveYaw, camYaw)) > bm.Cfg.Combat.RearAngle;
                 if (Horse != null)
                 {
-                    HorseAttack();
+                    HorseAttack(rear);
                     return;
                 }
                 InterruptClip();
-                float camYaw = Yaw(Player.eyes.rotation * Vector3.forward);
-                bool rear = Mathf.Abs(Mathf.DeltaAngle(moveYaw, camYaw)) > bm.Cfg.Combat.RearAngle;
+                ClearPose();
                 List<ClipRef> all = bm.Clips(Animal);
-                // the camera is a circle round the animal: the front half plays the attacks to the front, the rear half the kicks and bites behind
-                List<ClipRef> clips = rear ? all.Where(c => (Has(c, "behind") || Has(c, "kick")) && !Has(c, "death")).ToList() : new List<ClipRef>();
-                if (!rear)
+                List<ClipRef> clips;
+                if (rear)
+                {
+                    // the kick of the cow; the sheep and the ram stamp, the stag strikes with its own attack - their models have no kick
+                    clips = all.Where(c => (Has(c, "behind") || Has(c, "kick")) && !Has(c, "death")).ToList();
+                    if (clips.Count == 0)
+                    {
+                        clips = all.Where(c => Has(c, "stomp") && !Has(c, "death")).ToList();
+                    }
+                }
+                else
                 {
                     clips = all.Where(c => AttackWords.Any(w => Has(c, w)) && !Has(c, "death") && !Has(c, "behind") && !Has(c, "kick")).ToList();
                 }
@@ -5029,7 +5378,7 @@ namespace Oxide.Plugins
                 }
                 PlayClip(Animal, clip);
                 bm.AnimalVoice(Body, Species, "attack");          // the stag's clips carry no sound of their own
-                bm.StatsSpend(this, 4f);
+                bm.StatsSpend(this, bm.Cfg.Stamina.Attack);
                 nextAttack = Time.time + Mathf.Max(bm.Cfg.Combat.Cooldown, p.Delay + 0.4f);
                 float heading = moveYaw;
                 Invoke(() =>
@@ -5043,6 +5392,20 @@ namespace Oxide.Plugins
                         }
                     }
                 }, p.Delay);
+            }
+
+            // The hoofed animals kick behind them; the others always attack to the front.
+            internal static bool KicksBehind(SpeciesDef s)
+            {
+                if (s == null)
+                {
+                    return false;
+                }
+                switch (s.Id)
+                {
+                    case "cow": case "bull": case "calf": case "sheep": case "ram": case "lamb": case "stag": case "doe": case "horse": return true;
+                    default: return false;
+                }
             }
 
             public void OnGesture(string gesture)
@@ -5086,13 +5449,18 @@ namespace Oxide.Plugins
                 InterruptClip();
                 idleState = PlayClipState(Animal, clip);
                 idleStarted = Time.time;
+                idleEnds = idleStarted + ClipLength(clip) - 0.05f;
             }
+
+            private float idleEnds;
 
             public void InterruptClip()
             {
                 if (idleState != null)
                 {
-                    if (Time.time - idleStarted < 8f)
+                    // only a montage that still plays is stopped (a finished one is back in the game's pool and must not be returned twice);
+                    // its real length is known now, so long idles (16 s for the stag and the boar) give way to walking too
+                    if (Time.time < idleEnds)
                     {
                         StopClipState(Animal, ref idleState);
                     }
@@ -5189,7 +5557,7 @@ namespace Oxide.Plugins
                     return false;
                 }
                 bool rear = behindDriver || Guests.Count > 0;
-                string prefab = rear ? bm.Cfg.Riding.RearSeatPrefab : bm.Cfg.Riding.SeatPrefab;
+                string prefab = bm.UsableSeat(rear ? bm.Cfg.Riding.RearSeatPrefab : bm.Cfg.Riding.SeatPrefab);
                 BaseEntity entity = GameManager.server.CreateEntity(prefab, Body.transform.position, Body.transform.rotation);
                 BaseMountable seat = entity as BaseMountable;
                 if (seat == null)
@@ -5202,20 +5570,12 @@ namespace Oxide.Plugins
                 }
                 Quaternion rotation = Quaternion.Euler(0f, -yawOffset, 0f);
                 Vector3 anchor = seat.mountAnchor != null ? rotation * seat.transform.InverseTransformPoint(seat.mountAnchor.position) : Vector3.zero;
-                seat.SetParent(Body, false, false);
-                float k = ModelScale(Body);
-                if (k > 1.001f)
-                {
-                    seat.networkEntityScale = true;
-                    seat.transform.localScale = Vector3.one / k;
-                }
-                seat.transform.localRotation = rotation;
                 Vector3 place = BackPoint(Animal) - anchor + Vector3.up * bm.SeatLiftOf(Species);
                 if (rear)
                 {
-                    place += rotation * Vector3.back * Mathf.Max(0.55f, Body.bounds.extents.z * 0.5f);
+                    place += rotation * Vector3.back * Mathf.Max(0.5f, Body.bounds.extents.z * 0.42f);
                 }
-                seat.transform.localPosition = place;
+                FixSeat(seat, place, rotation, true);         // on the spine too: the second rider rocks with the back as well
                 bm.OwnSeats.Add(seat);
                 seat.Spawn();
                 Rigidbody rb = seat.GetComponent<Rigidbody>();
@@ -5310,6 +5670,10 @@ namespace Oxide.Plugins
                 {
                     return;
                 }
+                if (bm.OutOfBreath(this))
+                {
+                    return;                                 // out of breath: no jumps until the stamina is back
+                }
                 if (Horse != null)
                 {
                     HorseJump();
@@ -5382,27 +5746,51 @@ namespace Oxide.Plugins
                         height = Mathf.Min(height, 0.35f * k);
                     }
                 }
-                if (!jumpCollision && !platformLanding)
+                if (jumpCollision)
                 {
-                    // something to stand on where the jump ends (a low floor, a crate, a rock the sphere sailed over)?
-                    RaycastHit stand;
-                    float ground = TerrainMeta.HeightMap.GetHeight(to);
-                    if (Physics.Raycast(to + Vector3.up * (clear + 2f), Vector3.down, out stand, clear + 5f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore)
-                        && stand.normal.y >= 0.35f && stand.point.y > ground + 0.12f && stand.point.y <= jumpFrom.y + clear + 0.1f
-                        && !Physics.CheckCapsule(stand.point + Vector3.up * 0.5f, stand.point + Vector3.up * Mathf.Max(0.9f, Body.bounds.size.y * k * 0.6f), 0.3f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore))
-                    {
-                        to = stand.point + Vector3.up * 0.05f;
-                        height = Mathf.Max(height, stand.point.y - jumpFrom.y + 0.4f * k);
-                        platformLanding = true;
-                    }
-                }
-                if (!jumpCollision && !platformLanding)
-                {
-                    to.y = Mathf.Max(TerrainMeta.HeightMap.GetHeight(to), jumpFrom.y - 3f);
+                    to.y = jumpFrom.y;
+                    platformLanding = offMesh;              // a jump from a roof into a wall falls back onto that roof, not through it
                 }
                 else
                 {
-                    to.y = Mathf.Max(TerrainMeta.HeightMap.GetHeight(to), jumpFrom.y - 0.5f);
+                    // where the jump ends there must be a surface the animal can stand on (the terrain, a floor, a roof, a crate, the top of a rock)
+                    // and room for its body: a spot inside or under a rock or an object that is too high is never a landing - the jump is
+                    // shortened to the last good spot before it, and when there is none the animal runs into it
+                    Vector3 landing;
+                    bool onObject;
+                    if (ValidLanding(to, clear, k, out landing, out onObject))
+                    {
+                        to = landing;
+                        platformLanding = onObject;
+                    }
+                    else
+                    {
+                        bool found = false;
+                        Vector3 flat = to - jumpFrom;
+                        flat.y = 0f;
+                        for (float d = flat.magnitude - 0.3f; d > 0.25f; d -= 0.3f)
+                        {
+                            if (ValidLanding(jumpFrom + forward * d, clear, k, out landing, out onObject))
+                            {
+                                to = landing;
+                                platformLanding = onObject;
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found)
+                        {
+                            jumpCollision = true;
+                            jumpHitPoint = to + Vector3.up * 0.5f;
+                            to = jumpFrom;
+                            platformLanding = offMesh;
+                            height = Mathf.Min(height, 0.35f * k);
+                        }
+                    }
+                    if (!jumpCollision)
+                    {
+                        height = Mathf.Max(height, to.y - jumpFrom.y + 0.4f * k);
+                    }
                 }
                 jumpTo = to;
                 jumpHeight = height;
@@ -5411,8 +5799,42 @@ namespace Oxide.Plugins
                 jumping = true;
                 nextJump = Time.time + bm.Cfg.Movement.JumpCooldown;
                 agent.IsJumping = true;
-                bm.StatsSpend(this, 5f);
+                bm.StatsSpend(this, bm.Cfg.Stamina.Jump);
                 bm.LandSound(jumpFrom);                         // the push-off
+            }
+
+            // A spot the animal can land on: the highest walkable surface there that it can reach (searched from just above the height it can
+            // jump to, so a roof overhead does not count), not too far down, and room for the body above it (not inside a rock or an object).
+            private bool ValidLanding(Vector3 at, float clear, float k, out Vector3 landing, out bool onObject)
+            {
+                landing = at;
+                onObject = false;
+                float terrain = TerrainMeta.HeightMap.GetHeight(at);
+                float top = jumpFrom.y + clear + 0.5f;
+                float bottom = Mathf.Min(terrain, jumpFrom.y - 3.5f) - 0.5f;
+                Vector3 surface = new Vector3(at.x, terrain, at.z);
+                RaycastHit g;
+                if (top > bottom && Physics.Raycast(new Vector3(at.x, top, at.z), Vector3.down, out g, top - bottom, ObstacleMaskOf() | LayerMask.GetMask("Terrain"), QueryTriggerInteraction.Ignore))
+                {
+                    if (g.normal.y < 0.35f)
+                    {
+                        return false;                       // a wall or a steep face: nothing to stand on
+                    }
+                    surface = g.point;
+                    onObject = !(g.collider is TerrainCollider) && g.point.y > terrain + 0.12f;
+                }
+                if (surface.y < jumpFrom.y - 3.5f || surface.y > jumpFrom.y + clear + 0.1f)
+                {
+                    return false;
+                }
+                float bodyHeight = Mathf.Max(0.9f, Body.bounds.size.y * k * 0.6f);
+                float r = Mathf.Clamp(Mathf.Min(Body.bounds.extents.x, Body.bounds.extents.z) * 0.5f * k, 0.15f, 0.45f);
+                if (Physics.CheckCapsule(surface + Vector3.up * (r + 0.15f), surface + Vector3.up * Mathf.Max(bodyHeight, r + 0.3f), r, ObstacleMaskOf(), QueryTriggerInteraction.Ignore))
+                {
+                    return false;                           // inside a rock, under a low roof, in a wall
+                }
+                landing = surface + Vector3.up * 0.03f;
+                return true;
             }
 
             // The first walkable raised surface behind the front edge of an obstacle, with room above it for the animal.
@@ -5518,19 +5940,96 @@ namespace Oxide.Plugins
                 }
             }
 
-            // A jump into something too high: the animal hits it, hurts itself a little, whimpers and falls (with the sound of the hit and of the thing it hit).
+            // A jump or a full sprint into something solid: the animal hits it, hurts itself a little and falls (with the sound of the hit and of
+            // the thing it hit). A rider is thrown off, like from a horse.
             private void Crash()
             {
                 jumpCollision = false;
                 currentSpeed = 0f;
                 Gait = 1;
-                fallenUntil = Time.time + 2.2f;
+                fallenUntil = Time.time + 2.4f;
                 bm.BumpSound(jumpHitPoint, jumpHitSurface);
-                if (Animal != null && !bm.Play(Animal, "knockdown", "knock", "stumble", "hurt", "pain"))
-                {
-                    bm.Play(Animal, "sleep", "lie", "rest");        // an animal without a fall clip (the stag) goes down in its lying pose
-                }
+                FallAnimation(false);
                 Body.Hurt(Mathf.Max(2f, Body.MaxHealth() * bm.Cfg.Movement.CrashDamagePercent / 100f), Rust.DamageType.Blunt, null, false);
+                ThrowRider();
+            }
+
+            // The fall of each kind: the horse's own ragdoll; the knock-down of the cow, bull and calf; the sheep, ram and lamb have no
+            // knock-down, so they fall with their death animation and lie for a moment; the stag and the boar go down in their lying pose.
+            private bool restingFromFall;
+
+            private void FallAnimation(bool downhill)
+            {
+                if (Horse != null)
+                {
+                    Horse.RagdollHorse();
+                    return;
+                }
+                if (Animal == null)
+                {
+                    return;
+                }
+                InterruptClip();
+                ClearPose();
+                ClipRef knock = bm.Clips(Animal).FirstOrDefault(c => Has(c, downhill ? "canter_knockdown" : "stand_knockdown"))
+                    ?? bm.Clips(Animal).FirstOrDefault(c => Has(c, "knockdown") || Has(c, "stumble"));
+                if (knock != null)
+                {
+                    PlayClip(Animal, knock);
+                    return;
+                }
+                LivestockAnimal livestock = Animal as LivestockAnimal;
+                ClipRef down = bm.Clips(Animal).FirstOrDefault(c => Has(c, downhill ? "canter_death" : "death_front"))
+                    ?? bm.Clips(Animal).FirstOrDefault(c => Has(c, "death_front") || Has(c, "canter_death"));
+                if (livestock != null && down != null)
+                {
+                    PlayClip(Animal, down);
+                    livestock.SetResting(true);              // it lies there for a moment and gets up with the game's own animation
+                    restingFromFall = true;
+                    return;
+                }
+                if (!bm.Play(Animal, "sleep", "lie", "rest") && livestock != null)
+                {
+                    livestock.SetResting(true);
+                    restingFromFall = true;
+                }
+            }
+
+            private void EndFallPose()
+            {
+                if (!restingFromFall)
+                {
+                    return;
+                }
+                restingFromFall = false;
+                LivestockAnimal livestock = Animal as LivestockAnimal;
+                if (livestock != null && Valid(livestock))
+                {
+                    livestock.SetResting(false);
+                }
+            }
+
+            // A crash or a fall throws the rider (and the passengers) off, the way a horse does.
+            private void ThrowRider()
+            {
+                if (Kind != ControlKind.Ride || released || Player == null)
+                {
+                    return;
+                }
+                BasePlayer rider = Player;
+                Vector3 forward = Quaternion.Euler(0f, moveYaw, 0f) * Vector3.forward;
+                foreach (BaseMountable guestSeat in Guests.ToList())
+                {
+                    BasePlayer guest = guestSeat != null && !guestSeat.IsDestroyed ? guestSeat.GetMounted() : null;
+                    if (guest != null)
+                    {
+                        BasePlayer thrown = guest;
+                        guestSeat.DismountAllPlayers();
+                        bm.NextTick(() => bm.ThrowPlayer(thrown, forward));
+                    }
+                }
+                bm.StopControl(rider, "thrown off");
+                bm.NextTick(() => bm.ThrowPlayer(rider, forward));
             }
 
             // The horse: an impulse over what its physics lets it clear, with a push-off and a landing sound.
@@ -5546,15 +6045,25 @@ namespace Oxide.Plugins
                 nextJump = Time.time + bm.Cfg.Movement.JumpCooldown;
                 horseAir = true;
                 horseAirSince = Time.time;
-                bm.StatsSpend(this, 5f);
+                bm.StatsSpend(this, bm.Cfg.Stamina.Jump);
                 bm.LandSound(Body.transform.position);
             }
 
-            private void HorseAttack()
+            // F as the horse: rear up and strike to the front, or - with the camera behind it - kick behind (the horse has no kick animation:
+            // the hit and its sound only).
+            private void HorseAttack(bool rear)
             {
                 nextAttack = Time.time + bm.Cfg.Horse.AttackCooldown;
-                bm.StatsSpend(this, 4f);
-                if (bm.Stable != null)
+                bm.StatsSpend(this, bm.Cfg.Stamina.Attack);
+                if (bm.Stable == null)
+                {
+                    return;
+                }
+                if (rear)
+                {
+                    bm.Stable.PlayerKickBack(Horse, this);
+                }
+                else
                 {
                     bm.Stable.PlayerStrike(Horse, this);
                 }
@@ -5563,9 +6072,9 @@ namespace Oxide.Plugins
             // Running down a very steep slope: the animal may stumble and fall (and sometimes does not get up), like the horse.
             private void CheckSlope(float dt)
             {
-                if (bm.Cfg.Movement.SlopeFallChance <= 0f || Time.time < slopeCheckAt || currentSpeed < GaitSpeed(3) * 0.9f)
+                if (bm.Cfg.Movement.SlopeFallChance <= 0f || Time.time < slopeCheckAt || !AtFullSprint())
                 {
-                    return;
+                    return;                                     // only a full sprint down a steep slope ends in a fall
                 }
                 slopeCheckAt = Time.time + 0.5f;
                 Vector3 pos = Body.transform.position;
@@ -5580,23 +6089,26 @@ namespace Oxide.Plugins
                 {
                     return;
                 }
-                fallenUntil = Time.time + 2.6f;
+                fallenUntil = Time.time + 2.8f;
                 currentSpeed = 0f;
                 Gait = 1;
-                if (Horse != null)
+                FallAnimation(true);                            // the horse's own fall; the others with the fall of their kind
+                if (Horse == null)
                 {
-                    Horse.RagdollHorse();                       // the horse's own fall, with its sounds
-                }
-                else
-                {
-                    bm.Play(Animal, "knockdown", "knock", "stumble", "death_front", "canter_death");
                     bm.BumpSound(pos + Vector3.up * 0.5f, "dirt");
                 }
                 Body.Hurt(Mathf.Max(3f, Body.MaxHealth() * bm.Cfg.Movement.CrashDamagePercent / 100f), Rust.DamageType.Fall, null, false);
+                ThrowRider();
                 if (UnityEngine.Random.value < bm.Cfg.Movement.SlopeFallDeathChance)
                 {
                     Body.Hurt(Body.health + 1f, Rust.DamageType.Fall);
                 }
+            }
+
+            // The fastest gait of the animal, nearly at its top speed: only then does it crash into walls, run into others and fall on slopes.
+            public bool AtFullSprint()
+            {
+                return Gait >= 5 && Mathf.Abs(currentSpeed) >= GaitSpeed(5) * 0.8f;
             }
 
             // Is there an object surface ahead that is a little higher than where the animal stands (a roof, a ramp, a floor edge, a crate)?
@@ -5624,7 +6136,12 @@ namespace Oxide.Plugins
                 seatOffset += Vector3.up * delta;
                 if (Seat != null && !Seat.IsDestroyed)
                 {
-                    Seat.transform.localPosition = seatOffset + Vector3.up * seatLift;
+                    // moved straight up or down in the world (the seat may hang on a bone with axes of its own); the height stays as set
+                    Transform parent = Seat.transform.parent;
+                    Vector3 world = Vector3.up * delta * ModelScale(Body);
+                    seatBaseLocal += parent != null ? parent.InverseTransformVector(world) : world;
+                    seatLift = RequiredLift();
+                    ApplySeatLift(Seat);
                     Seat.SendNetworkUpdate();
                 }
             }
@@ -5702,6 +6219,22 @@ namespace Oxide.Plugins
 
             // ------------------------------------------------------------ the physics tick
 
+            // The heading of the animal is the plugin's: the navigation agent (sliding along a wall) and the root motion of the game's clips
+            // (an idle, a fall) may turn the body between two physics steps, and the camera of the animal form turns with the body. The heading
+            // is set again at the end of every frame, so the camera never swings round on its own.
+            private void LateUpdate()
+            {
+                if (released || Animal == null || Body == null || Body.IsDestroyed || Body.IsDead())
+                {
+                    return;
+                }
+                Quaternion want = Quaternion.Euler(0f, moveYaw + yawOffset, 0f);
+                if (Quaternion.Angle(Body.transform.rotation, want) > 0.5f)
+                {
+                    Body.transform.rotation = want;
+                }
+            }
+
             private void FixedUpdate()
             {
                 if (released)
@@ -5737,6 +6270,10 @@ namespace Oxide.Plugins
                     TickJump(dt);
                     KeepAboveTerrain();
                     return;
+                }
+                if (restingFromFall && Time.time >= fallenUntil - 0.8f)
+                {
+                    EndFallPose();                      // gets up in time to walk on when the fall is over
                 }
                 if (Time.time < fallenUntil)
                 {
@@ -5849,7 +6386,7 @@ namespace Oxide.Plugins
                     Vector3 wallPoint;
                     string wallSurface;
                     step = bm.WallSlide(Body, pos, step, ref currentSpeed, out hitWall, out wallPoint, out wallSurface);       // no walking through walls
-                    if (hitWall && speedBefore > GaitSpeed(3) * 0.75f && Time.time >= nextWallCrash)
+                    if (hitWall && speedBefore > GaitSpeed(5) * 0.8f && Gait >= 5 && Time.time >= nextWallCrash)
                     {
                         nextWallCrash = Time.time + 3f;
                         jumpHitPoint = wallPoint;
@@ -5942,6 +6479,7 @@ namespace Oxide.Plugins
                 Vector3 v = horseBody.linearVelocity;
                 horseBody.linearVelocity = new Vector3(forward.x * currentSpeed, v.y, forward.z * currentSpeed);
                 bm.LeashHorse(this, horseBody);
+                HorseWallCheck(dt);
                 if (horseBody.IsSleeping())
                 {
                     horseBody.WakeUp();
@@ -5963,6 +6501,48 @@ namespace Oxide.Plugins
                 CheckSlope(dt);
             }
 
+            // The horse at a full gallop that is stopped dead by a wall or an object: it falls (its own ragdoll) and hurts itself, like the
+            // other animals. A player or an animal in the way is no wall - running into them is an attack.
+            private float horseStall;
+
+            private void HorseWallCheck(float dt)
+            {
+                if (!AtFullSprint() || Time.time < nextWallCrash || horseBody == null)
+                {
+                    horseStall = 0f;
+                    return;
+                }
+                Vector3 v = horseBody.linearVelocity;
+                v.y = 0f;
+                horseStall = v.magnitude < Mathf.Abs(currentSpeed) * 0.35f ? horseStall + dt : 0f;
+                if (horseStall < 0.2f)
+                {
+                    return;
+                }
+                horseStall = 0f;
+                Vector3 forward = Horse.transform.forward;
+                forward.y = 0f;
+                RaycastHit hit;
+                if (!Physics.SphereCast(Horse.transform.position + Vector3.up * 1.1f, 0.4f, forward.normalized, out hit, 2.6f, ObstacleMaskOf(), QueryTriggerInteraction.Ignore) || hit.normal.y > 0.35f)
+                {
+                    return;
+                }
+                BaseEntity thing = hit.GetEntity();
+                if (thing is BasePlayer || thing is BaseNPC2 || thing is RidableHorse)
+                {
+                    return;
+                }
+                nextWallCrash = Time.time + 3f;
+                jumpHitPoint = hit.point;
+                jumpHitSurface = Beastmaster.ColliderSurface(hit.collider);
+                currentSpeed = 0f;
+                Gait = 1;
+                fallenUntil = Time.time + 2.8f;
+                bm.BumpSound(jumpHitPoint, jumpHitSurface);
+                Horse.RagdollHorse();
+                Body.Hurt(Mathf.Max(2f, Body.MaxHealth() * bm.Cfg.Movement.CrashDamagePercent / 100f), Rust.DamageType.Blunt, null, false);
+            }
+
             // The head turns slowly toward where the camera looks, less the faster the animal runs, never past its neck.
             // The FSM normally drives this through NPCNetworking, which does not tick while the AI is parked.
             private void UpdateLook(float speedFrac)
@@ -5973,10 +6553,15 @@ namespace Oxide.Plugins
                 }
                 nextLook = Time.time + 0.1f;
                 Quaternion body = Quaternion.Euler(0f, moveYaw + yawOffset, 0f);
-                Vector3 local = Quaternion.Inverse(body) * Player.eyes.HeadForward();
+                Vector3 local = Quaternion.Inverse(body) * CameraForward();
                 float yaw = Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg;
                 float pitch = -Mathf.Asin(Mathf.Clamp(local.y, -1f, 1f)) * Mathf.Rad2Deg;
-                float maxYaw = Mathf.Lerp(70f, 12f, speedFrac);
+                if (Mathf.Abs(yaw) > 120f)
+                {
+                    yaw = 0f;                           // the camera behind the animal: it looks ahead, never over its own back
+                    pitch = 0f;
+                }
+                float maxYaw = Mathf.Lerp(70f, 35f, speedFrac);
                 Vector3 desired = body * Quaternion.Euler(Mathf.Clamp(pitch, -25f, 30f), Mathf.Clamp(yaw, -maxYaw, maxYaw), 0f) * Vector3.forward;
                 Vector3 smoothed = Vector3.RotateTowards(lookDir, desired, 70f * Mathf.Deg2Rad * 0.1f, 0f);
                 if (Vector3.Angle(smoothed, lookDir) < 0.5f)
@@ -5988,17 +6573,18 @@ namespace Oxide.Plugins
                 Animal.SendNetworkUpdate();
             }
 
-            // The body sits at the seat's position. Antihack (InsideTerrain) kills and kicks a player whose position is more
-            // than 0.3 m under the terrain - the OnPlayerViolation hook can stop the kick but not the kill - so the seat never
-            // dips under the surface: on small creatures, slopes and jump arcs it is lifted a little instead.
+            // The body sits at the seat's position. Antihack (InsideTerrain) kills and kicks a player whose position is more than 0.3 m under
+            // the terrain - the OnPlayerViolation hook can stop the kick but not the kill. The seat stays where it was set (/bm seat up|down
+            // included); only when it would really sink that deep (a tiny creature in a hollow, a jump arc into a slope) is it lifted, and
+            // it goes back down as soon as that is over.
             private float RequiredLift()
             {
-                Vector3 seatBase = Body.transform.TransformPoint(seatOffset);
+                Vector3 seatBase = SeatBaseWorld();
                 if (TerrainMeta.HeightMap == null || (TerrainMeta.Collision != null && TerrainMeta.Collision.GetIgnore(seatBase)))
                 {
                     return 0f;
                 }
-                return Mathf.Max(0f, TerrainMeta.HeightMap.GetHeight(seatBase) + 0.15f - seatBase.y) / ModelScale(Body);
+                return Mathf.Max(0f, TerrainMeta.HeightMap.GetHeight(seatBase) - 0.2f - seatBase.y);
             }
 
             private void KeepAboveTerrain()
@@ -6007,11 +6593,15 @@ namespace Oxide.Plugins
                 {
                     return;
                 }
+                if (Kind == ControlKind.Ride)
+                {
+                    ClampRiderView();
+                }
                 float lift = RequiredLift();
-                if (lift > seatLift || lift < seatLift - 0.1f)
+                if (lift > seatLift + 0.01f || (seatLift > 0f && lift < seatLift - 0.05f))
                 {
                     seatLift = lift;
-                    Seat.transform.localPosition = seatOffset + Vector3.up * seatLift;
+                    ApplySeatLift(Seat);
                     Seat.SendNetworkUpdate();
                 }
             }
@@ -6179,12 +6769,14 @@ namespace Oxide.Plugins
             public int Slot = -1;
         }
 
+        // The inventory of an animal, the same as the horse's: four equipment slots and the storage the saddle bag (and the wooden armour) give.
         internal partial class GearRecord
         {
             public int Saddle;                           // 0 none, 1 single, 2 double
             public int Shoes;                            // 0 none, 1 basic, 2 high quality
-            public List<ItemRecord> Bag = new List<ItemRecord>();
-            public bool HasBag;
+            public List<ItemRecord> Bag = new List<ItemRecord>();      // the storage (Slot = index in the storage)
+            public bool HasBag;                          // a saddle bag is fitted
+            public int Armor;                            // 0 none, 1 wooden, 2 roadsign, 3 lunar new year
         }
 
         // One owned animal. State: follow, wait, guard.
@@ -6220,6 +6812,7 @@ namespace Oxide.Plugins
             public bool Asleep;
             public ulong Tag;
             public bool OwnsAnimal;
+            public GearRecord Gear;                      // the inventory of the animal (when it is not a tamed one, whose record keeps it)
         }
 
         internal PlayerSettings SettingsOf(ulong id)
@@ -6511,10 +7104,14 @@ namespace Oxide.Plugins
                 Vector3 pos = Animal.transform.position;
                 Vector3 to = target.transform.position - pos;
                 to.y = 0f;
-                float reach = (Animal.bounds.extents.z + 1.8f) * ModelScale(Animal);
-                if (to.magnitude > reach)
+                // close enough for the hit, which lands right at the nose: the nose has to come up to the target's body
+                float k = ModelScale(Animal);
+                float reach = (Animal.bounds.center.z + Animal.bounds.extents.z) * k + bm.Cfg.Combat.HitReach * 0.7f * k;
+                Vector3 gap = target.ClosestPoint(pos) - pos;
+                gap.y = 0f;
+                if (gap.magnitude > reach)
                 {
-                    Go(target.transform.position, RustNavMeshAgent.Speeds.Sprint, reach * 0.6f);
+                    Go(target.transform.position, RustNavMeshAgent.Speeds.Sprint, Mathf.Max(0.3f, reach * 0.5f));
                     return;
                 }
                 agent.ResetPath();
@@ -6577,7 +7174,7 @@ namespace Oxide.Plugins
         {
             Vector3 at = d.Body.transform.position;
             BasePlayer hearer = d.Player;
-            timer.Once(0.1f, () => FormAppear(at, hearer));            // and the animal appears with the same effect, heard by the player too
+            timer.Once(0.1f, () => FormAppear(at, hearer, 0.35f));     // and the animal appears with the same effect, heard by the player too
             Data.Forms.Remove(d.Player.userID);
             FormSleepers.Remove(d.Player.userID);
         }
@@ -6586,12 +7183,12 @@ namespace Oxide.Plugins
         {
             BasePlayer player = d.Player;
             Vector3 spot = Valid(d.Body) ? d.Body.transform.position : player.transform.position;
-            FormSmoke(spot, player);
+            FormSmoke(spot, player, 0.3f);
             if (player != null && player.IsConnected && !player.IsDead() && reason != "animal died")
             {
                 Vector3 back = GroundNear(spot, d.Body != null && !d.Body.IsDestroyed ? d.Body.bounds.extents.x * ModelScale(d.Body) + 1.2f : 1.5f);
                 player.Teleport(back);
-                FormAppear(back, player);
+                FormAppear(back, player, 0.3f);
             }
             HudSwitch(player, true);
             Data.RitualCooldown[player.userID] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + Cfg.Form.Cooldown;
@@ -6609,9 +7206,32 @@ namespace Oxide.Plugins
                         Stable.Forget(d.Horse);
                         Data.Horses.Remove(d.Horse.skinID);
                     }
+                    GearRecord carried;
+                    if (RecordOf(d.Body) == null && FormGears.TryGetValue(player.userID, out carried))
+                    {
+                        DropGearRecord(carried, spot + Vector3.up * 0.6f);   // what the animal carried stays on the ground
+                        FormGears.Remove(player.userID);
+                    }
+                    RemoveSaddle(d.Body);
                     Data.Bosses.Remove(d.Body.skinID);
                     d.Body.Kill();
                 }
+            }
+        }
+
+        // The animal of a player died: what it carried falls next to its body.
+        internal void FormAnimalDied(Driver d)
+        {
+            if (d == null || d.Player == null || RecordOf(d.Body) != null)
+            {
+                return;                                 // a tamed animal drops its gear by its record (TameModule)
+            }
+            GearRecord carried;
+            if (FormGears.TryGetValue(d.Player.userID, out carried))
+            {
+                Vector3 at = d.Body != null && !d.Body.IsDestroyed ? d.Body.transform.position : d.Player.transform.position;
+                DropGearRecord(carried, at + Vector3.up * 0.6f);
+                FormGears.Remove(d.Player.userID);
             }
         }
 
@@ -6651,7 +7271,8 @@ namespace Oxide.Plugins
                 LoggedOut = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 Asleep = true,
                 Tag = tag,
-                OwnsAnimal = d.OwnsAnimal
+                OwnsAnimal = d.OwnsAnimal,
+                Gear = RecordOf(animal) == null && FormGears.ContainsKey(player.userID) ? FormGears[player.userID] : null
             };
             FormSleepers[player.userID] = animal;
             Log(2, player.displayName + " left in " + d.Species.Display + " form - the animal sleeps.");
@@ -6729,6 +7350,10 @@ namespace Oxide.Plugins
                     return;
                 }
                 player.limitNetworking = false;
+                if (rec.Gear != null)
+                {
+                    FormGears[player.userID] = rec.Gear;       // the inventory it carried
+                }
                 Driver d;
                 if (StartControl(player, animal, ControlKind.Form, true))
                 {
@@ -6782,6 +7407,7 @@ namespace Oxide.Plugins
                         {
                             animal.skinID = rec.Tag;
                             animal.Spawn();
+                            EnforceLook(animal, species, rec.Genes != 0UL && animal is LivestockAnimal ? (int?)unchecked((int)(uint)rec.Genes) : null);
                             animal.health = Mathf.Max(1f, rec.Health);
                             RidableHorse reborn = animal as RidableHorse;
                             if (reborn != null)
@@ -6844,7 +7470,7 @@ namespace Oxide.Plugins
         {
             public BaseCombatEntity Animal;
             public ulong Owner;
-            public List<ItemRecord> Bag = new List<ItemRecord>();
+            public GearRecord Gear = new GearRecord();       // its inventory (saddle, shoes, bag, armour, storage)
         }
 
         internal readonly Dictionary<ulong, LeftForm> LeftForms = new Dictionary<ulong, LeftForm>();
@@ -6859,11 +7485,11 @@ namespace Oxide.Plugins
         {
             BaseCombatEntity body = d.Body;
             var left = new LeftForm { Animal = body, Owner = d.Player.userID };
-            List<ItemRecord> carried;
-            if (FormBags.TryGetValue(d.Player.userID, out carried))
+            GearRecord carried;
+            if (RecordOf(body) == null && FormGears.TryGetValue(d.Player.userID, out carried) && carried != null)
             {
-                left.Bag = carried;                  // the bag stays with the animal
-                FormBags.Remove(d.Player.userID);
+                left.Gear = carried;                 // the inventory stays with the animal
+                FormGears.Remove(d.Player.userID);
             }
             LeftForms[body.net.ID.Value] = left;
             BaseNPC2 npc = body as BaseNPC2;
@@ -6874,7 +7500,7 @@ namespace Oxide.Plugins
             RidableHorse horse = body as RidableHorse;
             if (horse != null)
             {
-                SetSeats(horse, Mathf.Max(1, SeatsOf(horse)));       // the horse can be ridden by its owner
+                SetSeats(horse, HorseModule.SaddleSeats(horse));      // its owner rides it the game's way, when it has a saddle
             }
         }
 
@@ -6889,15 +7515,8 @@ namespace Oxide.Plugins
             {
                 FormSmoke(lf.Animal.transform.position);
             }
-            foreach (ItemRecord rec in lf.Bag)
-            {
-                Item item = ItemFromRecord(rec);
-                if (item != null)
-                {
-                    item.Drop(lf.Animal.transform.position + Vector3.up, Vector3.up);       // what the animal carried stays on the ground
-                }
-            }
-            lf.Bag.Clear();
+            DropGearRecord(lf.Gear, lf.Animal.transform.position + Vector3.up * 0.6f);      // what the animal carried stays on the ground
+            RemoveSaddle(lf.Animal);
             Despawn(lf.Animal);
         }
 
@@ -6958,15 +7577,21 @@ namespace Oxide.Plugins
                 {
                     return null;
                 }
+                if (!Bm.SwapAllowed(player))
+                {
+                    return true;
+                }
                 BaseNPC2 npc = best.Animal as BaseNPC2;
                 if (npc != null)
                 {
                     Bm.Unpark(npc, "left");
                 }
+                Bm.CloseInventoriesOf(best.Gear);
                 Bm.LeftForms.Remove(best.Animal.net.ID.Value);
-                List<ItemRecord> bagBack = best.Bag;
+                GearRecord gearBack = best.Gear;
                 BasePlayer p = player;
                 BaseCombatEntity animal = best.Animal;
+                Bm.FormGears[p.userID] = gearBack;            // it carries its inventory again
                 Bm.NextTick(() =>
                 {
                     if (Bm.StartControl(p, animal, ControlKind.Form, true))
@@ -6976,7 +7601,17 @@ namespace Oxide.Plugins
                         {
                             d.OwnsAnimal = true;
                         }
-                        Bm.FormBags[p.userID] = bagBack;      // it carries its bag again
+                    }
+                    else if (Valid(animal) && !animal.IsDead())
+                    {
+                        // it could not be taken again: it stays where it is, with its inventory
+                        Bm.FormGears.Remove(p.userID);
+                        Bm.LeftForms[animal.net.ID.Value] = new LeftForm { Animal = animal, Owner = p.userID, Gear = gearBack };
+                        BaseNPC2 parked = animal as BaseNPC2;
+                        if (parked != null)
+                        {
+                            Bm.Park(parked, "left");
+                        }
                     }
                 });
                 return true;
@@ -7076,6 +7711,7 @@ namespace Oxide.Plugins
             public object Data;
             public bool Filling;
             public bool Done;
+            public float Opened;
             public Func<VirtualBox, Item, int, bool> Accept;
             public Action<VirtualBox, Item> Added;
             public Action<VirtualBox> Closed;
@@ -7097,10 +7733,19 @@ namespace Oxide.Plugins
                 return null;
             }
             box.enableSaving = false;
+            // the box hangs under the player's feet: the deployable's own ground checks would destroy it there before the panel shows
+            foreach (Component part in box.GetComponents<Component>())
+            {
+                string kindName = part != null ? part.GetType().Name : string.Empty;
+                if (kindName == "GroundWatch" || kindName == "DestroyOnGroundMissing" || kindName == "DeployableDecay")
+                {
+                    UnityEngine.Object.DestroyImmediate(part);
+                }
+            }
             box.Spawn();
             box.inventorySlots = slots;
             box.inventory.capacity = slots;
-            var vb = new VirtualBox { Box = box, Player = player, Kind = kind, Data = data, Accept = accept, Added = added, Closed = closed, Filling = true };
+            var vb = new VirtualBox { Box = box, Player = player, Kind = kind, Data = data, Accept = accept, Added = added, Closed = closed, Filling = true, Opened = Time.realtimeSinceStartup };
             Boxes[box.inventory] = vb;
             if (contents != null)
             {
@@ -7114,7 +7759,12 @@ namespace Oxide.Plugins
                 }
             }
             vb.Filling = false;
-            if (!box.PlayerOpenLoot(player, box.panelName, false))
+            bool opened;
+            using (new VanillaScope(player))             // an animal form (a spectator) may open it too
+            {
+                opened = box.PlayerOpenLoot(player, box.panelName, false);
+            }
+            if (!opened)
             {
                 FinishBox(vb, false);
                 return null;
@@ -7166,123 +7816,279 @@ namespace Oxide.Plugins
             return item;
         }
 
-        // ---------------------------------------------------------------- the gear panel of an owned animal (E, or crouch + E)
-        // Slot 0 = saddle (single or double), slot 1 = horseshoes, slot 2 = saddle bag, everything after that is the bag's own storage.
 
-        private const int GearFixedSlots = 3;
+        // ---------------------------------------------------------------- the inventory of an animal (the horse's, for every animal)
+        // Slot 1 = saddle (single or double), slot 2 = horseshoes, slot 3 = saddle bag, slot 4 = horse armour; from slot 5 on the storage: the
+        // saddle bag gives it (12 slots), the wooden armour adds 6, exactly like the horse. The horseshoes add speed, the bag and the armour cost
+        // some, the armour takes damage off. The horse itself keeps the game's own inventory.
 
-        internal void OpenGear(BasePlayer player, BaseEntity animal, TamedRecord rec)
+        internal const int SlotSaddle = 0, SlotShoes = 1, SlotBag = 2, SlotArmor = 3, GearFixedSlots = 4;
+        private static readonly string[] ArmorItems = { string.Empty, "horse.armor.wood", "horse.armor.roadsign", "horse.armor.lny26" };
+
+        internal static int ArmorIndex(string shortname)
+        {
+            for (int i = 1; i < ArmorItems.Length; i++)
+            {
+                if (ArmorItems[i] == shortname)
+                {
+                    return i;
+                }
+            }
+            return 0;
+        }
+
+        internal int StorageOf(GearRecord g)
+        {
+            return g == null ? 0 : (g.HasBag ? Mathf.Max(0, Cfg.Gear.BagSlots) : 0) + (g.Armor == 1 ? Mathf.Max(0, Cfg.Gear.WoodArmorSlots) : 0);
+        }
+
+        private int MaxStorage => Mathf.Max(0, Cfg.Gear.BagSlots) + Mathf.Max(0, Cfg.Gear.WoodArmorSlots);
+
+        // The double saddle fits the big hoofed animals.
+        internal static bool DoubleSaddleSpecies(SpeciesDef s)
+        {
+            if (s == null)
+            {
+                return false;
+            }
+            switch (s.Id)
+            {
+                case "horse": case "bull": case "cow": case "ram": case "sheep": case "stag": case "doe": return true;
+                default: return false;
+            }
+        }
+
+        // The inventory of an animal form that is not a tamed animal (a tamed one keeps its record's): it goes with the animal when the player
+        // leaves it, and with the player when he logs out.
+        internal readonly Dictionary<ulong, GearRecord> FormGears = new Dictionary<ulong, GearRecord>();
+
+        internal GearRecord FormGearOf(Driver d)
+        {
+            TamedRecord rec = RecordOf(d.Body);
+            if (rec != null)
+            {
+                return rec.Gear;
+            }
+            GearRecord g;
+            if (!FormGears.TryGetValue(d.Player.userID, out g) || g == null)
+            {
+                g = new GearRecord();
+                FormGears[d.Player.userID] = g;
+            }
+            return g;
+        }
+
+        // The inventory of an animal: a player's form, an animal a player has left, a tamed animal. Null = it has none (wild animals, horses).
+        internal GearRecord GearOf(BaseEntity animal)
+        {
+            if (animal == null || animal is RidableHorse)
+            {
+                return null;
+            }
+            Driver d = DriverOfAnimal(animal);
+            if (d != null && d.Kind == ControlKind.Form)
+            {
+                return FormGearOf(d);
+            }
+            LeftForm lf;
+            if (animal.net != null && LeftForms.TryGetValue(animal.net.ID.Value, out lf))
+            {
+                return lf.Gear;
+            }
+            TamedRecord rec = RecordOf(animal);
+            return rec != null ? rec.Gear : null;
+        }
+
+        internal int SaddleOf(BaseEntity animal)
+        {
+            RidableHorse horse = animal as RidableHorse;
+            if (horse != null)
+            {
+                return SeatsOf(horse);
+            }
+            GearRecord g = GearOf(animal);
+            return g != null ? g.Saddle : 0;
+        }
+
+        // Why a player may not open the inventory of an animal; null = he may.
+        internal string InventoryProblem(BasePlayer player, BaseEntity animal, out GearRecord gear)
+        {
+            gear = GearOf(animal);
+            SpeciesDef species = SpeciesOf(animal);
+            if (gear == null || species == null || !species.Gear)
+            {
+                return "This animal has no inventory.";
+            }
+            Driver d = DriverOfAnimal(animal);
+            if (d != null && d.Kind == ControlKind.Form)
+            {
+                if (d.Player == player)
+                {
+                    return null;                     // the player's own animal (Ctrl + E as the animal)
+                }
+                return FormHandledBy(d, player) ? null : "This animal does not let you into its inventory.";
+            }
+            if (d != null)
+            {
+                return "Somebody rides it: its inventory opens when nobody is on it.";
+            }
+            if (LeftOwnedBy(animal, player))
+            {
+                return null;
+            }
+            LeftForm lf;
+            if (animal.net != null && LeftForms.TryGetValue(animal.net.ID.Value, out lf))
+            {
+                return L("NotYours", player.UserIDString);
+            }
+            TamedRecord rec = RecordOf(animal);
+            if (rec != null && Cfg.Gear.BagPrivate && !MayUse(player, rec.Owner, "team"))
+            {
+                return L("NotYours", player.UserIDString);
+            }
+            return null;
+        }
+
+        internal sealed class InventoryContext
+        {
+            public GearRecord Gear;
+            public SpeciesDef Species;
+            public BaseEntity Animal;
+        }
+
+        private readonly HashSet<GearRecord> openGears = new HashSet<GearRecord>();
+
+        internal void OpenInventory(BasePlayer player, BaseEntity animal)
         {
             if (!Cfg.Features.Gear)
             {
                 Tell(player, "FeatureOff");
                 return;
             }
-            SpeciesDef species = SpeciesOf(animal);
-            if (species == null || !species.Gear)
+            GearRecord gear;
+            string problem = InventoryProblem(player, animal, out gear);
+            if (problem != null)
             {
+                TellRaw(player, problem);
                 return;
             }
-            if (Cfg.Gear.BagPrivate && rec.Owner != player.userID && !MayUse(player, rec.Owner, "team"))
+            foreach (VirtualBox own in Boxes.Values.Where(b => b.Player == player).ToList())
             {
-                Tell(player, "NotYours");
-                return;
+                FinishBox(own);                      // a panel of the same player still counted as open (saved first)
             }
-            var contents = new List<KeyValuePair<int, ItemRecord>>();
-            if (rec.Gear.Saddle > 0)
+            if (openGears.Contains(gear))
             {
-                contents.Add(new KeyValuePair<int, ItemRecord>(0, new ItemRecord { Shortname = rec.Gear.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single" }));
-            }
-            if (rec.Gear.Shoes > 0)
-            {
-                contents.Add(new KeyValuePair<int, ItemRecord>(1, new ItemRecord { Shortname = rec.Gear.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic" }));
-            }
-            if (rec.Gear.HasBag)
-            {
-                contents.Add(new KeyValuePair<int, ItemRecord>(2, new ItemRecord { Shortname = "horse.saddlebag" }));
-                foreach (ItemRecord bag in rec.Gear.Bag)
+                // the game of a player in animal form may not show the panel at all (the spectator view): such a panel never keeps others out
+                foreach (VirtualBox held in Boxes.Values.ToList())
                 {
-                    contents.Add(new KeyValuePair<int, ItemRecord>(GearFixedSlots + Mathf.Max(0, bag.Slot), bag));
+                    InventoryContext hc = held.Data as InventoryContext;
+                    Driver holder = held.Player != null ? DriverOf(held.Player) : null;
+                    if (hc != null && hc.Gear == gear && (held.Player == null || !held.Player.IsConnected || (holder != null && holder.Spectating)))
+                    {
+                        FinishBox(held);
+                    }
                 }
             }
-            int slots = GearFixedSlots + Cfg.Gear.BagSlots;
-            ulong tag = rec.Tag;
-            VirtualBox vb = OpenBox(player, "gear", slots, contents, tag,
-                GearAccept,
-                null,
-                GearClosed);
+            if (openGears.Contains(gear))
+            {
+                TellRaw(player, "Somebody is in its inventory right now.");
+                return;
+            }
+            SpeciesDef species = SpeciesOf(animal);
+            var contents = new List<KeyValuePair<int, ItemRecord>>();
+            if (gear.Saddle > 0)
+            {
+                contents.Add(new KeyValuePair<int, ItemRecord>(SlotSaddle, new ItemRecord { Shortname = gear.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single" }));
+            }
+            if (gear.Shoes > 0)
+            {
+                contents.Add(new KeyValuePair<int, ItemRecord>(SlotShoes, new ItemRecord { Shortname = gear.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic" }));
+            }
+            if (gear.HasBag)
+            {
+                contents.Add(new KeyValuePair<int, ItemRecord>(SlotBag, new ItemRecord { Shortname = "horse.saddlebag" }));
+            }
+            if (gear.Armor > 0 && gear.Armor < ArmorItems.Length)
+            {
+                contents.Add(new KeyValuePair<int, ItemRecord>(SlotArmor, new ItemRecord { Shortname = ArmorItems[gear.Armor] }));
+            }
+            foreach (ItemRecord stored in gear.Bag)
+            {
+                contents.Add(new KeyValuePair<int, ItemRecord>(GearFixedSlots + Mathf.Max(0, stored.Slot), stored));
+            }
+            var ctx = new InventoryContext { Gear = gear, Species = species, Animal = animal };
+            VirtualBox vb = OpenBox(player, "inventory", GearFixedSlots + MaxStorage, contents, ctx, InventoryAccept, null, InventoryClosed);
             if (vb != null)
             {
-                Tell(player, "GearOpen", species.Display);
+                openGears.Add(gear);
+                Tell(player, "GearOpen", species.Display, Cfg.Gear.BagSlots, Cfg.Gear.WoodArmorSlots);
             }
         }
 
-        private bool GearAccept(VirtualBox vb, Item item, int slot)
+        private bool InventoryAccept(VirtualBox vb, Item item, int slot)
         {
-            string name = item.info.shortname;
-            if (slot < 0)
+            InventoryContext ctx = vb.Data as InventoryContext;
+            if (ctx == null || slot < 0)
             {
                 return false;
             }
+            string name = item.info.shortname;
             switch (slot)
             {
-                case 0: return name == "horse.saddle.single" || name == "horse.saddle.double";
-                case 1: return name == "horse.shoes.basic" || name == "horse.shoes.advanced";
-                case 2: return name == "horse.saddlebag";
+                case SlotSaddle: return name == "horse.saddle.single" || (name == "horse.saddle.double" && DoubleSaddleSpecies(ctx.Species));
+                case SlotShoes: return name == "horse.shoes.basic" || name == "horse.shoes.advanced";
+                case SlotBag: return name == "horse.saddlebag";
+                case SlotArmor: return ArmorIndex(name) > 0;
                 default:
                     {
-                        Item bag = vb.Box.inventory.GetSlot(2);
-                        return bag != null && bag.info.shortname == "horse.saddlebag" && item != bag;
+                        Item bag = vb.Box.inventory.GetSlot(SlotBag);
+                        Item armor = vb.Box.inventory.GetSlot(SlotArmor);
+                        int capacity = (bag != null && bag.info.shortname == "horse.saddlebag" ? Cfg.Gear.BagSlots : 0)
+                            + (armor != null && ArmorIndex(armor.info.shortname) == 1 ? Cfg.Gear.WoodArmorSlots : 0);
+                        return slot - GearFixedSlots < capacity && item != bag && item != armor;
                     }
             }
         }
 
-        private void GearClosed(VirtualBox vb)
+        private void InventoryClosed(VirtualBox vb)
         {
-            TamedRecord rec;
-            if (!Data.Tamed.TryGetValue((ulong)vb.Data, out rec))
+            InventoryContext ctx = vb.Data as InventoryContext;
+            if (ctx == null)
             {
                 ReturnAll(vb);
                 return;
             }
+            openGears.Remove(ctx.Gear);
             ItemContainer inv = vb.Box.inventory;
-            Item saddle = inv.GetSlot(0), shoes = inv.GetSlot(1), bagItem = inv.GetSlot(2);
-            rec.Gear.Saddle = saddle == null ? 0 : saddle.info.shortname == "horse.saddle.double" ? 2 : 1;
-            rec.Gear.Shoes = shoes == null ? 0 : shoes.info.shortname == "horse.shoes.advanced" ? 2 : 1;
-            rec.Gear.HasBag = bagItem != null;
-            rec.Gear.Bag.Clear();
-            var leftovers = new List<Item>();
+            Item saddle = inv.GetSlot(SlotSaddle), shoes = inv.GetSlot(SlotShoes), bagItem = inv.GetSlot(SlotBag), armor = inv.GetSlot(SlotArmor);
+            GearRecord g = ctx.Gear;
+            g.Saddle = saddle == null ? 0 : saddle.info.shortname == "horse.saddle.double" ? 2 : saddle.info.shortname == "horse.saddle.single" ? 1 : 0;
+            g.Shoes = shoes == null ? 0 : shoes.info.shortname == "horse.shoes.advanced" ? 2 : 1;
+            g.HasBag = bagItem != null && bagItem.info.shortname == "horse.saddlebag";
+            g.Armor = armor != null ? ArmorIndex(armor.info.shortname) : 0;
+            int capacity = StorageOf(g);
+            g.Bag.Clear();
             foreach (Item item in inv.itemList.ToList())
             {
                 if (item.position < GearFixedSlots)
                 {
                     continue;
                 }
-                if (rec.Gear.HasBag)
+                int index = item.position - GearFixedSlots;
+                if (index < capacity)
                 {
-                    rec.Gear.Bag.Add(RecordFromItem(item, item.position - GearFixedSlots));
+                    g.Bag.Add(RecordFromItem(item, index));
                 }
                 else
                 {
-                    leftovers.Add(item);     // the bag was taken out: its contents go back to the player
-                }
-            }
-            foreach (Item item in leftovers)
-            {
-                GiveBack(vb.Player, item);
-            }
-            // the gear items themselves are stored in the record; they are made again when the panel opens
-            foreach (Item fixedItem in new[] { saddle, shoes, bagItem })
-            {
-                if (fixedItem != null)
-                {
-                    fixedItem.Remove();
+                    GiveBack(vb.Player, item);        // no room without the bag (or the armour): back to the player
                 }
             }
             foreach (Item rest in inv.itemList.ToList())
             {
                 rest.Remove();
             }
+            RefreshSaddle(ctx.Animal);
             Tell(vb.Player, "GearSaved");
         }
 
@@ -7294,6 +8100,170 @@ namespace Oxide.Plugins
             }
         }
 
+        // Ctrl + E as an animal: the animal's own inventory (the horse: the game's own horse inventory).
+        internal void OpenOwnInventory(Driver d)
+        {
+            if (d == null || d.Kind != ControlKind.Form || d.Player == null || !d.Alive)
+            {
+                return;
+            }
+            if (d.Horse != null)
+            {
+                if (!OpenEntityLoot(d.Player, d.Horse))
+                {
+                    TellRaw(d.Player, "The inventory of the horse cannot be opened right now.");
+                }
+                return;
+            }
+            if (d.Species == null || !d.Species.Gear)
+            {
+                TellRaw(d.Player, "A " + (d.Species != null ? d.Species.Display.ToLowerInvariant() : "creature") + " carries nothing: it has no inventory.");
+                return;
+            }
+            OpenInventory(d.Player, d.Body);
+            if (Boxes.Values.Any(b => b.Player == d.Player))
+            {
+                TellRaw(d.Player, "If no panel shows up, your game does not open panels in the animal view: press X and Ctrl + E at your animal, or let another player open it (hold E at you).");
+            }
+        }
+
+        // The game's own loot panel of an entity that is no storage box (the horse): its PlayerOpenLoot, whatever its parameters are in this build.
+        private static readonly Dictionary<Type, MethodInfo> openLootMethods = new Dictionary<Type, MethodInfo>();
+
+        internal bool OpenEntityLoot(BasePlayer player, BaseEntity entity)
+        {
+            if (player == null || !Valid(entity))
+            {
+                return false;
+            }
+            StorageContainer storage = entity as StorageContainer;
+            Type type = entity.GetType();
+            MethodInfo method;
+            if (!openLootMethods.TryGetValue(type, out method))
+            {
+                method = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                    .Where(m => m.Name == "PlayerOpenLoot" && m.GetParameters().Length > 0 && m.GetParameters()[0].ParameterType == typeof(BasePlayer))
+                    .OrderByDescending(m => m.GetParameters().Length)
+                    .FirstOrDefault();
+                openLootMethods[type] = method;
+            }
+            try
+            {
+                using (new VanillaScope(player))
+                {
+                    if (storage != null)
+                    {
+                        return storage.PlayerOpenLoot(player, string.Empty, false);
+                    }
+                    if (method == null)
+                    {
+                        return false;
+                    }
+                    ParameterInfo[] ps = method.GetParameters();
+                    var args = new object[ps.Length];
+                    args[0] = player;
+                    for (int i = 1; i < ps.Length; i++)
+                    {
+                        Type t = ps[i].ParameterType;
+                        args[i] = t == typeof(string) ? (object)string.Empty : t == typeof(bool) ? (object)false : ps[i].HasDefaultValue ? ps[i].DefaultValue : (t.IsValueType ? Activator.CreateInstance(t) : null);
+                    }
+                    object result = method.Invoke(entity, args);
+                    return !(result is bool) || (bool)result;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log(1, "Opening the loot of " + entity.ShortPrefabName + " failed: " + ex.Message);
+                return false;
+            }
+        }
+
+        // The storage of the game's horse (its saddle bag), found by name in this build.
+        private static FieldInfo horseStorageField;
+        private static PropertyInfo horseStorageProperty;
+        private static bool horseStorageLooked;
+
+        internal static ItemContainer HorseStorage(RidableHorse horse)
+        {
+            if (horse == null)
+            {
+                return null;
+            }
+            if (!horseStorageLooked)
+            {
+                horseStorageLooked = true;
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                for (Type t = typeof(RidableHorse); t != null && horseStorageField == null && horseStorageProperty == null; t = t.BaseType)
+                {
+                    horseStorageField = t.GetField("storageInventory", flags | BindingFlags.DeclaredOnly);
+                    if (horseStorageField == null)
+                    {
+                        horseStorageProperty = t.GetProperty("storageInventory", flags | BindingFlags.DeclaredOnly);
+                    }
+                }
+            }
+            try
+            {
+                if (horseStorageField != null)
+                {
+                    return horseStorageField.GetValue(horse) as ItemContainer;
+                }
+                if (horseStorageProperty != null)
+                {
+                    return horseStorageProperty.GetValue(horse, null) as ItemContainer;
+                }
+            }
+            catch
+            {
+            }
+            return null;
+        }
+
+        // An item for a player's animal (picked up, given): into the saddle bag of its inventory - the horse's own one for the horse.
+        internal bool StoreForForm(Driver d, Item item, out string why)
+        {
+            why = null;
+            if (d == null || item == null)
+            {
+                why = "There is nothing to put it in.";
+                return false;
+            }
+            if (d.Horse != null)
+            {
+                ItemContainer storage = HorseStorage(d.Horse);
+                if (storage == null || storage.capacity <= 0)
+                {
+                    why = "The horse has no saddle bag: things can only be carried in a saddle bag.";
+                    return false;
+                }
+                if (!item.MoveToContainer(storage))
+                {
+                    why = "The horse's saddle bag is full.";
+                    return false;
+                }
+                return true;
+            }
+            if (d.Species == null || !d.Species.Gear)
+            {
+                why = "A " + (d.Species != null ? d.Species.Display.ToLowerInvariant() : "creature") + " cannot carry anything.";
+                return false;
+            }
+            return AddToGear(FormGearOf(d), item, out why);
+        }
+
+        // An open panel of this inventory is closed first (its contents are saved), so that nothing is dropped and kept at the same time.
+        internal void CloseInventoriesOf(GearRecord g)
+        {
+            foreach (VirtualBox vb in Boxes.Values.ToList())
+            {
+                InventoryContext ctx = vb.Data as InventoryContext;
+                if (ctx != null && ctx.Gear == g)
+                {
+                    FinishBox(vb);
+                }
+            }
+        }
+
         internal static void GiveBack(BasePlayer player, Item item)
         {
             if (player == null || !player.IsConnected || !item.MoveToContainer(player.inventory.containerMain))
@@ -7302,14 +8272,60 @@ namespace Oxide.Plugins
             }
         }
 
-        // Dying animals drop what they carried (R3.5).
-        internal void DropGear(BaseEntity animal, TamedRecord rec)
+        // Puts an item into the storage of an animal (what it picks up, what somebody gives it). False = no saddle bag, no room, or the
+        // inventory is open in a panel right now.
+        internal bool AddToGear(GearRecord g, Item item, out string why)
         {
-            Vector3 pos = animal.transform.position + Vector3.up * 0.6f;
+            why = null;
+            if (g == null)
+            {
+                why = "This animal has no inventory.";
+                return false;
+            }
+            if (openGears.Contains(g))
+            {
+                why = "Its inventory is open right now.";
+                return false;
+            }
+            int capacity = StorageOf(g);
+            if (capacity <= 0)
+            {
+                why = "It has no saddle bag: things can only be carried in a saddle bag (put one into its inventory).";
+                return false;
+            }
+            ItemRecord same = g.Bag.FirstOrDefault(r => r.Shortname == item.info.shortname && r.Skin == item.skin && r.Condition < 0f && !item.hasCondition && r.Amount + item.amount <= item.info.stackable);
+            if (same != null)
+            {
+                same.Amount += item.amount;
+                item.Remove();
+                return true;
+            }
+            for (int slot = 0; slot < capacity; slot++)
+            {
+                if (g.Bag.All(r => r.Slot != slot))
+                {
+                    g.Bag.Add(RecordFromItem(item, slot));
+                    item.Remove();
+                    return true;
+                }
+            }
+            why = "Its saddle bag is full.";
+            return false;
+        }
+
+        // Everything an animal carried falls to the ground (it died, or it vanished).
+        internal void DropGearRecord(GearRecord g, Vector3 pos)
+        {
+            if (g == null)
+            {
+                return;
+            }
+            CloseInventoriesOf(g);
             var names = new List<string>();
-            if (rec.Gear.Saddle > 0) names.Add(rec.Gear.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single");
-            if (rec.Gear.Shoes > 0) names.Add(rec.Gear.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic");
-            if (rec.Gear.HasBag) names.Add("horse.saddlebag");
+            if (g.Saddle > 0) names.Add(g.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single");
+            if (g.Shoes > 0) names.Add(g.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic");
+            if (g.HasBag) names.Add("horse.saddlebag");
+            if (g.Armor > 0 && g.Armor < ArmorItems.Length) names.Add(ArmorItems[g.Armor]);
             foreach (string name in names)
             {
                 Item item = ItemManager.CreateByName(name, 1);
@@ -7318,31 +8334,239 @@ namespace Oxide.Plugins
                     item.Drop(pos, Vector3.up * 2f + UnityEngine.Random.insideUnitSphere);
                 }
             }
-            foreach (ItemRecord bag in rec.Gear.Bag)
+            foreach (ItemRecord stored in g.Bag)
             {
-                Item item = ItemFromRecord(bag);
+                Item item = ItemFromRecord(stored);
                 if (item != null)
                 {
                     item.Drop(pos, Vector3.up * 2f + UnityEngine.Random.insideUnitSphere);
                 }
             }
-            rec.Gear = new GearRecord();
+            g.Saddle = 0;
+            g.Shoes = 0;
+            g.HasBag = false;
+            g.Armor = 0;
+            g.Bag.Clear();
         }
 
-        // Speed change from the animal's gear (shoes add speed, the saddle bag costs some), like the horse's equipmentSpeedMod.
+        // Dying tamed animals drop what they carried (R3.5).
+        internal void DropGear(BaseEntity animal, TamedRecord rec)
+        {
+            DropGearRecord(rec.Gear, animal.transform.position + Vector3.up * 0.6f);
+            rec.Gear = new GearRecord();
+            RemoveSaddle(animal);
+        }
+
+        // Speed change from the inventory, the horse's numbers: horseshoes add speed, the saddle bag and the armour cost some.
         internal float GearSpeedBonus(BaseNPC2 animal)
         {
-            TamedRecord rec = RecordOf(animal);
-            if (rec == null)
+            GearRecord g = GearOf(animal);
+            if (g == null)
             {
                 return 0f;
             }
-            float bonus = rec.Gear.Shoes == 2 ? Cfg.Movement.ShoesAdvanced : rec.Gear.Shoes == 1 ? Cfg.Movement.ShoesBasic : 0f;
-            if (rec.Gear.HasBag)
+            float bonus = g.Shoes == 2 ? Cfg.Movement.ShoesAdvanced : g.Shoes == 1 ? Cfg.Movement.ShoesBasic : 0f;
+            if (g.HasBag)
             {
                 bonus += Cfg.Movement.SaddleBag;
             }
+            if (g.Armor == 1)
+            {
+                bonus += Cfg.Movement.ArmorWood;
+            }
+            else if (g.Armor > 1)
+            {
+                bonus += Cfg.Movement.ArmorRoadsign;
+            }
             return bonus;
+        }
+
+        private float ArmorProtection(GearRecord g)
+        {
+            if (g == null || g.Armor <= 0)
+            {
+                return 0f;
+            }
+            return Mathf.Clamp01(g.Armor == 1 ? Cfg.Gear.ArmorWoodProtection : Cfg.Gear.ArmorRoadsignProtection);
+        }
+
+        // ---------------------------------------------------------------- the saddle on the back
+        // The horse shows its saddle itself. On the other animals the saddle of the inventory is the game's own saddle model (the item's world
+        // model), fixed to the spine so that it moves with the back, scaled to the size of the animal. It can never be picked up.
+
+        internal sealed class SaddleVisual
+        {
+            public BaseEntity Entity;
+            public int Kind;
+        }
+
+        private readonly Dictionary<ulong, SaddleVisual> saddles = new Dictionary<ulong, SaddleVisual>();
+
+        internal void RefreshSaddle(BaseEntity animal)
+        {
+            BaseNPC2 npc = animal as BaseNPC2;
+            if (npc == null || !Valid(npc) || npc.IsDead())
+            {
+                RemoveSaddle(animal);
+                return;
+            }
+            GearRecord g = GearOf(npc);
+            int want = Cfg.Gear.ShowSaddle && g != null ? g.Saddle : 0;
+            ulong id = npc.net.ID.Value;
+            SaddleVisual current;
+            if (saddles.TryGetValue(id, out current) && current.Kind == want && Valid(current.Entity))
+            {
+                return;
+            }
+            RemoveSaddle(npc);
+            if (want <= 0)
+            {
+                return;
+            }
+            BaseEntity visual = MakeSaddle(npc, want);
+            if (visual != null)
+            {
+                saddles[id] = new SaddleVisual { Entity = visual, Kind = want };
+            }
+        }
+
+        // The saddles of one species are put on again (after /bm saddle changed how they sit).
+        internal void RefreshSaddlesOf(SpeciesDef species)
+        {
+            foreach (ulong id in saddles.Keys.ToList())
+            {
+                BaseNPC2 npc = BaseNetworkable.serverEntities.Find(new NetworkableId(id)) as BaseNPC2;
+                if (npc != null && SpeciesOf(npc) == species)
+                {
+                    RemoveSaddle(npc);
+                    RefreshSaddle(npc);
+                }
+            }
+        }
+
+        internal bool IsSaddleModel(BaseEntity e)
+        {
+            if (e == null || saddles.Count == 0)
+            {
+                return false;
+            }
+            foreach (SaddleVisual v in saddles.Values)
+            {
+                if (v.Entity == e)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // A world item vanishes after a while by itself (the game's despawn of dropped items); the saddle on the back must not.
+        private static void KeepFromDespawning(BaseEntity visual)
+        {
+            try
+            {
+                MethodInfo idle = visual.GetType().GetMethod("IdleDestroy", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (idle != null)
+                {
+                    visual.CancelInvoke((Action)Delegate.CreateDelegate(typeof(Action), visual, idle));
+                }
+            }
+            catch
+            {
+                // the Tick of the module puts a new saddle on the back if this one goes
+            }
+        }
+
+        internal void RemoveSaddle(BaseNetworkable animal)
+        {
+            if (animal == null || animal.net == null)
+            {
+                return;
+            }
+            SaddleVisual current;
+            if (saddles.TryGetValue(animal.net.ID.Value, out current))
+            {
+                saddles.Remove(animal.net.ID.Value);
+                if (Valid(current.Entity))
+                {
+                    current.Entity.Kill();
+                }
+            }
+        }
+
+        internal static Vector3 ParseVector(string text)
+        {
+            Vector3 v = Vector3.zero;
+            if (string.IsNullOrEmpty(text))
+            {
+                return v;
+            }
+            string[] parts = text.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
+            float f;
+            if (parts.Length > 0 && float.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out f)) v.x = f;
+            if (parts.Length > 1 && float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out f)) v.y = f;
+            if (parts.Length > 2 && float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out f)) v.z = f;
+            return v;
+        }
+
+        private BaseEntity MakeSaddle(BaseNPC2 animal, int kind)
+        {
+            SpeciesDef species = SpeciesOf(animal);
+            SpeciesOverride o = null;
+            if (species != null)
+            {
+                Cfg.Species.TryGetValue(species.Id, out o);
+            }
+            Item item = ItemManager.CreateByName(kind == 2 ? "horse.saddle.double" : "horse.saddle.single", 1);
+            if (item == null)
+            {
+                return null;
+            }
+            float k = ModelScale(animal);
+            float lift = Cfg.Gear.SaddleLift + (o != null && o.SaddleLift.HasValue ? o.SaddleLift.Value : 0f);
+            Vector3 local = BackPoint(animal) + Vector3.up * lift;
+            Vector3 turn = ParseVector(Cfg.Gear.SaddleRotation) + (o != null ? ParseVector(o.SaddleTurn) : Vector3.zero);
+            float yawOffset = species != null ? YawOffsetOf(species) : 0f;
+            Vector3 world = animal.transform.TransformPoint(local);
+            Quaternion rotation = animal.transform.rotation * Quaternion.Euler(0f, -yawOffset, 0f) * Quaternion.Euler(turn);
+            BaseEntity visual = item.CreateWorldObject(world, rotation);
+            if (visual == null)
+            {
+                item.Remove();
+                return null;
+            }
+            visual.enableSaving = false;
+            KeepFromDespawning(visual);
+            WorldItem worldItem = visual as WorldItem;
+            if (worldItem != null)
+            {
+                worldItem.allowPickup = false;
+            }
+            Rigidbody rb = visual.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.isKinematic = true;
+                rb.useGravity = false;
+                rb.detectCollisions = false;
+            }
+            Transform bone = BackBone(animal);
+            if (bone != null)
+            {
+                visual.SetParent(animal, bone.name, true, false);       // the saddle moves with the spine, like the horse's
+            }
+            else
+            {
+                visual.SetParent(animal, true, false);
+            }
+            // the size: a horse-sized saddle on a horse-sized animal, smaller on a sheep, bigger on a boss
+            float length = Mathf.Max(0.3f, animal.bounds.size.z) * k;
+            float size = Mathf.Clamp(length / 3.06f, 0.4f, 1.6f) * Mathf.Max(0.1f, Cfg.Gear.SaddleScale) * (o != null && o.SaddleScale.HasValue ? o.SaddleScale.Value : 1f);
+            Transform parent = visual.transform.parent;
+            float parentScale = parent != null ? Mathf.Max(0.0001f, parent.lossyScale.x) : 1f;
+            visual.networkEntityScale = true;
+            visual.transform.localScale = Vector3.one * (size / parentScale);
+            visual.SendNetworkUpdateImmediate();
+            return visual;
         }
 
         // ---------------------------------------------------------------- hooks
@@ -7350,13 +8574,14 @@ namespace Oxide.Plugins
         internal sealed class GearModule : Module
         {
             public override int Order => 40;
+            private float nextSaddleCheck;
 
             public override Dictionary<string, string> Messages()
             {
                 return new Dictionary<string, string>
                 {
-                    ["GearOpen"] = "{0} gear: slot 1 = saddle, slot 2 = horseshoes, slot 3 = saddle bag, the other slots are the bag. Close the panel to save.",
-                    ["GearSaved"] = "Gear saved.",
+                    ["GearOpen"] = "{0} inventory: slot 1 saddle, slot 2 horseshoes, slot 3 saddle bag, slot 4 horse armour; from slot 5 on the storage ({1} slots with a saddle bag, {2} more with the wooden armour). Close the panel to save.",
+                    ["GearSaved"] = "Saved.",
                 };
             }
 
@@ -7392,6 +8617,94 @@ namespace Oxide.Plugins
                 }
             }
 
+            // The horse armour of an animal takes damage off (the horse's armour works by itself).
+            public override object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
+            {
+                BaseNPC2 animal = entity as BaseNPC2;
+                if (animal == null || info == null)
+                {
+                    return null;
+                }
+                float protection = Bm.ArmorProtection(Bm.GearOf(animal));
+                if (protection > 0f)
+                {
+                    info.damageTypes.ScaleAll(1f - protection);
+                }
+                return null;
+            }
+
+            // The saddles on the backs follow the inventories (a saddle fitted or taken out, an animal that came or went).
+            public override void Tick(float now)
+            {
+                if (now < nextSaddleCheck)
+                {
+                    return;
+                }
+                nextSaddleCheck = now + 1f;
+                // a panel the player's game never showed, or one that was closed without the end hook, ends here (its contents are saved)
+                foreach (VirtualBox vb in Bm.Boxes.Values.ToList())
+                {
+                    if (Time.realtimeSinceStartup - vb.Opened > 2f && (vb.Player == null || !vb.Player.IsConnected || vb.Player.inventory.loot.entitySource != vb.Box))
+                    {
+                        Bm.FinishBox(vb);
+                    }
+                }
+                var wanted = new HashSet<ulong>();
+                foreach (Driver d in Bm.Drivers.Values.ToList())
+                {
+                    if (d != null && d.Alive && d.Animal != null && Valid(d.Animal))
+                    {
+                        wanted.Add(d.Animal.net.ID.Value);
+                        Bm.RefreshSaddle(d.Animal);
+                    }
+                }
+                foreach (LeftForm lf in Bm.LeftForms.Values.ToList())
+                {
+                    BaseNPC2 npc = lf.Animal as BaseNPC2;
+                    if (npc != null && Valid(npc) && wanted.Add(npc.net.ID.Value))
+                    {
+                        Bm.RefreshSaddle(npc);
+                    }
+                }
+                foreach (TamedRecord rec in Bm.Data.Tamed.Values.ToList())
+                {
+                    BaseNPC2 npc = Bm.EntityOfRecord(rec) as BaseNPC2;
+                    if (npc != null && wanted.Add(npc.net.ID.Value))
+                    {
+                        Bm.RefreshSaddle(npc);
+                    }
+                }
+                foreach (ulong id in Bm.saddles.Keys.ToList())
+                {
+                    if (!wanted.Contains(id))
+                    {
+                        SaddleVisual v = Bm.saddles[id];
+                        Bm.saddles.Remove(id);
+                        if (Valid(v.Entity))
+                        {
+                            v.Entity.Kill();
+                        }
+                    }
+                }
+            }
+
+            // A dying animal takes its saddle model with it (the inventory itself is dropped by its owner's rules).
+            public override void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
+            {
+                if (entity is BaseNPC2)
+                {
+                    Bm.RemoveSaddle(entity);
+                }
+            }
+
+            public override void OnEntityKill(BaseNetworkable entity)
+            {
+                if (entity is BaseNPC2)
+                {
+                    Bm.RemoveSaddle(entity);
+                }
+            }
+
             public override void OnPlayerDisconnected(BasePlayer player, string reason)
             {
                 foreach (VirtualBox vb in Bm.Boxes.Values.Where(b => b.Player == player).ToList())
@@ -7406,11 +8719,24 @@ namespace Oxide.Plugins
                 {
                     Bm.FinishBox(vb);
                 }
+                foreach (SaddleVisual v in Bm.saddles.Values.ToList())
+                {
+                    if (Valid(v.Entity))
+                    {
+                        v.Entity.Kill();
+                    }
+                }
+                Bm.saddles.Clear();
             }
 
             public override void OnDisable()
             {
                 Unload();
+            }
+
+            public override void SelfTest(List<string> report)
+            {
+                report.Add("Gear: " + Bm.saddles.Count + " saddles shown on animals; armour items " + string.Join(", ", ArmorItems.Where(a => a.Length > 0).Select(a => a + (ItemManager.FindItemDefinition(a) != null ? " OK" : " MISSING")).ToArray()));
             }
         }
     }
@@ -7443,20 +8769,21 @@ namespace Oxide.Plugins
             return rule != "team" || SameParty(host.Player, other);
         }
 
-        internal bool NeedsFood(SpeciesDef s)
+        // A player's animal carries riders when it has a saddle in its inventory: one with a single saddle, two with a double saddle (the double
+        // saddle fits the horse, bull, cow, ram, sheep and stag). The horse uses the game's own saddle and seats.
+        internal int MaxRiders(Driver host)
         {
-            return s != null && Cfg.Form.RideFedSpecies != null && Cfg.Form.RideFedSpecies.Contains(s.Id);
+            if (host == null || host.Body == null)
+            {
+                return 0;
+            }
+            return SaddleOf(host.Body);
         }
 
-        internal int MaxRiders(SpeciesDef s)
-        {
-            return Mathf.Max(0, NeedsFood(s) ? Cfg.Form.RidersFed : Cfg.Form.RidersOther);
-        }
-
-        // May this player climb on that animal form right now? (the horse form uses this in its vanilla mount hook, the others in TryBoard)
+        // May this player climb on that animal form right now? (the horse form uses this in its vanilla mount hook, the others in TryFormHandle)
         internal bool FormMountCheck(BasePlayer player, Driver host, bool tell)
         {
-            if (!FormHandledBy(host, player) || MaxRiders(host.Species) <= 0)
+            if (!FormHandledBy(host, player))
             {
                 if (tell)
                 {
@@ -7464,34 +8791,33 @@ namespace Oxide.Plugins
                 }
                 return false;
             }
-            if (NeedsFood(host.Species) && host.FedUntil <= Time.time)
+            if (host.Species == null || host.Species.Critter || host.Species.Ride == RideTier.None || !host.Species.Gear)
             {
                 if (tell)
                 {
-                    TellRaw(player, "It will only let you on after it has eaten: drop food in front of its head and wait until it has eaten it.");
+                    TellRaw(player, "A " + (host.Species != null ? host.Species.Display.ToLowerInvariant() : "creature") + " is too small to ride.");
+                }
+                return false;
+            }
+            if (MaxRiders(host) <= 0)
+            {
+                if (tell)
+                {
+                    TellRaw(player, "It has no saddle: put a saddle into its inventory (hold E at it, then Inventory) to ride it.");
                 }
                 return false;
             }
             return true;
         }
 
-        // The animal has eaten something that was lying on the ground: it is calm enough to be ridden for a while.
-        internal void FormFed(Driver d)
-        {
-            if (d != null && d.Kind == ControlKind.Form)
-            {
-                d.FedUntil = Time.time + Mathf.Max(30f, Cfg.Form.FedSeconds);
-            }
-        }
-
-        // E on somebody's animal form (the plugin's own seats for the Gen2 animals; the horse is mounted the game's way).
-        internal bool TryFormHandle(BasePlayer player, Driver host)
+        // E on somebody's animal form (the plugin's own seats for the Gen2 animals; the horse is mounted the game's way). Ctrl + E: the leash.
+        internal bool TryFormHandle(BasePlayer player, Driver host, bool leash)
         {
             if (host == null || host.Kind != ControlKind.Form || !host.Alive)
             {
                 return false;
             }
-            if (player.serverInput.IsDown(BUTTON.DUCK))
+            if (leash)
             {
                 ToggleLeash(player, host);
                 return true;
@@ -7505,12 +8831,7 @@ namespace Oxide.Plugins
             {
                 return true;
             }
-            if (host.Species.Critter || host.Species.Ride == RideTier.None)
-            {
-                TellRaw(player, "A " + host.Species.Display.ToLowerInvariant() + " is too small to ride.");
-                return true;
-            }
-            if (host.Guests.Count >= MaxRiders(host.Species))
+            if (host.Guests.Count >= MaxRiders(host))
             {
                 TellRaw(player, "There is no room left on the " + host.Species.Display.ToLowerInvariant() + ".");
                 return true;
@@ -8035,6 +9356,8 @@ namespace Oxide.Plugins
             public float AttackUntil;
             public float SpeedMult = 1f;             // bosses run faster
             public float Damage;                     // bosses hit harder (0 = the configured horse attack)
+            public float PassUntil;                  // after a hit the charging horse runs on past its victim, then turns for the next run
+            public Vector3 PassTo;
             public bool WasLeading;                  // the vanilla rope was on last tick
             public BasePlayer LastLeader;
             public float StopRequested;              // the leader asked to let go (so the rope breaking is no accident)
@@ -8429,11 +9752,17 @@ namespace Oxide.Plugins
                     s.Drive.Stop();
                     return false;
                 }
-                if (dist <= 3.4f)
+                if (dist <= 3.4f && !Bm.IsFormPlayer(leader))
                 {
                     s.Tether = null;
                     s.Drive.Stop();
                     h.SetLeading(leader);
+                    return true;
+                }
+                if (dist <= 3.4f)
+                {
+                    s.Mode = "tether";
+                    s.Drive.Stop();                     // an animal form leads without a visible rope: the horse just stays close
                     return true;
                 }
                 s.Mode = "tether";
@@ -8517,21 +9846,48 @@ namespace Oxide.Plugins
 
             // ---------------------------------------------------------------- charging and striking
 
+            // An aggressive horse attacks like a ram: it gallops straight into its victim, the impact hurts and knocks a player down, it runs on
+            // past and turns for the next run. No rearing up and no screaming on the way (that looked wrong); its own hoof beats and snorts stay.
             private void Charge(HorseState s, BaseCombatEntity target, float now)
             {
-                Vector3 to = target.transform.position - s.Horse.transform.position;
-                to.y = 0f;
+                RidableHorse h = s.Horse;
                 s.Mode = "charge";
-                if (to.magnitude > 3.2f)
+                float speed = Bm.Cfg.Horse.FleeSpeed * s.SpeedMult;
+                if (now < s.PassUntil)
                 {
-                    s.Drive.StopDistance = 2.5f;
-                    s.Drive.MoveTo(target.transform.position, Bm.Cfg.Horse.FleeSpeed * s.SpeedMult);
+                    s.Drive.StopDistance = 1f;
+                    s.Drive.MoveTo(s.PassTo, speed);
                     return;
                 }
-                s.Drive.Stop();
-                Strike(s, target, now);
+                Vector3 center;
+                Vector3 nose = AttackTip(h, h.transform.eulerAngles.y, false, out center);
+                Vector3 touch = target.ClosestPoint(nose);
+                Vector3 ahead = touch - center;
+                ahead.y = 0f;
+                Vector3 fwd = h.transform.forward;
+                fwd.y = 0f;
+                bool inFront = ahead.sqrMagnitude < 0.01f || Vector3.Angle(fwd, ahead) < 60f;
+                if (inFront && Vector3.Distance(touch, nose) <= Bm.Cfg.Combat.ChargeContact + 0.45f && now >= s.NextAttack)
+                {
+                    s.NextAttack = now + Bm.Cfg.Horse.AttackCooldown;
+                    float damage = s.Damage > 0f ? s.Damage : Bm.Cfg.Horse.AttackDamage;
+                    target.Hurt(new HitInfo(h, target, Rust.DamageType.Blunt, damage * Bm.Cfg.Combat.DamageScale, touch));
+                    Bm.BumpSound(touch, "generic");
+                    Bm.BossHit(h, target);
+                    BasePlayer victim = target as BasePlayer;
+                    if (victim != null && !victim.IsDead() && !victim.isMounted)
+                    {
+                        victim.Ragdoll(fwd.normalized * 6f + Vector3.up * 3f, true, false, false, h);
+                    }
+                    s.PassTo = GroundAt(h.transform.position + fwd.normalized * 12f);
+                    s.PassUntil = now + 1.4f;
+                    return;
+                }
+                s.Drive.StopDistance = 0.2f;
+                s.Drive.MoveTo(target.transform.position, speed);         // straight into it
             }
 
+            // F as the horse: rear up and strike what is in front.
             public void Strike(HorseState s, BaseCombatEntity target, float now)
             {
                 if (now < s.NextAttack)
@@ -8539,62 +9895,54 @@ namespace Oxide.Plugins
                     return;
                 }
                 s.NextAttack = now + Bm.Cfg.Horse.AttackCooldown;
-                Vector3 to = target.transform.position - s.Horse.transform.position;
-                to.y = 0f;
-                if (to.sqrMagnitude > 0.01f)
-                {
-                    s.Horse.transform.rotation = Quaternion.Euler(0f, Yaw(to), 0f);
-                }
-                if (Bm.Cfg.Horse.RearUpAttack)
-                {
-                    RpcGroup(s.Horse, "CLIENT_Stand");
-                }
                 RidableHorse horse = s.Horse;
-                Bm.timer.Once(Bm.Cfg.Horse.RearUpAttack ? 0.8f : 0.1f, () =>
+                Bm.timer.Once(0.1f, () =>
                 {
-                    if (!Valid(horse) || horse.IsDead())
+                    if (Valid(horse) && !horse.IsDead())
                     {
-                        return;
+                        HitZone(horse, s.Damage > 0f ? s.Damage : Bm.Cfg.Horse.AttackDamage, target, false, false);
                     }
-                    HitFront(horse, s.Damage > 0f ? s.Damage : Bm.Cfg.Horse.AttackDamage, target);
                 });
             }
 
-            // Damage to everything the horse faces within 4 m (the aimed target and others in the cone).
-            internal void HitFront(RidableHorse horse, float damage, BaseCombatEntity preferred, bool anyAnimal = false)
+            // Damage right at the nose of the horse (or right behind it for a kick): the aimed target and, for a player's horse, everything there.
+            internal void HitZone(RidableHorse horse, float damage, BaseCombatEntity preferred, bool anyAnimal, bool rear)
             {
-                Vector3 pos = horse.transform.position;
-                Vector3 fwd = horse.transform.forward;
-                fwd.y = 0f;
+                Vector3 center;
+                Vector3 tip = AttackTip(horse, horse.transform.eulerAngles.y, rear, out center);
+                Vector3 facing = horse.transform.forward * (rear ? -1f : 1f);
+                facing.y = 0f;
+                float reach = Bm.Cfg.Combat.HitReach * ModelScale(horse) + 0.2f;
                 var near = new List<BaseCombatEntity>();
-                float reach = ModelScale(horse);
-                Vis.Entities(pos, 4.2f * reach, near);
+                Vis.Entities(tip, reach + 2f, near);
                 foreach (BaseCombatEntity e in near)
                 {
-                    if (e == null || e == horse || !Alive(e) || e is BaseCorpse || (e is RidableHorse))
+                    if (e == null || e == horse || !Alive(e) || e is BaseCorpse || (e is RidableHorse && e != preferred))
                     {
                         continue;
                     }
                     BasePlayer p = e as BasePlayer;
-                    if (p != null && (p.InSafeZone() || (Instance != null && Instance.IsFormPlayer(p) && Instance.Cfg.Form.Untargetable)))
+                    if (p != null && (p.InSafeZone() || p.GetMounted() != null && HorseOfSeat(p.GetMounted()) == horse || (Instance != null && Instance.IsFormPlayer(p) && Instance.Cfg.Form.Untargetable)))
                     {
                         continue;
                     }
-                    if ((e is BaseNPC2 && Bm.IsTamed(e)) || Bm.IsBossPair(horse, e))
+                    if ((e is BaseNPC2 && Bm.IsTamed(e) && e != preferred) || Bm.IsBossPair(horse, e))
                     {
                         continue;
                     }
                     if (p == null && e != preferred && !anyAnimal)
                     {
-                        continue;       // a charging horse hurts the players around it and its target, not every animal that stands near
+                        continue;
                     }
-                    Vector3 to = e.transform.position - pos;
+                    Vector3 point = e.ClosestPoint(tip);
+                    Vector3 to = point - center;
                     to.y = 0f;
-                    if (e != preferred && Vector3.Angle(fwd, to) > 70f)
+                    if (Vector3.Distance(point, tip) > reach || (to.sqrMagnitude > 0.01f && Vector3.Angle(facing, to) > 70f))
                     {
                         continue;
                     }
-                    e.Hurt(new HitInfo(horse, e, Rust.DamageType.Blunt, damage * Bm.Cfg.Combat.DamageScale, e.transform.position));
+                    e.Hurt(new HitInfo(horse, e, Rust.DamageType.Blunt, damage * Bm.Cfg.Combat.DamageScale, point));
+                    Bm.HitSound(e, point);
                     Bm.BossHit(horse, e);
                 }
             }
@@ -8731,8 +10079,22 @@ namespace Oxide.Plugins
                     horse.SetLeading(null);
                 }
                 horse.DismountAllPlayers();
-                // the player is the horse: riders get the seats once it has eaten (the mount hook checks that), the driver seat is the player's view
-                SetSeats(horse, Mathf.Clamp(Bm.Cfg.Form.RidersFed, 0, 2));
+                // the player is the horse: riders get the seats its saddle gives (none without one), the game keeps that up when a saddle is fitted
+                SetSeats(horse, SaddleSeats(horse));
+            }
+
+            // The seats the saddle in the horse's equipment gives: 0, 1 (single) or 2 (double).
+            public static int SaddleSeats(RidableHorse horse)
+            {
+                int seats = 0;
+                if (horse != null && horse.equipmentInventory != null)
+                {
+                    foreach (Item it in horse.equipmentInventory.itemList)
+                    {
+                        seats = Mathf.Max(seats, horse.GetSaddleItemSeatCount(it));
+                    }
+                }
+                return seats;
             }
 
             public void ReleaseControl(RidableHorse horse)
@@ -8747,15 +10109,7 @@ namespace Oxide.Plugins
                 {
                     // the seats follow the saddle again
                     horse.DismountAllPlayers();
-                    int seats = 0;
-                    if (horse.equipmentInventory != null)
-                    {
-                        foreach (Item it in horse.equipmentInventory.itemList)
-                        {
-                            seats = Mathf.Max(seats, horse.GetSaddleItemSeatCount(it));
-                        }
-                    }
-                    SetSeats(horse, seats);
+                    SetSeats(horse, SaddleSeats(horse));
                 }
             }
 
@@ -8806,7 +10160,19 @@ namespace Oxide.Plugins
                 {
                     if (Valid(horse) && !horse.IsDead())
                     {
-                        HitFront(horse, Bm.Cfg.Horse.AttackDamage, null, true);
+                        HitZone(horse, Bm.Cfg.Horse.AttackDamage, null, true, false);
+                    }
+                });
+            }
+
+            // F as the horse with the camera behind it: a kick behind (the game has no kick animation for the horse - the hit and its sound).
+            public void PlayerKickBack(RidableHorse horse, Driver d)
+            {
+                Bm.timer.Once(0.15f, () =>
+                {
+                    if (Valid(horse) && !horse.IsDead())
+                    {
+                        HitZone(horse, Bm.Cfg.Horse.AttackDamage, null, true, true);
                     }
                 });
             }
@@ -8944,7 +10310,7 @@ namespace Oxide.Plugins
                 Driver formHost = Bm.DriverOfAnimal(horse);
                 if (formHost != null && formHost.Kind == ControlKind.Form)
                 {
-                    // a player is the horse: others ride it after it has eaten, never as its driver
+                    // a player is the horse: others ride it when it has a saddle (the game gives it the seats of the saddle), never as its driver
                     return Bm.FormMountCheck(player, formHost, true) ? null : (object)false;
                 }
                 if (s.Asleep(Time.time) || s.Frozen)
@@ -8975,12 +10341,27 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            // The gear panel of a managed horse: owner and team only, never while it is wild or asleep.
+            // The gear panel of a managed horse: owner and team only, never while it is wild or asleep. A horse that is a player: that player
+            // (Ctrl + E) and whom the server lets handle it; the horse a player has left: that player.
             public override object CanLootEntity(BasePlayer player, BaseEntity entity)
             {
                 RidableHorse horse = entity as RidableHorse;
                 HorseState s = horse != null ? StateOf(horse) : null;
                 if (s == null || (Bm.Cfg.Riding.AdminBypass && Bm.IsAdmin(player)))
+                {
+                    return null;
+                }
+                Driver formHost = Bm.DriverOfAnimal(horse);
+                if (formHost != null && formHost.Kind == ControlKind.Form)
+                {
+                    if (formHost.Player == player || Bm.FormHandledBy(formHost, player))
+                    {
+                        return null;
+                    }
+                    Bm.Tell(player, "HorseNoLoot");
+                    return false;
+                }
+                if (Bm.LeftOwnedBy(horse, player))
                 {
                     return null;
                 }
@@ -9115,7 +10496,7 @@ namespace Oxide.Plugins
                 {
                     if (Valid(horse) && !horse.IsDead())
                     {
-                        HitFront(horse, Bm.Cfg.Horse.AttackDamage, null, true);
+                        HitZone(horse, Bm.Cfg.Horse.AttackDamage, null, true, false);
                     }
                 });
                 return true;
@@ -9335,52 +10716,24 @@ namespace Oxide.Plugins
         }
 
         // Use key in the third-person animal form: the nearest door, container, corpse or pickup in front of the animal's head.
-        internal void InteractFrom(Driver d)
+        internal void InteractFrom(Driver d, bool crouch)
         {
             BasePlayer player = d.Player;
+            if (crouch)
+            {
+                OpenOwnInventory(d);                    // Ctrl + E: the animal's own inventory (saddle, shoes, saddle bag, armour)
+                return;
+            }
             if (TryLeadToggle(d))
             {
                 return;
             }
             if (!Cfg.Form.Doors && !Cfg.Form.Looting)
             {
+                TryEat(d);
                 return;
             }
-            Vector3 head = d.HeadPosition();
-            Vector3 dir = Quaternion.Euler(10f, d.Heading, 0f) * Vector3.forward;
-            var found = new List<BaseEntity>();
-            Vis.Entities(head + dir * 1.1f, 2.4f, found);
-            BaseEntity best = null;
-            float bestScore = float.MaxValue;
-            foreach (BaseEntity e in found)
-            {
-                if (!Valid(e) || e == d.Body || e == player)
-                {
-                    continue;
-                }
-                bool wanted = (Cfg.Form.Doors && e is Door) || (Cfg.Form.Looting && (e is StorageContainer || e is LootableCorpse || e is DroppedItemContainer || e is CollectibleEntity || e is WorldItem));
-                if (!wanted)
-                {
-                    continue;
-                }
-                Vector3 to = e.ClosestPoint(head) - head;
-                float dist = to.magnitude;
-                if (dist > 2.6f)
-                {
-                    continue;
-                }
-                float angle = Vector3.Angle(dir, to);
-                if (angle > 65f)
-                {
-                    continue;
-                }
-                float score = angle * 0.04f + dist;
-                if (score < bestScore)
-                {
-                    bestScore = score;
-                    best = e;
-                }
-            }
+            BaseEntity best = InteractTarget(d);
             if (best == null)
             {
                 TryEat(d);
@@ -9403,6 +10756,108 @@ namespace Oxide.Plugins
             {
                 Log(0, "Interaction with " + best.ShortPrefabName + " failed: " + ex.Message);
             }
+        }
+
+        // The door, container, corpse or thing in front of the animal's head that E would use.
+        internal BaseEntity InteractTarget(Driver d)
+        {
+            if (!Cfg.Form.Doors && !Cfg.Form.Looting)
+            {
+                return null;
+            }
+            Vector3 head = d.HeadPosition();
+            Vector3 dir = Quaternion.Euler(10f, d.Heading, 0f) * Vector3.forward;
+            var found = new List<BaseEntity>();
+            Vis.Entities(head + dir * 1.1f, 2.4f, found);
+            BaseEntity best = null;
+            float bestScore = float.MaxValue;
+            foreach (BaseEntity e in found)
+            {
+                if (!Valid(e) || e == d.Body || e == d.Player)
+                {
+                    continue;
+                }
+                bool wanted = (Cfg.Form.Doors && e is Door) || (Cfg.Form.Looting && (e is StorageContainer || e is LootableCorpse || e is DroppedItemContainer || e is CollectibleEntity || e is WorldItem));
+                if (!wanted || IsSaddleModel(e))
+                {
+                    continue;
+                }
+                Vector3 to = e.ClosestPoint(head) - head;
+                float dist = to.magnitude;
+                if (dist > 2.6f)
+                {
+                    continue;
+                }
+                float angle = Vector3.Angle(dir, to);
+                if (angle > 65f)
+                {
+                    continue;
+                }
+                float score = angle * 0.04f + dist;
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best = e;
+                }
+            }
+            return best;
+        }
+
+        // What E would do right now, for the prompt on the screen of an animal form (null = nothing).
+        internal string UsePrompt(Driver d)
+        {
+            if (d == null || d.Kind != ControlKind.Form || !d.Alive || d.Body == null)
+            {
+                return null;
+            }
+            string lead = LeadPrompt(d);
+            if (lead != null)
+            {
+                return lead;
+            }
+            BaseEntity target = InteractTarget(d);
+            if (target != null)
+            {
+                Door door = target as Door;
+                if (door != null)
+                {
+                    if (!door.canHandOpen)
+                    {
+                        return null;
+                    }
+                    return door.IsLocked() ? "Locked" : door.IsOpen() ? "Close" : "Open";
+                }
+                if (target is LootableCorpse)
+                {
+                    return "Loot";
+                }
+                if (target is StorageContainer || target is DroppedItemContainer)
+                {
+                    return "Open";
+                }
+                if (target is CollectibleEntity)
+                {
+                    return "Pick up";
+                }
+                WorldItem lying = target as WorldItem;
+                if (lying != null && lying.item != null)
+                {
+                    return StatsModule.OnDiet(d.Species, lying.item.info.shortname) ? "Eat " + lying.item.info.displayName.english : "Pick up " + lying.item.info.displayName.english;
+                }
+            }
+            if (!Cfg.Form.Needs)
+            {
+                return null;
+            }
+            Vector3 fwd = Quaternion.Euler(0f, d.Heading, 0f) * Vector3.forward;
+            foreach (float reach in new[] { 0.5f, 1.2f, 2f })
+            {
+                if (WaterLevel.GetWaterDepth(d.Body.transform.position + fwd * reach, true, true, null) > 0.02f)
+                {
+                    return "Drink";
+                }
+            }
+            return null;
         }
 
         private void InteractWith(BasePlayer player, BaseEntity entity)
@@ -9448,14 +10903,15 @@ namespace Oxide.Plugins
                 {
                     lying.Kill();                           // the item lies in the bag now, the empty world item goes away
                 }
-                if (AddToBag(player, picked))
+                string why;
+                if (StoreForForm(DriverOf(player), picked, out why))
                 {
-                    TellRaw(player, "Picked up: " + pickedName + " (it is in your animal's bag).");
+                    TellRaw(player, "Picked up: " + pickedName + " (it is in your saddle bag; Ctrl + E opens your inventory).");
                 }
                 else
                 {
-                    picked.Drop(at + Vector3.up * 0.3f, Vector3.up);       // the bag is full: it stays where it lay
-                    TellRaw(player, "Your animal's bag is full.");
+                    picked.Drop(at + Vector3.up * 0.3f, Vector3.up);       // no saddle bag or no room: it stays where it lay
+                    TellRaw(player, why);
                 }
             }
         }
@@ -9525,7 +10981,7 @@ namespace Oxide.Plugins
                 ["UnknownSpecies"] = "Unknown species '{0}'. Known: {1}",
                 ["SpeciesOff"] = "{0} is not available (disabled or not in this game build).",
                 ["NeedTame"] = "This animal is not tamed. Tame it first (see Help - Taming).",
-                ["NeedSaddle"] = "This animal has no saddle. Open its gear with E and fit one.",
+                ["NeedSaddle"] = "This animal has no saddle: open its inventory (E, or Ctrl + E) and put a saddle into slot 1.",
                 ["NotYours"] = "This animal belongs to someone else.",
                 ["AlreadyControlling"] = "You are already riding or in animal form. Press X first.",
                 ["Riding"] = "Riding the {0}. W/A/S/D move, Shift faster, Ctrl brake, Space jump, F attack, G view, X get off.",
@@ -9615,6 +11071,23 @@ namespace Oxide.Plugins
                 }
             }
             return best;
+        }
+
+        // The prompt of E for leading: "Lead the cow" / "Let the cow go" (null = no animal to lead in front of the head).
+        internal string LeadPrompt(Driver d)
+        {
+            if (!Cfg.Features.Lead || d.Kind != ControlKind.Form || Leads == null)
+            {
+                return null;
+            }
+            BaseNPC2 target = LeadCandidate(d);
+            if (target == null)
+            {
+                return null;
+            }
+            SpeciesDef species = SpeciesOf(target);
+            string name = species != null ? species.Display.ToLowerInvariant() : "animal";
+            return Leads.ChainOf(d).Contains(target) ? "Let the " + name + " go" : "Lead the " + name;
         }
 
         // E from the animal's head: lead the tamed animal in front of it, or let it go if it is led already.
@@ -9865,6 +11338,521 @@ namespace Oxide.Plugins
             private static string savedLeadBreakInfo()
             {
                 return ConVar.Livestock.leadBreakDistance.ToString("0");
+            }
+        }
+    }
+
+    // ======================================== Life.cs
+    public partial class Beastmaster
+    {
+        // ---------------------------------------------------------------- the life of a played animal
+        // The prompt of E on the screen of an animal form (open the door, loot, eat, drink, lead), the dung a played horse, cow or sheep leaves
+        // now and then, the egg a played chicken very rarely lays, the rope of the game that an animal form must not show, and the wild animals
+        // that do not jump over things (only an animal a player controls jumps).
+
+        // An item by its short name, or - when this game build calls it differently - the first item whose name has that word in it.
+        internal static ItemDefinition ItemLike(string preferred, string word, string exclude)
+        {
+            ItemDefinition def = string.IsNullOrEmpty(preferred) ? null : ItemManager.FindItemDefinition(preferred);
+            if (def != null)
+            {
+                return def;
+            }
+            foreach (ItemDefinition d in ItemManager.itemList)
+            {
+                string n = d.shortname;
+                if (n == word || ((n.StartsWith(word + ".") || n.EndsWith("." + word)) && (exclude == null || !n.Contains(exclude))))
+                {
+                    return d;
+                }
+            }
+            return null;
+        }
+
+        internal sealed class LifeModule : Module
+        {
+            public override int Order => 60;
+
+            private const string PromptUi = "BeastmasterPrompt";
+
+            private readonly Dictionary<ulong, string> prompts = new Dictionary<ulong, string>();
+            private readonly Dictionary<ulong, float> nextDung = new Dictionary<ulong, float>();
+            private float nextPrompt, nextMinute, nextRope;
+
+            public override void Init(Beastmaster bm)
+            {
+                base.Init(bm);
+                bm.Subscribe("OnEntitySpawned");
+            }
+
+            public override void OnServerInitialized()
+            {
+                if (!Bm.Cfg.Life.NoWildJumps)
+                {
+                    return;
+                }
+                int n = 0;
+                foreach (BaseNetworkable net in BaseNetworkable.serverEntities.ToList())
+                {
+                    BaseNPC2 npc = net as BaseNPC2;
+                    if (npc != null && NoJumps(npc))
+                    {
+                        n++;
+                    }
+                }
+                Bm.Log(3, "Wild jumps switched off on " + n + " animals (" + JumpReport + ")");
+            }
+
+            public override void OnEntitySpawned(BaseNetworkable entity)
+            {
+                BaseNPC2 npc = entity as BaseNPC2;
+                if (npc == null || !Bm.Cfg.Life.NoWildJumps)
+                {
+                    return;
+                }
+                Bm.NextTick(() =>
+                {
+                    if (Valid(npc))
+                    {
+                        NoJumps(npc);
+                    }
+                });
+            }
+
+            public override void Tick(float now)
+            {
+                if (now >= nextPrompt)
+                {
+                    nextPrompt = now + 0.3f;
+                    Prompts();
+                }
+                if (now >= nextRope)
+                {
+                    nextRope = now + 1f;
+                    HideRopes();
+                }
+                if (now >= nextMinute)
+                {
+                    float step = nextMinute <= 0f ? 0f : 5f;
+                    nextMinute = now + 5f;
+                    if (step > 0f)
+                    {
+                        Droppings(now, step);
+                    }
+                }
+            }
+
+            public override void OnPlayerDisconnected(BasePlayer player, string reason)
+            {
+                prompts.Remove(player.userID);
+            }
+
+            public override void OnDisable()
+            {
+                Unload();
+            }
+
+            public override void Unload()
+            {
+                foreach (ulong id in prompts.Keys.ToList())
+                {
+                    BasePlayer p = BasePlayer.FindByID(id);
+                    if (p != null && p.IsConnected)
+                    {
+                        CuiHelper.DestroyUi(p, PromptUi);
+                    }
+                }
+                prompts.Clear();
+                RestoreJumps();
+            }
+
+            // ------------------------------------------------------------ the prompt of E
+
+            private void Prompts()
+            {
+                var shown = new HashSet<ulong>();
+                if (Bm.Cfg.Life.Prompts)
+                {
+                    foreach (Driver d in Bm.Drivers.Values.ToList())
+                    {
+                        if (d == null || !d.Alive || d.Kind != ControlKind.Form || !d.Spectating || d.Player == null || !d.Player.IsConnected)
+                        {
+                            continue;
+                        }
+                        string text = null;
+                        try
+                        {
+                            text = Bm.UsePrompt(d);
+                        }
+                        catch (Exception ex)
+                        {
+                            Bm.Log(1, "Prompt: " + ex.Message);
+                        }
+                        Draw(d.Player, text);
+                        shown.Add(d.Player.userID);
+                    }
+                }
+                foreach (ulong id in prompts.Keys.Where(k => !shown.Contains(k)).ToList())
+                {
+                    BasePlayer p = BasePlayer.FindByID(id);
+                    if (p != null && p.IsConnected)
+                    {
+                        CuiHelper.DestroyUi(p, PromptUi);
+                    }
+                    prompts.Remove(id);
+                }
+            }
+
+            private void Draw(BasePlayer p, string text)
+            {
+                string old;
+                if (prompts.TryGetValue(p.userID, out old) && old == text)
+                {
+                    return;
+                }
+                prompts[p.userID] = text;
+                CuiHelper.DestroyUi(p, PromptUi);
+                if (string.IsNullOrEmpty(text))
+                {
+                    return;
+                }
+                var c = new CuiElementContainer();
+                c.Add(new CuiPanel
+                {
+                    Image = { Color = "0.06 0.07 0.05 0.55" },
+                    RectTransform = { AnchorMin = "0.5 0.38", AnchorMax = "0.5 0.38", OffsetMin = "-150 -15", OffsetMax = "150 15" }
+                }, "Overlay", PromptUi);
+                c.Add(new CuiLabel
+                {
+                    Text = { Text = "<color=#e8c35a><b>E</b></color>   " + text, FontSize = 15, Align = TextAnchor.MiddleCenter, Color = "1 1 1 0.95" },
+                    RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }
+                }, PromptUi);
+                CuiHelper.AddUi(p, c);
+            }
+
+            // ------------------------------------------------------------ dung and eggs
+
+            private void Droppings(float now, float seconds)
+            {
+                LifeCfg cfg = Bm.Cfg.Life;
+                foreach (Driver d in Bm.Drivers.Values.ToList())
+                {
+                    if (d == null || !d.Alive || d.Kind != ControlKind.Form || d.Species == null || !Valid(d.Body) || d.Body.IsDead())
+                    {
+                        continue;
+                    }
+                    if (WaterLevel.GetWaterDepth(d.Body.transform.position, true, true, null) > 0.3f)
+                    {
+                        continue;                         // not while swimming
+                    }
+                    ulong id = d.Player.userID;
+                    if (cfg.Dung && cfg.DungSpecies != null && cfg.DungSpecies.Contains(d.Species.Id))
+                    {
+                        float due;
+                        if (!nextDung.TryGetValue(id, out due))
+                        {
+                            nextDung[id] = now + NextDungDelay();
+                        }
+                        else if (now >= due)
+                        {
+                            nextDung[id] = now + NextDungDelay();
+                            Drop(d, ItemLike(cfg.DungItem, "dung", null), 1);
+                        }
+                    }
+                    if (cfg.Eggs && d.Species.Id == "chicken" && UnityEngine.Random.value * 100f < Mathf.Max(0f, cfg.EggChancePerMinute) * seconds / 60f)
+                    {
+                        float roll = UnityEngine.Random.value;
+                        Drop(d, ItemLike(cfg.EggItem, "egg", "easter"), roll < 0.8f ? 1 : roll < 0.95f ? 2 : 3);
+                    }
+                }
+                foreach (ulong id in nextDung.Keys.ToList())
+                {
+                    if (!Bm.Drivers.ContainsKey(id))
+                    {
+                        nextDung.Remove(id);
+                    }
+                }
+            }
+
+            private float NextDungDelay()
+            {
+                float min = Mathf.Max(0.5f, Bm.Cfg.Life.DungMinMinutes);
+                float max = Mathf.Max(min, Bm.Cfg.Life.DungMaxMinutes);
+                return UnityEngine.Random.Range(min, max) * 60f;
+            }
+
+            // Behind the animal, on the ground.
+            private void Drop(Driver d, ItemDefinition def, int amount)
+            {
+                if (def == null)
+                {
+                    return;
+                }
+                Bounds b = d.Body.bounds;
+                Vector3 back = Quaternion.Euler(0f, d.Heading, 0f) * Vector3.back;
+                Vector3 center = d.Body.transform.TransformPoint(b.center);
+                Vector3 at = center + back * (Mathf.Max(b.extents.x, b.extents.z) * ModelScale(d.Body) + 0.1f);
+                RaycastHit hit;
+                if (Physics.Raycast(at + Vector3.up * 0.5f, Vector3.down, out hit, 4f, LayerMask.GetMask("Terrain", "World", "Construction", "Default"), QueryTriggerInteraction.Ignore))
+                {
+                    at = hit.point + Vector3.up * 0.15f;
+                }
+                Item item = ItemManager.Create(def, amount, 0UL);
+                if (item != null)
+                {
+                    item.Drop(at, back * 0.3f);
+                }
+            }
+
+            // ------------------------------------------------------------ the rope of the game
+
+            // An animal form leads the way a player in animal form does: invisibly. A rope of the game that is still tied to the hidden human
+            // (taken before the transformation, or tied again by the horse code) is taken off; the animal follows the form on the plugin's own
+            // invisible lead instead.
+            private void HideRopes()
+            {
+                if (Bm.Drivers.Count == 0)
+                {
+                    return;
+                }
+                foreach (Driver d in Bm.Drivers.Values.ToList())
+                {
+                    if (d == null || !d.Alive || d.Kind != ControlKind.Form || d.Player == null || !Valid(d.Body))
+                    {
+                        continue;
+                    }
+                    var near = new List<BaseEntity>();
+                    Vis.Entities(d.Body.transform.position, 20f, near);
+                    foreach (BaseEntity e in near)
+                    {
+                        RidableHorse horse = e as RidableHorse;
+                        if (horse != null && horse != d.Body && horse.IsLeading && horse.leadingPlayer == d.Player)
+                        {
+                            horse.SetLeading(null);
+                            HorseState s = Bm.Stable != null ? Bm.Stable.StateOf(horse) : null;
+                            if (s != null)
+                            {
+                                s.WasLeading = false;
+                                s.Tether = d.Player;          // follows on the invisible tether of the horse code
+                            }
+                            continue;
+                        }
+                        LivestockAnimal ls = e as LivestockAnimal;
+                        if (ls == null || ls == d.Body || !ls.IsLeading() || ls.LeadingPlayer.Get(true) != d.Player)
+                        {
+                            continue;
+                        }
+                        if (StopVanillaLead(ls) && Bm.Leads != null && Bm.Cfg.Features.Lead && !Bm.Leads.ChainOf(d).Contains(ls) && Bm.Leads.ChainOf(d).Count < Bm.Cfg.Lead.MaxChain)
+                        {
+                            Bm.Leads.Lead(d, ls);
+                        }
+                    }
+                }
+            }
+
+            private static MethodInfo stopLead;
+            private static bool stopLeadWithPlayer;
+            private static bool stopLeadLooked;
+
+            private static bool StopVanillaLead(LivestockAnimal ls)
+            {
+                if (!stopLeadLooked)
+                {
+                    stopLeadLooked = true;
+                    const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                    foreach (string name in new[] { "StopLeading", "StopLead", "EndLeading", "ClearLeading", "ReleaseLead" })
+                    {
+                        stopLead = typeof(LivestockAnimal).GetMethod(name, flags, null, Type.EmptyTypes, null);
+                        if (stopLead != null)
+                        {
+                            break;
+                        }
+                    }
+                    if (stopLead == null)
+                    {
+                        foreach (string name in new[] { "SetLeading", "SetLeadingPlayer", "StartLeading" })
+                        {
+                            stopLead = typeof(LivestockAnimal).GetMethod(name, flags, null, new[] { typeof(BasePlayer) }, null);
+                            if (stopLead != null)
+                            {
+                                stopLeadWithPlayer = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (stopLead == null)
+                {
+                    return false;
+                }
+                try
+                {
+                    stopLead.Invoke(ls, stopLeadWithPlayer ? new object[] { null } : new object[0]);
+                    return !ls.IsLeading();
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            // ------------------------------------------------------------ wild animals do not jump
+
+            private static readonly List<FieldInfo> jumpSwitches = new List<FieldInfo>();
+            private static readonly List<PropertyInfo> jumpSwitchProps = new List<PropertyInfo>();
+            private static FieldInfo unityAgentField;
+            private static PropertyInfo areaMaskProperty;
+            private static int jumpAreaBit;
+            private static bool jumpLooked;
+            internal static string JumpReport = "not looked at yet";
+            private readonly HashSet<BaseNPC2> jumpless = new HashSet<BaseNPC2>();
+
+            private static void LookUpJumpSwitches()
+            {
+                if (jumpLooked)
+                {
+                    return;
+                }
+                jumpLooked = true;
+                var found = new List<string>();
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+                try
+                {
+                    for (Type t = typeof(RustNavMeshAgent); t != null && t != typeof(MonoBehaviour) && t != typeof(object); t = t.BaseType)
+                    {
+                        foreach (FieldInfo f in t.GetFields(flags))
+                        {
+                            string n = f.Name.ToLowerInvariant();
+                            if (f.FieldType == typeof(bool) && n.Contains("jump") && !n.Contains("isjumping") && n != "jumping" && (n.Contains("can") || n.Contains("allow") || n.Contains("enable") || n.Contains("use")))
+                            {
+                                jumpSwitches.Add(f);
+                                found.Add(f.Name);
+                            }
+                            if (unityAgentField == null && f.FieldType.FullName == "UnityEngine.AI.NavMeshAgent")
+                            {
+                                unityAgentField = f;
+                            }
+                        }
+                        foreach (PropertyInfo p in t.GetProperties(flags))
+                        {
+                            string n = p.Name.ToLowerInvariant();
+                            if (p.PropertyType == typeof(bool) && p.CanWrite && p.GetIndexParameters().Length == 0 && n.Contains("jump") && !n.Contains("isjumping") && (n.Contains("can") || n.Contains("allow") || n.Contains("enable")))
+                            {
+                                jumpSwitchProps.Add(p);
+                                found.Add(p.Name);
+                            }
+                        }
+                    }
+                    if (unityAgentField != null)
+                    {
+                        Type agentType = unityAgentField.FieldType;
+                        areaMaskProperty = agentType.GetProperty("areaMask", BindingFlags.Instance | BindingFlags.Public);
+                        Type navMesh = agentType.Assembly.GetType("UnityEngine.AI.NavMesh");
+                        MethodInfo area = navMesh != null ? navMesh.GetMethod("GetAreaFromName", new[] { typeof(string) }) : null;
+                        int index = area != null ? (int)area.Invoke(null, new object[] { "Jump" }) : -1;
+                        jumpAreaBit = index >= 0 && index < 32 ? 1 << index : 0;
+                        if (areaMaskProperty != null && jumpAreaBit != 0)
+                        {
+                            found.Add("navmesh area Jump");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    found.Add("lookup failed: " + ex.Message);
+                }
+                JumpReport = found.Count > 0 ? string.Join(", ", found.ToArray()) : "this game build has no jump switch on the animals";
+            }
+
+            private bool NoJumps(BaseNPC2 npc)
+            {
+                LookUpJumpSwitches();
+                RustNavMeshAgent agent = npc.GetComponent<RustNavMeshAgent>();
+                if (agent == null)
+                {
+                    return false;
+                }
+                bool changed = false;
+                try
+                {
+                    foreach (FieldInfo f in jumpSwitches)
+                    {
+                        f.SetValue(agent, false);
+                        changed = true;
+                    }
+                    foreach (PropertyInfo p in jumpSwitchProps)
+                    {
+                        p.SetValue(agent, false, null);
+                        changed = true;
+                    }
+                    if (unityAgentField != null && areaMaskProperty != null && jumpAreaBit != 0)
+                    {
+                        object unityAgent = unityAgentField.GetValue(agent);
+                        if (unityAgent != null)
+                        {
+                            int mask = (int)areaMaskProperty.GetValue(unityAgent, null);
+                            areaMaskProperty.SetValue(unityAgent, mask & ~jumpAreaBit, null);
+                            changed = true;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Bm.Log(1, "Switching off the jumps of " + npc.ShortPrefabName + " failed: " + ex.Message);
+                }
+                if (changed)
+                {
+                    jumpless.Add(npc);
+                }
+                return changed;
+            }
+
+            private void RestoreJumps()
+            {
+                foreach (BaseNPC2 npc in jumpless)
+                {
+                    if (!Valid(npc))
+                    {
+                        continue;
+                    }
+                    RustNavMeshAgent agent = npc.GetComponent<RustNavMeshAgent>();
+                    if (agent == null)
+                    {
+                        continue;
+                    }
+                    try
+                    {
+                        foreach (FieldInfo f in jumpSwitches)
+                        {
+                            f.SetValue(agent, true);
+                        }
+                        foreach (PropertyInfo p in jumpSwitchProps)
+                        {
+                            p.SetValue(agent, true, null);
+                        }
+                        if (unityAgentField != null && areaMaskProperty != null && jumpAreaBit != 0)
+                        {
+                            object unityAgent = unityAgentField.GetValue(agent);
+                            if (unityAgent != null)
+                            {
+                                areaMaskProperty.SetValue(unityAgent, (int)areaMaskProperty.GetValue(unityAgent, null) | jumpAreaBit, null);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+                jumpless.Clear();
+            }
+
+            public override void SelfTest(List<string> report)
+            {
+                LookUpJumpSwitches();
+                ItemDefinition dung = ItemLike(Bm.Cfg.Life.DungItem, "dung", null);
+                ItemDefinition egg = ItemLike(Bm.Cfg.Life.EggItem, "egg", "easter");
+                report.Add("Life: dung item " + (dung != null ? dung.shortname : "MISSING") + ", egg item " + (egg != null ? egg.shortname : "MISSING")
+                    + "; wild jumps off on " + jumpless.Count + " animals (" + JumpReport + "); vanilla rope release " + (stopLead != null ? stopLead.Name : stopLeadLooked ? "MISSING" : "not needed yet"));
             }
         }
     }
@@ -10194,8 +12182,8 @@ namespace Oxide.Plugins
                 + "Tame animals, fit saddles and gear, command them and ride them. With the ritual of transformation you can become an animal yourself.\n\n"
                 + "<b>Quick start</b>\n"
                 + "1. Tame an animal (Help - Taming).\n"
-                + "2. Press E on it: the gear panel opens. Put a saddle into slot 1 and close the panel.\n"
-                + "3. Press E again to mount. W/A/S/D move, Shift faster, F attack, G or R switch first / third person, X gets you off.\n"
+                + "2. Press E on it: without a saddle its inventory opens. Put a saddle into slot 1 and close the panel.\n"
+                + "3. Press E again to mount (hold E for all choices). W/A/S/D move, Shift faster, F attack, G or R switch first / third person, X gets you off.\n"
                 + "4. Command it: /bm cmd follow | wait | guard | attack | release.\n\n"
                 + "<b>Switched on here</b>\n" + FeatureLine() + "\n\n"
                 + "Open this menu any time with /bm.";
@@ -10209,12 +12197,15 @@ namespace Oxide.Plugins
                 + "Ctrl  brake (with A or D at a run: the stop-and-turn)\n"
                 + "S while running  turn around 180 degrees (a slide for bulls and rams)\n"
                 + "Space  jump - over fences and onto raised surfaces: floors, roofs, crates, rocks (cooldown " + Cfg.Movement.JumpCooldown + " s)\n"
-                + "F  attack - turn the camera behind the animal for the rear attack (kicks)\n"
-                + "E  as an animal: eat food on the ground, drink fresh water, graze, pick things up into the animal's bag, open doors and containers, lead your tamed animals\n"
+                + "F  attack - camera to the front: the attack to the front; camera behind the animal: the rear kick (cow, bull, sheep, ram, stag, horse)\n"
+                + "E  as an animal: eat food on the ground, drink fresh water, graze, pick things up into the saddle bag, open doors and containers, lead your tamed animals (the prompt on the screen says what E does)\n"
+                + "Ctrl + E  as an animal: your animal's inventory (saddle, horseshoes, saddle bag, horse armour)\n"
+                + "E at an animal (as a human): ride it when it has a saddle, its inventory when it has none. Ctrl + E: its inventory (a player's animal: the leash). Hold E: all choices\n"
                 + "R  as an animal: another skin (cow, bull, sheep, ram, horse) - while riding: first / third person\n"
                 + "G  as an animal: night vision (goggles from your inventory) - while riding: first / third person\n"
                 + "B  gesture wheel: lie down, sit, roar, look around - /bm lie, sit, roar, look, stand do the same\n"
-                + "X  back to human / get off. X at the animal you have left: become it again. E at it: ride it. Ctrl + E at it: its bag\n"
+                + "X  back to human / get off. X at the animal you have left: become it again. E at it: ride it (with a saddle). Ctrl + E at it: its inventory\n"
+                + "Stamina  running tires the animal like a horse (the yellow bar above the game's bars); out of breath it only trots and cannot jump until it has rested\n"
                 + "Ctrl + R  this menu (empty hands, riding or as an animal), also /bm\n\n"
                 + "<color=#9aa58f>F5 and H need a one-time bind in the F1 console: bind f5 bm.menu and bind h bm.nv (the game keeps them).</color>";
         }
@@ -10223,8 +12214,10 @@ namespace Oxide.Plugins
         {
             return "<b>Riding</b> " + OnOff(Cfg.Features.Riding) + "\n\n"
                 + "Who: " + (Cfg.Riding.RequireTame ? "tamed animals" : "any animal") + (Cfg.Riding.RequireSaddle ? " with a saddle" : string.Empty) + ". Owner may ride; " + OwnershipText() + ".\n"
-                + "How: look at the animal within " + Cfg.Riding.MountDistance + " m and press E. A saddle fitted in the gear panel (E, or crouch + E when it already has one) is needed first.\n"
-                + "A double saddle carries a second rider behind you.\n"
+                + "How: look at the animal within " + Cfg.Riding.MountDistance + " m and press E. A saddle in slot 1 of its inventory is needed first (E opens the inventory while it has none, Ctrl + E always).\n"
+                + "A double saddle (horse, bull, cow, ram, sheep, stag) carries a second rider behind you. You sit on its back like on a horse and look to the sides at most.\n"
+                + "A player who is an animal can be ridden only when his animal has a saddle in its inventory (single: one rider, double: two).\n"
+                + "Stamina: like the horse, a sprint lasts a short while; walking and standing give the breath back. A crash into a wall or a fall throws the rider off.\n"
                 + "Chicken, crocodile, snake, rabbit, squirrel and frog are restricted species (permission beastmaster.ride.restricted).\n\n"
                 + "<b>Good to know</b>\n"
                 + "Deep water slows animals like the horse (" + Mathf.RoundToInt(Cfg.Movement.WaterMinSpeed * 100f) + " % at the deepest wading); bears and crocodiles are exempt.\n"
@@ -10246,13 +12239,16 @@ namespace Oxide.Plugins
 
         private string HelpGear(BasePlayer p)
         {
-            return "<b>Gear</b> " + OnOff(Cfg.Features.Gear) + "\n\n"
-                + "Press E on your animal (crouch + E if it already has a saddle) to open its gear panel:\n"
-                + "slot 1  saddle (single or double)\nslot 2  horseshoes\nslot 3  saddle bag\nother slots  the bag's contents (" + Cfg.Gear.BagSlots + " slots)\n"
-                + "Close the panel to save.\n\n"
-                + "<b>Speed</b>\nBasic horseshoes +" + Cfg.Movement.ShoesBasic + " m/s, high quality horseshoes +" + Cfg.Movement.ShoesAdvanced + " m/s, the saddle bag " + Cfg.Movement.SaddleBag + " m/s.\n"
-                + (Cfg.Gear.BagPrivate ? "Only the owner and the team can open the bag.\n" : "Anyone can open the bag.\n")
-                + "Gear is kept with the animal and survives restarts.";
+            return "<b>Inventory (like the horse's)</b> " + OnOff(Cfg.Features.Gear) + "\n\n"
+                + "Every animal that can be ridden has the horse's inventory. E at your animal opens it while it has no saddle, Ctrl + E always (hold E for all choices); as an animal yourself: Ctrl + E.\n"
+                + "slot 1  saddle - single, or double for horse, bull, cow, ram, sheep and stag (the saddle is seen on the back)\n"
+                + "slot 2  horseshoes - basic +" + Cfg.Movement.ShoesBasic + " m/s, high quality +" + Cfg.Movement.ShoesAdvanced + " m/s\n"
+                + "slot 3  saddle bag - " + Cfg.Gear.BagSlots + " storage slots, " + Cfg.Movement.SaddleBag + " m/s\n"
+                + "slot 4  horse armour - wooden: " + Mathf.RoundToInt(Cfg.Gear.ArmorWoodProtection * 100f) + " % less damage, +" + Cfg.Gear.WoodArmorSlots + " slots, " + Cfg.Movement.ArmorWood + " m/s; roadsign: " + Mathf.RoundToInt(Cfg.Gear.ArmorRoadsignProtection * 100f) + " % less damage, " + Cfg.Movement.ArmorRoadsign + " m/s (only the horse shows its armour)\n"
+                + "from slot 5  the storage the saddle bag (and the wooden armour) give\n"
+                + "Close the panel to save. What an animal form picks up goes into its saddle bag; without one it cannot carry anything.\n\n"
+                + (Cfg.Gear.BagPrivate ? "Only the owner and the team can open the inventory of a tamed animal.\n" : "Anyone can open the inventory of a tamed animal.\n")
+                + "The inventory stays with the animal (also with the animal you have left as a player) and survives restarts; a dying animal drops it.";
         }
 
         private string HelpTaming(BasePlayer p)
@@ -10945,6 +12941,9 @@ namespace Oxide.Plugins
                         }
                         break;
                     }
+                case "beast":
+                    BeastButton(player, args);
+                    return;
                 case "seat":
                     if (arg1 == "up" || arg1 == "down")
                     {
@@ -11142,7 +13141,7 @@ namespace Oxide.Plugins
         {
             "close", "noop", "page", "topic", "species", "tpage", "list", "search", "clearsearch", "lookhelp", "animal", "all", "view", "preset", "setting",
             "revert", "plugin", "feature", "species_toggle", "spawnspecies", "spawncount", "spawnmode", "spawnsaddle", "spawn", "spawnclear", "grant", "revoke",
-            "bossmini", "spawnboss", "aim", "gesture", "cam", "nv", "breed", "rename", "renameset", "seat"
+            "bossmini", "spawnboss", "aim", "gesture", "cam", "nv", "breed", "rename", "renameset", "seat", "beast"
         };
 
         // Builds every page and every Help topic for a stand-in player, checks the JSON and that every button names a known action.
@@ -11478,16 +13477,19 @@ namespace Oxide.Plugins
         // and counts as an attack; bulls and rams also break wooden barricades (R2.6).
         internal void ChargeTick(Driver d)
         {
-            if (Time.time < nextRamCheck || !Charges(d.Species) || d.Gait < 3 || d.Speed < 2.5f)
+            if (Time.time < nextRamCheck || !Charges(d.Species) || !d.AtFullSprint())
             {
-                return;
+                return;                                 // only the full sprint of the animal is a charge
             }
-            nextRamCheck = Time.time + 0.2f;
+            nextRamCheck = Time.time;                  // every physics step: at a gallop the nose covers the contact distance in a few steps only
             float k = ModelScale(d.Body);
+            Bounds bounds = d.Body.bounds;
             Vector3 heading = Quaternion.Euler(0f, d.Heading, 0f) * Vector3.forward;
-            Vector3 ahead = d.Body.transform.position + heading * (d.Body.bounds.extents.z * k + 0.5f) + Vector3.up * 0.9f * k;
+            // the tip of the nose: a charge counts only when the animal really touches the other one
+            Vector3 center = d.Body.transform.position + Vector3.up * bounds.center.y * k;
+            Vector3 nose = center + heading * ((bounds.center.z + bounds.extents.z) * k);
             var found = new List<BaseEntity>();
-            Vis.Entities(ahead, 1.0f * k, found);
+            Vis.Entities(nose, 1.6f * k, found);
             float now = Time.time;
             foreach (BaseEntity e in found)
             {
@@ -11510,6 +13512,13 @@ namespace Oxide.Plugins
                 if (victim == null && !(target is BaseNPC2 || target is RidableHorse))
                 {
                     continue;
+                }
+                Vector3 touch = target.ClosestPoint(nose);
+                Vector3 ahead = touch - center;
+                ahead.y = 0f;
+                if (Vector3.Distance(touch, nose) > Cfg.Combat.ChargeContact * k || (ahead.sqrMagnitude > 0.01f && Vector3.Angle(heading, ahead) > 55f))
+                {
+                    continue;                           // not touched yet, or beside the animal
                 }
                 if (victim != null && (victim == d.Player || victim.IsNpc && false))
                 {
@@ -12067,69 +14076,15 @@ namespace Oxide.Plugins
             Log(2, player.displayName + " used the aim tool '" + what + "' on " + target.ShortPrefabName);
         }
 
-        // ---------------------------------------------------------------- the bag of an animal form
-        // What an animal picks up (or is given) goes into its own bag, not into the human inventory. The bag stays with the animal when the player
-        // leaves it (X); as a human the owner opens it with Ctrl + E at the animal.
-
-        internal readonly Dictionary<ulong, List<ItemRecord>> FormBags = new Dictionary<ulong, List<ItemRecord>>();
-
-        internal bool AddToBag(BasePlayer player, Item item)
-        {
-            List<ItemRecord> bag;
-            if (!FormBags.TryGetValue(player.userID, out bag))
-            {
-                bag = new List<ItemRecord>();
-                FormBags[player.userID] = bag;
-            }
-            ItemRecord same = bag.FirstOrDefault(r => r.Shortname == item.info.shortname && r.Skin == item.skin && item.info.stackable > r.Amount + item.amount - 1 && r.Condition < 0f);
-            if (same != null)
-            {
-                same.Amount += item.amount;
-                item.Remove();
-                return true;
-            }
-            for (int slot = 0; slot < Cfg.Gear.BagSlots; slot++)
-            {
-                if (bag.All(r => r.Slot != slot))
-                {
-                    bag.Add(RecordFromItem(item, slot));
-                    item.Remove();
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        internal void OpenFormBag(BasePlayer player, LeftForm lf)
-        {
-            var contents = lf.Bag.Select(r => new KeyValuePair<int, ItemRecord>(r.Slot, r)).ToList();
-            VirtualBox vb = OpenBox(player, "formbag", Cfg.Gear.BagSlots, contents, lf, (box, item, slot) => slot >= 0, null, box => FormBagClosed(box, lf));
-            if (vb != null)
-            {
-                TellRaw(player, "The bag of your " + (lf.Animal != null ? SpeciesOf(lf.Animal) != null ? SpeciesOf(lf.Animal).Display.ToLowerInvariant() : "animal" : "animal") + ".");
-            }
-        }
-
-        private void FormBagClosed(VirtualBox vb, LeftForm lf)
-        {
-            lf.Bag.Clear();
-            foreach (Item item in vb.Box.inventory.itemList.ToList())
-            {
-                lf.Bag.Add(RecordFromItem(item, item.position));
-                item.Remove();
-            }
-        }
-
-        // ---------------------------------------------------------------- giving an item to a player who is an animal (it goes into his bag)
+        // ---------------------------------------------------------------- giving an item to an animal (it goes into its saddle bag)
 
         internal void GiveCommand(BasePlayer player, Action<string> reply)
         {
             BaseEntity target = (BaseEntity)AnimalInSight(player, 6f, 30f) ?? HorseInSight(player, 6f, 30f);
-            Driver host = target != null ? DriverOfAnimal(target) : null;
             Item held = player.GetActiveItem();
-            if (host == null || host.Kind != ControlKind.Form || host.Player == player)
+            if (target == null)
             {
-                reply("Look at an animal that is a player (within 6 m) and hold the item you want to give.");
+                reply("Look at an animal (within 6 m) and hold the item you want to give.");
                 return;
             }
             if (held == null)
@@ -12138,13 +14093,42 @@ namespace Oxide.Plugins
                 return;
             }
             string name = held.info.displayName.english;
-            if (!AddToBag(host.Player, held))
+            Driver host = DriverOfAnimal(target);
+            string why;
+            if (host != null && host.Kind == ControlKind.Form && host.Player != player)
             {
-                reply("Its bag is full.");
+                if (!FormHandledBy(host, player))
+                {
+                    reply("This animal does not take anything from you.");
+                    return;
+                }
+                if (!StoreForForm(host, held, out why))
+                {
+                    reply(why);
+                    return;
+                }
+                reply("You put " + name + " into the saddle bag of the " + host.Species.Display.ToLowerInvariant() + ".");
+                TellRaw(host.Player, player.displayName + " put " + name + " into your saddle bag.");
                 return;
             }
-            reply("You gave " + name + " to the " + host.Species.Display.ToLowerInvariant() + ".");
-            TellRaw(host.Player, player.displayName + " put " + name + " in your bag.");
+            if (target is RidableHorse)
+            {
+                reply("Hold E at the horse and open its inventory.");
+                return;
+            }
+            GearRecord gear;
+            string problem = InventoryProblem(player, target, out gear);
+            if (problem != null)
+            {
+                reply(problem);
+                return;
+            }
+            if (!AddToGear(gear, held, out why))
+            {
+                reply(why);
+                return;
+            }
+            reply("You put " + name + " into its saddle bag.");
         }
 
         // ---------------------------------------------------------------- naming a tamed animal
@@ -12328,7 +14312,7 @@ namespace Oxide.Plugins
 
         internal bool IsRitualCorpse(BaseEntity entity)
         {
-            return entity != null && RitualCorpses.Any(r => r.Corpse == entity);
+            return entity != null && RitualCorpses.Any(r => r.Corpse == entity && (r.Burning || r.StandIn));
         }
 
         internal sealed class RitualModule : Module
@@ -12415,13 +14399,22 @@ namespace Oxide.Plugins
                 }
             }
 
+            // Only the burning body (and a stand-in, which is no real body) is protected: before the fire every body is an ordinary body that
+            // gives its loot and its meat - harvesting it simply ends the ritual on it.
             public override object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
             {
-                if (Bm.RitualCorpses.Count == 0 || !(entity is BaseCorpse) || !Bm.IsRitualCorpse(entity))
+                if (Bm.RitualCorpses.Count == 0 || !(entity is BaseCorpse))
                 {
                     return null;
                 }
-                return true;
+                foreach (RitualCorpse rc in Bm.RitualCorpses)
+                {
+                    if (rc.Corpse == entity && (rc.Burning || rc.StandIn))
+                    {
+                        return true;
+                    }
+                }
+                return null;
             }
 
             // The killer's animal leaves a body that stays; the look of the animal is remembered for the transformation.
@@ -12493,9 +14486,10 @@ namespace Oxide.Plugins
                         continue;
                     }
                     bool mine = rc.Animal != null && corpse.parentEnt == rc.Animal;
-                    if (!mine && !Valid(rc.Animal) && Time.time - rc.Died < 20f && Vector3.Distance(rc.Position, corpse.transform.position) < 8f)
+                    if (!mine && Time.time - rc.Died < 20f && Vector3.Distance(rc.Position, corpse.transform.position) < 8f
+                        && (!Valid(rc.Animal) || CorpseOfKind(corpse, rc.Species)))
                     {
-                        mine = true;      // the dead animal is already gone: the nearest body in time and space
+                        mine = true;      // the body of that kind that appeared there right after the death (the horse's body has no parent)
                     }
                     if (mine)
                     {
@@ -12508,7 +14502,6 @@ namespace Oxide.Plugins
                         rc.Linked = true;
                         rc.Position = corpse.transform.position;
                         corpse.ResetRemovalTime(Bm.Cfg.Ritual.CorpseKeepSeconds);
-                        Protect(corpse);
                         return;
                     }
                 }
@@ -12573,7 +14566,10 @@ namespace Oxide.Plugins
                         Remove(rc);               // harvested some other way, despawned or destroyed: the ritual is off (R9.10)
                         continue;
                     }
-                    Protect(rc.Corpse);           // the game may fill the dispenser in after the spawn hook
+                    if (rc.Burning || rc.StandIn)
+                    {
+                        Protect(rc.Corpse);       // the game may fill the dispenser in after the spawn hook
+                    }
                     if (rc.Burning)
                     {
                         if (now > rc.BurnUntil)
@@ -12587,9 +14583,23 @@ namespace Oxide.Plugins
             }
 
             // The species' own body prefab if the game has one, else the chicken's: it is only the marker of the ritual spot.
+            private static bool CorpseOfKind(BaseCorpse corpse, SpeciesDef species)
+            {
+                if (corpse is HorseCorpse)
+                {
+                    return species.Id == "horse";
+                }
+                string name = corpse.ShortPrefabName.ToLowerInvariant();
+                string kind = species.Id == "ram" ? "sheep" : species.Id == "doe" ? "stag" : species.Id;
+                return name.StartsWith(kind) || (species.Short != null && name.StartsWith(species.Short));
+            }
+
             private void MakeStandIn(RitualCorpse rc)
             {
-                string path = Bm.FindPrefabPath("rust.ai/agents/" + rc.Species.Id + "/", ".corpse.prefab") ?? Bm.FindPrefabPath("rust.ai/agents/chicken/", ".corpse.prefab");
+                string path = rc.Species.Id == "horse"
+                    ? Bm.FindPrefabPath("vehicles/horse/", ".corpse.prefab")
+                    : Bm.FindPrefabPath("rust.ai/agents/" + rc.Species.Id + "/", ".corpse.prefab");
+                path = path ?? Bm.FindPrefabPath("rust.ai/agents/chicken/", ".corpse.prefab");
                 if (path == null)
                 {
                     Bm.Log(1, "Ritual: no body prefab for the stand-in of the " + rc.Species.Id);
@@ -12691,6 +14701,7 @@ namespace Oxide.Plugins
 
             private void Ignite(RitualCorpse rc, BasePlayer p, float now)
             {
+                Protect(rc.Corpse);               // the burning body cannot be harvested any more
                 rc.Burning = true;
                 rc.BurnUntil = now + Mathf.Max(3f, Bm.Cfg.Ritual.BurnSeconds);
                 rc.Performer = p.userID;
@@ -12827,6 +14838,10 @@ namespace Oxide.Plugins
                 Data.Bosses[tag] = new BossInfo { Kind = rc.Boss.Kind, Mini = rc.Boss.Mini, Tamed = true };
             }
             animal.Spawn();
+            if (livestock != null)
+            {
+                EnforceLook(animal, rc.Species, rc.Genes, rc.Name, rc.Male);      // the game rolls a new look at the spawn: the killed one's is put back
+            }
             if (reborn != null)
             {
                 reborn.SetBreed(rc.Genes);
@@ -13380,7 +15395,7 @@ namespace Oxide.Plugins
     public partial class Beastmaster
     {
         // ---------------------------------------------------------------- the needs of an animal form (R9.22 - R9.26)
-        // Health, Stamina, Hunger and Thirst of the animal are shown on a small panel. Eating and drinking restore them: the Use key at food on the
+        // Health, hunger and thirst of the animal are shown in the game's own bars, the stamina in a bar above them. Eating and drinking restore them: the Use key at food on the
         // ground, at a corpse (carnivores), at water or at grass (herbivores), and the items of the inventory that are on the animal's diet.
         // The needs are gentle: nothing dies of hunger unless the server owner switches that on. The human body's own needs stay frozen.
 
@@ -13390,17 +15405,11 @@ namespace Oxide.Plugins
         {
             public float Hunger = 100f;
             public float Thirst = 100f;
-            public float Stamina = 100f;
             public float NextBite;
-            public float NextHud;
             public float HealBudget;            // health the animal may still gain this second from food (heal-per-second cap)
             public float HealWindow;
-            public float LastSpend;
             public bool Saved;                  // the human's own calories and hydration, put back when the form ends
             public float HumanCalories, HumanHydration;
-            public bool HudDrawn;
-            public int HudValue;
-            public float HudAt;
         }
 
         // The climate and the needs together slow an animal that is hungry, thirsty or worn out.
@@ -13423,10 +15432,58 @@ namespace Oxide.Plugins
             }
         }
 
+        // Out of breath (stamina): no jumps, a trot at most.
+        internal bool OutOfBreath(Driver d)
+        {
+            return Needs != null && Needs.Exhausted(d);
+        }
+
         // The Use key with nothing else to use: eat or drink what is in front of the animal's head.
         internal bool TryEat(Driver d)
         {
             return Needs != null && Needs.Eat(d);
+        }
+
+        // E at food, water or grass: the animal lowers its head (the game's own grazing and drinking pose of livestock, the eating clip of the
+        // others) until it walks off or a few seconds have passed.
+        internal void StartFeedPose(Driver d, string word)
+        {
+            if (d == null || d.Animal == null)
+            {
+                return;                  // the horse has no eating pose to show
+            }
+            d.InterruptClip();
+            LivestockAnimal ls = d.Animal as LivestockAnimal;
+            if (ls != null)
+            {
+                ls.SetGrazing(word != "drink");
+                ls.SetDrinking(word == "drink");
+            }
+            List<ClipRef> clips = Clips(d.Animal).Where(c => Has(c, word) && !Has(c, "death") && !Has(c, "turn") && !Has(c, "walk") && !Has(c, "run")).ToList();
+            if (clips.Count == 0)
+            {
+                clips = Clips(d.Animal).Where(c => (Has(c, "eat") || Has(c, "graze") || Has(c, "drink") || Has(c, "food")) && !Has(c, "death") && !Has(c, "turn") && !Has(c, "walk") && !Has(c, "run")).ToList();
+            }
+            if (clips.Count > 0)
+            {
+                d.PlayIdleClip(clips[UnityEngine.Random.Range(0, clips.Count)]);
+            }
+            d.FeedPoseUntil = Time.time + 3f;
+        }
+
+        internal void EndFeedPose(Driver d)
+        {
+            if (d == null || d.FeedPoseUntil <= 0f)
+            {
+                return;
+            }
+            d.FeedPoseUntil = 0f;
+            LivestockAnimal ls = d.Animal as LivestockAnimal;
+            if (ls != null && Valid(ls))
+            {
+                ls.SetGrazing(false);
+                ls.SetDrinking(false);
+            }
         }
 
         // Headless test of the diets: who eats what, with the food values read from the item definitions.
@@ -13488,7 +15545,7 @@ namespace Oxide.Plugins
                     ["DrinkSalt"] = "Salt water cannot be drunk. Find a river, a lake or a pond.",
                     ["StatHungry"] = "You are starving - find food.",
                     ["StatThirsty"] = "You are parched - find water.",
-                    ["StatTired"] = "You are out of breath.",
+                    ["StatTired"] = "Out of breath: walk or stand a moment to get the stamina back.",
                 };
             }
 
@@ -13507,6 +15564,7 @@ namespace Oxide.Plugins
                     }
                 }
                 stats.Clear();
+                bars.Clear();
             }
 
             public override void Unload()
@@ -13543,25 +15601,113 @@ namespace Oxide.Plugins
                 return f;
             }
 
+            // ---------------------------------------------------------------- stamina (ridden animals and animal forms, like the horse)
+
+            internal sealed class Breath
+            {
+                public float Value = 100f;
+                public bool Exhausted;
+                public float LastSpend;
+                public float Seen;
+            }
+
+            // Kept per animal, so that a tired animal stays tired when its rider gets off and on again.
+            private readonly Dictionary<ulong, Breath> breaths = new Dictionary<ulong, Breath>();
+
+            private Breath BreathOf(Driver d)
+            {
+                if (d == null || d.Body == null || d.Body.net == null)
+                {
+                    return null;
+                }
+                ulong id = d.Body.net.ID.Value;
+                Breath b;
+                float now = Time.time;
+                if (!breaths.TryGetValue(id, out b))
+                {
+                    b = new Breath { Seen = now };
+                    breaths[id] = b;
+                }
+                else if (now - b.Seen > 2f)
+                {
+                    // the animal rested while nobody drove it
+                    b.Value = Mathf.Min(100f, b.Value + Mathf.Max(0f, Bm.Cfg.Stamina.Recover) * (now - b.Seen));
+                    if (b.Value >= Bm.Cfg.Stamina.RecoverTo)
+                    {
+                        b.Exhausted = false;
+                    }
+                }
+                b.Seen = now;
+                return b;
+            }
+
+            public float StaminaOf(Driver d)
+            {
+                Breath b = Bm.Cfg.Stamina.Enabled ? BreathOf(d) : null;
+                return b != null ? b.Value : 100f;
+            }
+
+            public bool Exhausted(Driver d)
+            {
+                Breath b = Bm.Cfg.Stamina.Enabled ? BreathOf(d) : null;
+                return b != null && b.Exhausted;
+            }
+
+            // The highest gait the animal can keep up: out of breath, a trot.
             public int GaitCap(Driver d)
             {
-                FormStats s;
-                if (d.Kind != ControlKind.Form || !Bm.Cfg.Form.Needs || !stats.TryGetValue(d.Player.userID, out s))
-                {
-                    return 5;
-                }
-                return s.Stamina < 5f ? 2 : 5;
+                return Exhausted(d) ? 2 : 5;
             }
 
             public void Spend(Driver d, float amount)
             {
-                if (d.Kind != ControlKind.Form || !Bm.Cfg.Form.Needs)
+                if (!Bm.Cfg.Stamina.Enabled || amount <= 0f)
                 {
                     return;
                 }
-                FormStats s = Of(d.Player);
-                s.Stamina = Mathf.Max(0f, s.Stamina - amount);
-                s.LastSpend = Time.time;
+                Breath b = BreathOf(d);
+                if (b == null)
+                {
+                    return;
+                }
+                b.Value = Mathf.Max(0f, b.Value - amount);
+                b.LastSpend = Time.time;
+                if (!b.Exhausted && b.Value <= Bm.Cfg.Stamina.ExhaustedBelow)
+                {
+                    b.Exhausted = true;
+                    Bm.Tell(d.Player, "StatTired");
+                }
+            }
+
+            // Running uses the breath, walking and standing give it back.
+            private void Breathe(Driver d, float now, float dt)
+            {
+                StaminaCfg c = Bm.Cfg.Stamina;
+                Breath b = BreathOf(d);
+                if (b == null)
+                {
+                    return;
+                }
+                // what the animal really does counts (a gait chosen while standing or backing up costs nothing)
+                float speed = Mathf.Abs(d.Speed);
+                float use = d.Standing || d.Speed < 0f ? 0f
+                    : speed >= d.GaitSpeed(5) * 0.9f ? c.FullSprint
+                    : speed >= d.GaitSpeed(4) * 0.9f ? c.Sprint
+                    : speed >= d.GaitSpeed(3) * 0.9f ? c.Run : 0f;
+                if (use > 0f)
+                {
+                    Spend(d, use * dt);
+                    return;
+                }
+                if (now - b.LastSpend < c.RecoverDelay)
+                {
+                    return;
+                }
+                b.Value = Mathf.Min(100f, b.Value + Mathf.Max(0f, c.Recover) * dt * (d.Standing ? 1.3f : 1f));
+                if (b.Exhausted && b.Value >= c.RecoverTo)
+                {
+                    b.Exhausted = false;
+                }
             }
 
             // ---------------------------------------------------------------- ticking: drains, recovery, the panel
@@ -13570,19 +15716,49 @@ namespace Oxide.Plugins
             {
                 float dt = lastTick > 0f ? Mathf.Min(now - lastTick, 1f) : 0.25f;
                 lastTick = now;
-                if (Bm.Drivers.Count == 0 && stats.Count == 0)
+                if (Bm.Drivers.Count == 0 && stats.Count == 0 && bars.Count == 0)
                 {
                     return;
                 }
                 var present = new HashSet<ulong>();
+                var shown = new HashSet<ulong>();
                 foreach (Driver d in Bm.Drivers.Values.ToList())
                 {
-                    if (d == null || !d.Alive || d.Kind != ControlKind.Form || d.Player == null || !Valid(d.Body))
+                    if (d == null || !d.Alive || d.Player == null || !Valid(d.Body))
+                    {
+                        continue;
+                    }
+                    if (d.FeedPoseUntil > 0f && now > d.FeedPoseUntil)
+                    {
+                        Bm.EndFeedPose(d);
+                    }
+                    if (Bm.Cfg.Stamina.Enabled)
+                    {
+                        Breathe(d, now, dt);
+                    }
+                    if (DrawBars(d, now))
+                    {
+                        shown.Add(d.Player.userID);
+                    }
+                    if (d.Kind != ControlKind.Form)
                     {
                         continue;
                     }
                     present.Add(d.Player.userID);
                     Update(d, now, dt);
+                }
+                foreach (ulong id in bars.Keys.Where(k => !shown.Contains(k)).ToList())
+                {
+                    BasePlayer gone = BasePlayer.FindByID(id);
+                    if (gone != null && gone.IsConnected)
+                    {
+                        CuiHelper.DestroyUi(gone, Hud);
+                    }
+                    bars.Remove(id);
+                }
+                foreach (ulong id in breaths.Where(kv => now - kv.Value.Seen > 900f).Select(kv => kv.Key).ToList())
+                {
+                    breaths.Remove(id);
                 }
                 foreach (ulong id in stats.Keys.Where(k => !present.Contains(k)).ToList())
                 {
@@ -13606,11 +15782,6 @@ namespace Oxide.Plugins
                 FormStats s = Of(p);
                 if (!Bm.Cfg.Form.Needs)
                 {
-                    if (now >= s.NextHud)
-                    {
-                        s.NextHud = now + 1f;
-                        CuiHelper.DestroyUi(p, Hud);
-                    }
                     return;
                 }
                 // the game's own bars (health, food, water) show the animal's: the human's values are kept aside and put back later
@@ -13627,94 +15798,127 @@ namespace Oxide.Plugins
                     p.metabolism.isDirty = true;
                 }
                 float rate = Bm.Cfg.Form.NeedsRate;
-                bool wasHungry = s.Hunger <= 0.5f, wasThirsty = s.Thirst <= 0.5f, wasTired = s.Stamina < 5f;
+                bool wasHungry = s.Hunger <= 0.5f, wasThirsty = s.Thirst <= 0.5f;
                 s.Hunger = Mathf.Max(0f, s.Hunger - 0.045f * rate * dt);
                 s.Thirst = Mathf.Max(0f, s.Thirst - 0.07f * rate * dt);
-                int gait = d.Gait;
-                float drain = d.Standing ? 0f : gait >= 5 ? 3.5f : gait == 4 ? 2.2f : gait == 3 ? 0.8f : 0f;
-                if (drain > 0f)
-                {
-                    s.Stamina = Mathf.Max(0f, s.Stamina - drain * dt);
-                    s.LastSpend = now;
-                }
-                s.Stamina = 100f;                        // there is no stamina: an animal runs as long as it likes
                 if (Bm.Cfg.Form.StarveDamage && (s.Hunger <= 0f || s.Thirst <= 0f) && Valid(d.Body))
                 {
                     d.Body.Hurt(0.6f * dt, Rust.DamageType.Hunger, null, false);
                 }
                 if (s.Hunger <= 0.5f && !wasHungry) Bm.Tell(p, "StatHungry");
                 if (s.Thirst <= 0.5f && !wasThirsty) Bm.Tell(p, "StatThirsty");
-                if (s.Stamina < 5f && !wasTired) Bm.Tell(p, "StatTired");
-                if (now >= s.NextHud)
-                {
-                    s.NextHud = now + 0.4f;
-                    CuiHelper.DestroyUi(p, Hud);                // the game's own bars show the animal: health, food and water
-                }
             }
 
-            // Health, food and water of the animal are in the game's own bars; the one thing the game has no bar for, the stamina, gets a bar of the same
-            // size above them. It is drawn once and then only updated, so that it does not flicker.
-            private void DrawHud(Driver d, FormStats s)
+            // ---------------------------------------------------------------- the bars
+            // The stamina gets a bar above the game's own bars, the way the horse shows its own; a rider also sees the health of the animal (an
+            // animal form sees its health in the game's own health bar). Drawn once, then only updated, so that nothing flickers.
+
+            private sealed class BarState
+            {
+                public int Stamina = -1;
+                public int Health = -1;
+                public bool Rider;
+                public float At;
+            }
+
+            private readonly Dictionary<ulong, BarState> bars = new Dictionary<ulong, BarState>();
+
+            private const string StaminaColor = "0.86 0.76 0.24 0.85";
+            private const string HealthColor = "0.47 0.69 0.24 0.85";
+
+            // True = the bars of this player are up.
+            private bool DrawBars(Driver d, float now)
             {
                 BasePlayer p = d.Player;
-                int value = Mathf.RoundToInt(Mathf.Clamp(s.Stamina, 0f, 100f));
-                float now = Time.time;
-                if (!d.Spectating)
+                if (!Bm.Cfg.Stamina.Enabled || !Bm.Cfg.Stamina.ShowBar || !p.IsConnected || (d.Kind == ControlKind.Form && !d.Spectating))
                 {
-                    if (s.HudDrawn)
-                    {
-                        CuiHelper.DestroyUi(p, Hud);
-                        s.HudDrawn = false;
-                    }
-                    return;
+                    return false;
                 }
-                if (s.HudDrawn && value == s.HudValue && now - s.HudAt < 30f)
+                bool rider = d.Kind != ControlKind.Form;
+                int stamina = Mathf.RoundToInt(Mathf.Clamp(StaminaOf(d), 0f, 100f));
+                int health = rider ? Mathf.RoundToInt(Mathf.Clamp01(d.Body.health / Mathf.Max(1f, d.Body.MaxHealth())) * 100f) : 0;
+                BarState st;
+                bool fresh = !bars.TryGetValue(p.userID, out st) || st.Rider != rider || now - st.At >= 30f;
+                if (!fresh && st.Stamina == stamina && st.Health == health)
                 {
-                    return;
+                    return true;
                 }
-                float frac = value / 100f;
                 var c = new CuiElementContainer();
-                if (!s.HudDrawn || now - s.HudAt >= 30f)
+                if (fresh)
                 {
+                    st = new BarState { Rider = rider, At = now };
+                    bars[p.userID] = st;
                     c.Add(new CuiPanel
                     {
-                        Image = { Color = "0.09 0.10 0.08 0.45" },
-                        RectTransform = { AnchorMin = "1 0", AnchorMax = "1 0", OffsetMin = "-311 150", OffsetMax = "-29 184" }
+                        Image = { Color = "0 0 0 0" },
+                        RectTransform = { AnchorMin = "1 0", AnchorMax = "1 0", OffsetMin = "-311 150", OffsetMax = rider ? "-29 212" : "-29 178" }
                     }, "Overlay", Hud);
-                    c.Add(new CuiElement
+                    AddBar(c, "stamina", "STAMINA", StaminaColor, stamina, rider ? 0.55f : 0f, 1f);
+                    if (rider)
                     {
-                        Name = Hud + ".fill",
-                        Parent = Hud,
-                        Components = { new CuiImageComponent { Color = "0.86 0.76 0.24 0.85" }, new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = Pt(frac, 1f) } }
-                    });
-                    c.Add(new CuiElement
-                    {
-                        Name = Hud + ".num",
-                        Parent = Hud,
-                        Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 18, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.03 0", AnchorMax = "1 1" } }
-                    });
+                        AddBar(c, "health", (d.Species != null ? d.Species.Display.ToUpperInvariant() : "ANIMAL") + " HEALTH", HealthColor, health, 0f, 0.45f);
+                    }
                     CuiHelper.DestroyUi(p, Hud);
                     CuiHelper.AddUi(p, c);
-                    s.HudDrawn = true;
-                    s.HudAt = now;
                 }
                 else
                 {
-                    c.Add(new CuiElement
+                    UpdateBar(c, "stamina", StaminaColor, stamina);
+                    if (rider)
                     {
-                        Name = Hud + ".fill",
-                        Update = true,
-                        Components = { new CuiImageComponent { Color = "0.86 0.76 0.24 0.85" }, new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = Pt(frac, 1f) } }
-                    });
-                    c.Add(new CuiElement
-                    {
-                        Name = Hud + ".num",
-                        Update = true,
-                        Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 18, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.03 0", AnchorMax = "1 1" } }
-                    });
+                        UpdateBar(c, "health", HealthColor, health);
+                    }
                     CuiHelper.AddUi(p, c);
                 }
-                s.HudValue = value;
+                st.Stamina = stamina;
+                st.Health = health;
+                return true;
+            }
+
+            private static void AddBar(CuiElementContainer c, string id, string label, string color, int value, float y0, float y1)
+            {
+                string name = Hud + "." + id;
+                c.Add(new CuiElement
+                {
+                    Name = name,
+                    Parent = Hud,
+                    Components = { new CuiImageComponent { Color = "0.09 0.10 0.08 0.45" }, new CuiRectTransformComponent { AnchorMin = Pt(0f, y0), AnchorMax = Pt(1f, y1) } }
+                });
+                c.Add(new CuiElement
+                {
+                    Name = name + ".fill",
+                    Parent = name,
+                    Components = { new CuiImageComponent { Color = color }, new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = Pt(value / 100f, 1f) } }
+                });
+                c.Add(new CuiElement
+                {
+                    Name = name + ".num",
+                    Parent = name,
+                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 16, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.03 0", AnchorMax = "0.5 1" } }
+                });
+                c.Add(new CuiElement
+                {
+                    Name = name + ".label",
+                    Parent = name,
+                    Components = { new CuiTextComponent { Text = label, FontSize = 11, Align = TextAnchor.MiddleRight, Color = "1 1 1 0.8" }, new CuiRectTransformComponent { AnchorMin = "0.3 0", AnchorMax = "0.97 1" } }
+                });
+            }
+
+            private static void UpdateBar(CuiElementContainer c, string id, string color, int value)
+            {
+                string name = Hud + "." + id;
+                c.Add(new CuiElement
+                {
+                    Name = name + ".fill",
+                    Update = true,
+                    Components = { new CuiImageComponent { Color = color }, new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = Pt(value / 100f, 1f) } }
+                });
+                c.Add(new CuiElement
+                {
+                    Name = name + ".num",
+                    Update = true,
+                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 16, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.03 0", AnchorMax = "0.5 1" } }
+                });
             }
 
             // The human's own food and water come back when the animal form ends.
@@ -13759,7 +15963,6 @@ namespace Oxide.Plugins
                         if (Consumable(dropped.item, out calories, out hydration, out health) && OnDiet(sp, dropped.item.info.shortname))
                         {
                             Feed(d, s, calories, hydration, health, "Ate");
-                            Bm.FormFed(d);
                             if (dropped.item.amount > 1)
                             {
                                 dropped.item.amount -= 1;
@@ -13853,19 +16056,7 @@ namespace Oxide.Plugins
             private void Bite(Driver d, FormStats s, string word)
             {
                 s.NextBite = Time.time + Bm.Cfg.Form.BiteCooldown;
-                if (d.Animal == null)
-                {
-                    return;                  // the horse has no eating clip to play
-                }
-                List<ClipRef> clips = Bm.Clips(d.Animal).Where(c => Has(c, word) && !Has(c, "death") && !Has(c, "turn")).ToList();
-                if (clips.Count == 0)
-                {
-                    clips = Bm.Clips(d.Animal).Where(c => (Has(c, "eat") || Has(c, "graze") || Has(c, "drink") || Has(c, "head")) && !Has(c, "death") && !Has(c, "turn")).ToList();
-                }
-                if (clips.Count > 0)
-                {
-                    PlayClip(d.Animal, clips[UnityEngine.Random.Range(0, clips.Count)]);
-                }
+                Bm.StartFeedPose(d, word);
             }
 
             // Food values come from the item definitions, so changed or modded items work (R9.25).
@@ -14001,7 +16192,48 @@ namespace Oxide.Plugins
             if (animal != null)
             {
                 animal.IsMale = true;
+                animal.SendNetworkUpdate();
             }
+        }
+
+        // The sex of the kind: a ram is male and a sheep is female (both use the sheep's body), a bull is male and a cow is female. The game rolls
+        // the sex (and the coat and the name) when a livestock animal spawns, over anything set before: so it is set after the spawn, and once
+        // more a moment later. genes / name / male: the exact look to keep (the ritual copies the look of the killed animal).
+        internal void EnforceLook(BaseEntity entity, SpeciesDef species, int? genes = null, string name = null, bool? male = null)
+        {
+            Action apply = () =>
+            {
+                LivestockAnimal ls = entity as LivestockAnimal;
+                if (ls == null || !Valid(ls) || species == null)
+                {
+                    return;
+                }
+                bool? sex = male;
+                if (species.Id == "ram" || species.Id == "bull") sex = true;
+                else if (species.Id == "sheep" || species.Id == "cow") sex = false;
+                bool changed = false;
+                if (sex.HasValue && ls.IsMale != sex.Value)
+                {
+                    ls.IsMale = sex.Value;
+                    changed = true;
+                }
+                if (genes.HasValue && ls.Genes != genes.Value)
+                {
+                    ls.Genes = genes.Value;
+                    changed = true;
+                }
+                if (!string.IsNullOrEmpty(name) && ls.AnimalName != name)
+                {
+                    ls.AnimalName = name;
+                    changed = true;
+                }
+                if (changed)
+                {
+                    ls.SendNetworkUpdate();
+                }
+            };
+            apply();
+            timer.Once(0.5f, apply);
         }
 
         internal bool IsTamed(BaseEntity e)
@@ -14296,55 +16528,142 @@ namespace Oxide.Plugins
         }
 
         // ---------------------------------------------------------------- the use key (E) on animals
+        // A tap of E does the obvious thing with the animal in front of the player: rides it when it has a saddle, opens its inventory when it has
+        // none, tames, claims. Ctrl + E opens the inventory (on a player's animal: takes or drops the leash). Holding E a moment shows everything
+        // that can be done with that animal right now. The horse keeps the game's own E (mount, and its own menu when E is held).
 
-        // E in front of an animal: syringe on a trapped predator, the deer's inventory, gear and mounting of owned animals, claiming a bonded one.
-        internal void UseKey(BasePlayer player)
+        private sealed class UsePress
         {
-            if (!Cfg.Features.Riding && !Cfg.Features.Taming)
+            public BaseNPC2 Target;
+            public float Start;
+            public bool Crouch;
+            public bool Done;
+        }
+
+        private readonly Dictionary<ulong, UsePress> usePresses = new Dictionary<ulong, UsePress>();
+        private const float UseHoldTime = 0.45f;
+
+        private bool UseAllowed(BasePlayer player)
+        {
+            return (Cfg.Features.Riding || Cfg.Features.Taming || Cfg.Features.Gear || Cfg.Features.AnimalForm)
+                && Has(player, PermUse) && DriverOf(player) == null && !player.isMounted && !player.IsDead() && !player.IsSleeping();
+        }
+
+        // The game's own handling of livestock works with a tool in the hand (the knife shears, the bucket milks, the rope leads): with one of
+        // those the plugin leaves E alone.
+        private static bool VanillaTool(Item item)
+        {
+            if (item == null)
+            {
+                return false;
+            }
+            string n = item.info.shortname;
+            return n.Contains("knife") || n.Contains("rope") || n.Contains("bucket") || n.Contains("jug") || n == "water.jar" || n.Contains("bota") || n.Contains("canteen");
+        }
+
+        internal void UsePressed(BasePlayer player)
+        {
+            usePresses.Remove(player.userID);
+            CloseBeastMenu(player);
+            if (!UseAllowed(player))
             {
                 return;
             }
-            if (!Has(player, PermUse) || DriverOf(player) != null)
-            {
-                return;
-            }
+            bool crouch = player.serverInput.IsDown(BUTTON.DUCK);
             BaseNPC2 animal = AnimalInSight(player, Cfg.Riding.MountDistance, 20f);
             if (animal == null)
             {
                 RidableHorse horse = HorseInSight(player, Cfg.Riding.MountDistance + 1f, 20f);
                 if (horse != null)
                 {
-                    Driver horseHost = DriverOfAnimal(horse);
-                    if (horseHost != null)
-                    {
-                        if (horseHost.Kind == ControlKind.Form)
-                        {
-                            TryFormHandle(player, horseHost);   // crouch + E leads it; riding is the game's own mount
-                        }
-                        return;
-                    }
-                    if (LeftOwnedBy(horse, player))
-                    {
-                        if (player.serverInput.IsDown(BUTTON.DUCK))
-                        {
-                            OpenFormBag(player, LeftForms[horse.net.ID.Value]);     // Ctrl + E: what the horse carried for its player
-                        }
-                        return;                                 // E: the game's own mount of the horse the player has just left
-                    }
-                    HorseUse(player, horse);
+                    HorseKey(player, horse, crouch);
                 }
                 return;
             }
-            Driver hostDriver = DriverOfAnimal(animal);
-            if (hostDriver != null)
+            if (animal is LivestockAnimal && VanillaTool(player.GetActiveItem()))
             {
-                if (hostDriver.Kind == ControlKind.Form)
+                return;
+            }
+            usePresses[player.userID] = new UsePress { Target = animal, Start = Time.time, Crouch = crouch };
+        }
+
+        internal void UseHeld(BasePlayer player)
+        {
+            UsePress press;
+            if (!usePresses.TryGetValue(player.userID, out press) || press.Done || Time.time - press.Start < UseHoldTime)
+            {
+                return;
+            }
+            press.Done = true;
+            if (!Valid(press.Target) || press.Target.IsDead() || !UseAllowed(player))
+            {
+                return;
+            }
+            List<string[]> choices = BeastChoices(player, press.Target);
+            if (choices.Count == 0)
+            {
+                UseTap(player, press.Target, press.Crouch);           // nothing to choose from: the hold counts as a tap
+                return;
+            }
+            ShowBeastMenu(player, press.Target, choices);
+        }
+
+        internal void UseReleased(BasePlayer player)
+        {
+            UsePress press;
+            if (!usePresses.TryGetValue(player.userID, out press))
+            {
+                return;
+            }
+            usePresses.Remove(player.userID);
+            if (press.Done || !Valid(press.Target) || press.Target.IsDead())
+            {
+                return;
+            }
+            UseTap(player, press.Target, press.Crouch);
+        }
+
+        // E on a horse: the game mounts it and shows its menu; the plugin adds the leash of a horse that is a player (Ctrl + E), the inventory
+        // of the horse a player has left (Ctrl + E) and taming of the wild ones.
+        private void HorseKey(BasePlayer player, RidableHorse horse, bool crouch)
+        {
+            Driver horseHost = DriverOfAnimal(horse);
+            if (horseHost != null)
+            {
+                if (horseHost.Kind == ControlKind.Form && crouch)
                 {
-                    TryFormHandle(player, hostDriver);        // the animal is a player: a rider, a leash
+                    TryFormHandle(player, horseHost, true);
+                }
+                return;
+            }
+            if (LeftOwnedBy(horse, player))
+            {
+                // E: the game mounts it when it has a saddle; Ctrl + E on a horse without one: its inventory (hold E: the game's own menu)
+                if (crouch && SeatsOf(horse) == 0 && !OpenEntityLoot(player, horse))
+                {
+                    TellRaw(player, "Hold E at the horse and choose its inventory.");
+                }
+                return;
+            }
+            HorseUse(player, horse);
+        }
+
+        private void UseTap(BasePlayer player, BaseNPC2 animal, bool crouch)
+        {
+            if (!UseAllowed(player))
+            {
+                return;
+            }
+            Driver host = DriverOfAnimal(animal);
+            if (host != null)
+            {
+                if (host.Kind == ControlKind.Form)
+                {
+                    FormKey(player, host, crouch);
                 }
                 else
                 {
-                    TryRideBehind(player, hostDriver);        // a ridden animal with a double saddle carries a second rider
+                    TryRideBehind(player, host);                    // a ridden animal with a double saddle carries a second rider
                 }
                 return;
             }
@@ -14355,9 +16674,13 @@ namespace Oxide.Plugins
             }
             if (LeftOwnedBy(animal, player))
             {
-                if (player.serverInput.IsDown(BUTTON.DUCK))
+                if (crouch || (species.Gear && Cfg.Features.Gear && SaddleOf(animal) <= 0 && !RideBypass(player)))
                 {
-                    OpenFormBag(player, LeftForms[animal.net.ID.Value]);      // Ctrl + E: what the animal carries
+                    if (!crouch)
+                    {
+                        TellRaw(player, "It has no saddle: fit one in slot 1 of its inventory to ride it.");
+                    }
+                    OpenInventory(player, animal);
                     return;
                 }
                 if (species.Ride != RideTier.None && !species.Critter)
@@ -14378,21 +16701,50 @@ namespace Oxide.Plugins
                     Tell(player, "NotYours");
                     return;
                 }
-                bool crouch = player.serverInput.IsDown(BUTTON.DUCK);
-                if (species.Gear && Cfg.Features.Gear && (crouch || rec.Gear.Saddle <= 0))
+                if (species.Gear && Cfg.Features.Gear && (crouch || (SaddleOf(animal) <= 0 && !RideBypass(player))))
                 {
-                    OpenGear(player, animal, rec);
+                    OpenInventory(player, animal);
                     return;
                 }
-                TryMountFromUse(player);
+                if (species.Ride != RideTier.None && !species.Critter)
+                {
+                    StartControl(player, animal, ControlKind.Ride);
+                }
                 return;
             }
             if (species.Ride == RideTier.Restricted)
             {
-                TryMountFromUse(player);
+                if (!crouch)
+                {
+                    StartControl(player, animal, ControlKind.Ride);
+                }
                 return;
             }
             TryClaim(player, animal, species);
+        }
+
+        private bool RideBypass(BasePlayer player)
+        {
+            return Cfg.Riding.AdminBypass && IsAdmin(player);
+        }
+
+        // E on another player's animal: rides it when it has a saddle, opens its inventory when it has none (so that one can be fitted).
+        // Ctrl + E: the leash.
+        private void FormKey(BasePlayer player, Driver host, bool crouch)
+        {
+            if (crouch)
+            {
+                TryFormHandle(player, host, true);
+                return;
+            }
+            if (host.Horse == null && host.Species != null && host.Species.Gear && Cfg.Features.Gear && !host.Species.Critter
+                && host.Species.Ride != RideTier.None && FormHandledBy(host, player) && MaxRiders(host) <= 0)
+            {
+                TellRaw(player, "It has no saddle yet: fit one in slot 1 of its inventory to ride it.");
+                OpenInventory(player, host.Body);
+                return;
+            }
+            TryFormHandle(player, host, false);
         }
 
         // E on an animal somebody rides: with a double saddle the player climbs on behind the rider (owner and team, like the riding rule).
@@ -14402,13 +16754,13 @@ namespace Oxide.Plugins
             {
                 return;
             }
-            TamedRecord rec = RecordOf(host.Animal);
-            if (rec == null || rec.Gear.Saddle < 2)
+            if (SaddleOf(host.Animal) < 2)
             {
                 TellRaw(player, "Only an animal with a double saddle carries a second rider.");
                 return;
             }
-            if (!MayUse(player, rec.Owner, Cfg.Riding.Ownership) && !SameParty(player, host.Player))
+            TamedRecord rec = RecordOf(host.Animal);
+            if (rec != null && !MayUse(player, rec.Owner, Cfg.Riding.Ownership) && !SameParty(player, host.Player))
             {
                 Tell(player, "NotYours");
                 return;
@@ -14423,6 +16775,236 @@ namespace Oxide.Plugins
             {
                 TellRaw(player, "You ride behind " + host.Player.displayName + ". Press Space to get off.");
             }
+        }
+
+        // ---------------------------------------------------------------- the menu of E held
+
+        private const string BeastUi = "BeastmasterBeast";
+
+        private sealed class BeastMenu
+        {
+            public BaseNPC2 Target;
+            public float Until;
+        }
+
+        private readonly Dictionary<ulong, BeastMenu> beastMenus = new Dictionary<ulong, BeastMenu>();
+
+        // What this player can do with that animal right now: { action, button text }.
+        internal List<string[]> BeastChoices(BasePlayer player, BaseNPC2 animal)
+        {
+            var list = new List<string[]>();
+            if (player == null || !Valid(animal) || animal.IsDead())
+            {
+                return list;
+            }
+            SpeciesDef species = SpeciesOf(animal);
+            if (species == null)
+            {
+                return list;
+            }
+            GearRecord ignored;
+            bool inventory = Cfg.Features.Gear && species.Gear && InventoryProblem(player, animal, out ignored) == null;
+            Driver host = DriverOfAnimal(animal);
+            if (host != null)
+            {
+                if (host.Kind == ControlKind.Form && host.Player != player)
+                {
+                    host.PruneGuests();
+                    if (host.Horse == null && FormMountCheck(player, host, false) && host.Guests.Count < MaxRiders(host))
+                    {
+                        list.Add(new[] { "ride", "Ride" });
+                    }
+                    if (inventory)
+                    {
+                        list.Add(new[] { "inventory", "Inventory" });
+                    }
+                    if (FormHandledBy(host, player))
+                    {
+                        list.Add(new[] { "lead", host.Leader == player ? "Let go" : "Lead" });
+                    }
+                }
+                else if (host.Kind == ControlKind.Ride && host.Player != player && SaddleOf(animal) >= 2)
+                {
+                    host.PruneGuests();
+                    if (host.Guests.Count == 0)
+                    {
+                        list.Add(new[] { "behind", "Ride behind" });
+                    }
+                }
+                return list;
+            }
+            object[] args;
+            bool rideable = species.Ride != RideTier.None && !species.Critter && ControlProblem(player, animal, ControlKind.Ride, out args) == null;
+            if (LeftOwnedBy(animal, player))
+            {
+                if (rideable)
+                {
+                    list.Add(new[] { "ride", "Ride" });
+                }
+                if (inventory)
+                {
+                    list.Add(new[] { "inventory", "Inventory" });
+                }
+                return list;
+            }
+            TamedRecord rec = RecordOf(animal);
+            if (rec != null && MayUse(player, rec.Owner, "team"))
+            {
+                if (rideable)
+                {
+                    list.Add(new[] { "ride", "Ride" });
+                }
+                if (inventory)
+                {
+                    list.Add(new[] { "inventory", "Inventory" });
+                }
+                if (Cfg.Features.Taming)
+                {
+                    list.Add(new[] { "follow", rec.State == "follow" ? "Follow (now)" : "Follow" });
+                    list.Add(new[] { "wait", rec.State == "wait" ? "Wait (now)" : "Wait" });
+                    list.Add(new[] { "guard", rec.State == "guard" ? "Guard (now)" : "Guard" });
+                }
+            }
+            return list;
+        }
+
+        private void ShowBeastMenu(BasePlayer player, BaseNPC2 animal, List<string[]> choices)
+        {
+            CloseBeastMenu(player);
+            SpeciesDef species = SpeciesOf(animal);
+            TamedRecord rec = RecordOf(animal);
+            Driver host = DriverOfAnimal(animal);
+            string title = species != null ? species.Display : "Animal";
+            if (host != null && host.Kind == ControlKind.Form && host.Player != null)
+            {
+                title += "  <size=12>(" + host.Player.displayName + ")</size>";
+            }
+            else if (rec != null && !string.IsNullOrEmpty(rec.Name))
+            {
+                title += "  <size=12>(" + rec.Name + ")</size>";
+            }
+            float rows = choices.Count + 1;
+            float height = 0.045f * rows + 0.06f;
+            var c = new CuiElementContainer();
+            c.Add(new CuiPanel { Image = { Color = "0.08 0.09 0.07 0.92" }, RectTransform = { AnchorMin = Pt(0.42f, 0.5f - height / 2f), AnchorMax = Pt(0.58f, 0.5f + height / 2f) }, CursorEnabled = true }, "Overlay", BeastUi);
+            float step = 1f / (rows + 1.3f);
+            UiLabel(c, BeastUi, "<b>" + title + "</b>", 14, 0.04f, 1f - step * 1.2f, 0.96f, 0.98f, TextAnchor.MiddleCenter);
+            string id = animal.net.ID.Value.ToString(CultureInfo.InvariantCulture);
+            for (int i = 0; i < choices.Count; i++)
+            {
+                float top = 1f - step * (1.3f + i);
+                UiButton(c, BeastUi, choices[i][1], "bm.ui beast " + id + " " + choices[i][0], 0.06f, top - step * 0.86f, 0.94f, top, choices[i][0] == "ride" || choices[i][0] == "behind" ? ColOn : ColBtn, 13);
+            }
+            float last = 1f - step * (1.3f + choices.Count);
+            UiButton(c, BeastUi, "Close", "bm.ui beast 0 close", 0.30f, last - step * 0.86f, 0.70f, last, ColOff, 12);
+            CuiHelper.AddUi(player, c);
+            beastMenus[player.userID] = new BeastMenu { Target = animal, Until = Time.time + 12f };
+        }
+
+        internal void CloseBeastMenu(BasePlayer player)
+        {
+            if (player == null)
+            {
+                return;
+            }
+            if (beastMenus.Remove(player.userID) && player.IsConnected)
+            {
+                CuiHelper.DestroyUi(player, BeastUi);
+            }
+        }
+
+        // A button of the menu: everything is checked again, the menu may be old by now.
+        internal void BeastButton(BasePlayer player, string[] args)
+        {
+            BeastMenu menu;
+            beastMenus.TryGetValue(player.userID, out menu);
+            CloseBeastMenu(player);
+            ulong id;
+            if (args.Length < 3 || !ulong.TryParse(args[1], out id) || id == 0UL || menu == null || !Valid(menu.Target) || menu.Target.net.ID.Value != id)
+            {
+                return;
+            }
+            BaseNPC2 animal = menu.Target;
+            string act = args[2].ToLowerInvariant();
+            if (!UseAllowed(player) || Vector3.Distance(player.transform.position, animal.transform.position) > Cfg.Riding.MountDistance + 3f)
+            {
+                return;
+            }
+            if (!BeastChoices(player, animal).Any(c => c[0] == act))
+            {
+                return;
+            }
+            Driver host = DriverOfAnimal(animal);
+            switch (act)
+            {
+                case "ride":
+                    if (host != null && host.Kind == ControlKind.Form)
+                    {
+                        TryFormHandle(player, host, false);
+                    }
+                    else
+                    {
+                        StartControl(player, animal, ControlKind.Ride);
+                    }
+                    break;
+                case "behind":
+                    TryRideBehind(player, host);
+                    break;
+                case "inventory":
+                    OpenInventory(player, animal);
+                    break;
+                case "lead":
+                    TryFormHandle(player, host, true);
+                    break;
+                case "follow":
+                case "wait":
+                case "guard":
+                    {
+                        TamedRecord rec = RecordOf(animal);
+                        if (rec != null)
+                        {
+                            rec.State = act;
+                            ApplyState(animal, rec);
+                            SpeciesDef sp = SpeciesOf(animal);
+                            TellRaw(player, "The " + (sp != null ? sp.Display.ToLowerInvariant() : "animal") + (act == "follow" ? " follows you." : act == "wait" ? " waits here." : " guards you."));
+                        }
+                        break;
+                    }
+            }
+        }
+
+        // /bm bag: the inventory of the animal the player looks at; as an animal: his own.
+        internal void BagCommand(BasePlayer player, Action<string> reply)
+        {
+            Driver d = DriverOf(player);
+            if (d != null)
+            {
+                if (d.Kind == ControlKind.Form)
+                {
+                    OpenOwnInventory(d);
+                }
+                else
+                {
+                    reply("Get off first; then look at the animal and use /bm bag (or Ctrl + E).");
+                }
+                return;
+            }
+            BaseNPC2 animal = AnimalInSight(player, 6f, 30f);
+            if (animal != null)
+            {
+                OpenInventory(player, animal);
+                return;
+            }
+            RidableHorse horse = HorseInSight(player, 6f, 30f);
+            if (horse != null)
+            {
+                if (!OpenEntityLoot(player, horse))
+                {
+                    reply("Hold E at the horse and choose its inventory.");
+                }
+                return;
+            }
+            reply("Look at an animal within 6 m.");
         }
 
         // ---------------------------------------------------------------- module (hooks, persistence)
@@ -14461,6 +17043,15 @@ namespace Oxide.Plugins
             {
                 Bm.StoreTamed();
                 Bm.StopAllFollowers();
+                foreach (ulong id in Bm.beastMenus.Keys.ToList())
+                {
+                    BasePlayer p = BasePlayer.FindByID(id);
+                    if (p != null)
+                    {
+                        Bm.CloseBeastMenu(p);
+                    }
+                }
+                Bm.beastMenus.Clear();
             }
 
             public override void OnDisable()
@@ -14477,7 +17068,15 @@ namespace Oxide.Plugins
             {
                 if (input.WasJustPressed(BUTTON.USE))
                 {
-                    Bm.UseKey(player);
+                    Bm.UsePressed(player);
+                }
+                else if (input.IsDown(BUTTON.USE))
+                {
+                    Bm.UseHeld(player);
+                }
+                if (input.WasJustReleased(BUTTON.USE))
+                {
+                    Bm.UseReleased(player);
                 }
                 if (!Bm.Cfg.Features.Commands)
                 {
@@ -14561,6 +17160,40 @@ namespace Oxide.Plugins
                     Bm.TagIndex.Remove(e.skinID);
                 }
                 Bm.StopFollower(entity);
+            }
+
+            private float nextMenuCheck;
+
+            // The menu of E held closes by itself: after a while, or when the animal is gone or far.
+            public override void Tick(float now)
+            {
+                if (now < nextMenuCheck || Bm.beastMenus.Count == 0)
+                {
+                    return;
+                }
+                nextMenuCheck = now + 0.5f;
+                foreach (KeyValuePair<ulong, BeastMenu> pair in Bm.beastMenus.ToList())
+                {
+                    BasePlayer p = BasePlayer.FindByID(pair.Key);
+                    BeastMenu m = pair.Value;
+                    if (p == null || !p.IsConnected || now > m.Until || !Valid(m.Target) || m.Target.IsDead() || Vector3.Distance(p.transform.position, m.Target.transform.position) > Bm.Cfg.Riding.MountDistance + 3f)
+                    {
+                        if (p != null)
+                        {
+                            Bm.CloseBeastMenu(p);
+                        }
+                        else
+                        {
+                            Bm.beastMenus.Remove(pair.Key);
+                        }
+                    }
+                }
+            }
+
+            public override void OnPlayerDisconnected(BasePlayer player, string reason)
+            {
+                Bm.usePresses.Remove(player.userID);
+                Bm.beastMenus.Remove(player.userID);
             }
 
             public override void SelfTest(List<string> report)
@@ -14651,10 +17284,7 @@ namespace Oxide.Plugins
                     {
                         c.health = Mathf.Min(rec.Health, c.MaxHealth());
                     }
-                    if (species.Id == "ram")
-                    {
-                        MakeMale(e as LivestockAnimal);
-                    }
+                    EnforceLook(e, species, rec.Genes != 0UL ? (int?)unchecked((int)(uint)rec.Genes) : null, rec.Name);
                 }
                 TagIndex[rec.Tag] = e;
                 ApplyState(e, rec);
@@ -15626,7 +18256,7 @@ namespace Oxide.Plugins
         }
 
         // The smoke of a transformation (config path, else the nearest looking effect of the game).
-        internal void FormSmoke(Vector3 position, BasePlayer hearer = null)
+        internal void FormSmoke(Vector3 position, BasePlayer hearer = null, float hearerDelay = 0f)
         {
             if (!Cfg.Form.Smoke)
             {
@@ -15637,11 +18267,11 @@ namespace Oxide.Plugins
             {
                 prefab = FindPrefabPath("fx", "smoke") ?? FindPrefabPath("fx", "poof") ?? FindPrefabPath("fx", "explosion", "small");
             }
-            RunEffectFor(prefab, position + Vector3.up * 0.8f, hearer);
+            RunEffectFor(prefab, position + Vector3.up * 0.8f, hearer, hearerDelay);
         }
 
         // The human shows up again: the game's appear effect with its sound.
-        internal void FormAppear(Vector3 position, BasePlayer hearer = null)
+        internal void FormAppear(Vector3 position, BasePlayer hearer = null, float hearerDelay = 0f)
         {
             if (!Cfg.Form.Smoke)
             {
@@ -15650,7 +18280,7 @@ namespace Oxide.Plugins
             string prefab = Cfg.Form.AppearPrefab;
             if (!string.IsNullOrEmpty(prefab) && GameManager.server.FindPrefab(prefab) != null)
             {
-                RunEffectFor(prefab, position + Vector3.up * 0.8f, hearer);
+                RunEffectFor(prefab, position + Vector3.up * 0.8f, hearer, hearerDelay);
             }
         }
 
@@ -15659,33 +18289,44 @@ namespace Oxide.Plugins
         // The effect is sent straight to the connection of every player near it, and to the player it is about (the hearer) wherever he is:
         // exactly once each. It does not depend on the network group the hidden body of the hearer is in at that moment (the body is
         // parented to the animal and switched to the spectator view right at the transformation, which used to swallow the effect now and then).
-        internal void RunEffectFor(string prefab, Vector3 position, BasePlayer hearer)
+        // hearerDelay: the player's own copy comes a moment later - right after the switch of the view (spectator camera on or off) the
+        // game's client may still be busy with the switch and drop an effect that arrives in that instant.
+        internal void RunEffectFor(string prefab, Vector3 position, BasePlayer hearer, float hearerDelay = 0f)
         {
             if (string.IsNullOrEmpty(prefab))
             {
                 return;
             }
-            bool hearerDone = false;
             foreach (BasePlayer p in BasePlayer.activePlayerList)
             {
-                if (p == null || !p.IsConnected || p.net == null || p.net.connection == null)
+                if (p == null || p == hearer || !p.IsConnected || p.net == null || p.net.connection == null)
                 {
                     continue;
                 }
-                bool isHearer = hearer != null && p == hearer;
-                if (!isHearer && Vector3.Distance(p.transform.position, position) > EffectHearRange)
+                if (Vector3.Distance(p.transform.position, position) <= EffectHearRange)
                 {
-                    continue;
-                }
-                EffectNetwork.Send(new Effect(prefab, position, Vector3.up), p.net.connection);
-                if (isHearer)
-                {
-                    hearerDone = true;
+                    EffectNetwork.Send(new Effect(prefab, position, Vector3.up), p.net.connection);
                 }
             }
-            if (hearer != null && !hearerDone && hearer.IsConnected && hearer.net != null && hearer.net.connection != null)
+            if (hearer == null)
             {
-                EffectNetwork.Send(new Effect(prefab, position, Vector3.up), hearer.net.connection);
+                return;
+            }
+            BasePlayer target = hearer;
+            Action send = () =>
+            {
+                if (target != null && target.IsConnected && target.net != null && target.net.connection != null)
+                {
+                    EffectNetwork.Send(new Effect(prefab, position, Vector3.up), target.net.connection);
+                }
+            };
+            if (hearerDelay > 0.01f)
+            {
+                timer.Once(hearerDelay, send);
+            }
+            else
+            {
+                send();
             }
         }
 
@@ -15822,7 +18463,6 @@ namespace Oxide.Plugins
             }
 
             private readonly Dictionary<ulong, Reaction> reactions = new Dictionary<ulong, Reaction>();
-            private readonly Dictionary<ulong, float> rolled = new Dictionary<ulong, float>();
             private float nextRelations;
 
             public override void OnDisable()
@@ -15839,6 +18479,18 @@ namespace Oxide.Plugins
 
             public override object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
             {
+                if (info != null && entity != null && (entity is BasePlayer || Bm.DriverOfAnimal(entity) != null))
+                {
+                    BaseNPC2 biter = info.Initiator as BaseNPC2;
+                    if (biter != null && Bm.DriverOfAnimal(biter) == null)
+                    {
+                        NoteAggression(biter, entity);          // a wild animal attacked a player (or the animal of one)
+                    }
+                    if (!(entity is BaseNPC2))
+                    {
+                        return null;
+                    }
+                }
                 BaseNPC2 npc = entity as BaseNPC2;
                 if (npc == null || info == null || !Bm.Cfg.Features.WildDefence)
                 {
@@ -15862,22 +18514,35 @@ namespace Oxide.Plugins
                 bool always = Bm.Cfg.Wild.AlwaysDefend.Contains(species.Id);
                 bool may = always || Bm.Cfg.Wild.MayDefend.Count == 0 || Bm.Cfg.Wild.MayDefend.Contains(species.Id);
                 float now = Time.time;
-                float last;
                 ulong key = npc.net.ID.Value;
-                if (rolled.TryGetValue(key, out last) && now - last < 20f)
+                // the decision of an animal sticks: one that fights keeps fighting, one that runs keeps running - no attack and run off at once
+                Decision decided;
+                if (decisions.TryGetValue(key, out decided) && now < decided.Until)
                 {
+                    decided.Until = now + (decided.Defend ? Bm.Cfg.Wild.DefendSeconds : Bm.Cfg.Wild.FleeSeconds);
+                    Follower current = Bm.FollowerOf(npc);
+                    if (decided.Defend && (current == null || current.Reason != "defend"))
+                    {
+                        Defend(npc, by);
+                    }
+                    else if (!decided.Defend && (current == null || current.Reason != "scared"))
+                    {
+                        Scare(npc, by);
+                    }
                     return null;
                 }
-                rolled[key] = now;
-                if (rolled.Count > 400)
+                if (decisions.Count > 400)
                 {
-                    foreach (ulong old in rolled.Where(kv => now - kv.Value > 60f).Select(kv => kv.Key).ToList())
+                    foreach (ulong old in decisions.Where(kv => now > kv.Value.Until + 30f).Select(kv => kv.Key).ToList())
                     {
-                        rolled.Remove(old);
+                        decisions.Remove(old);
                     }
                 }
-                // the animals on the list always fight back; the others run, and now and then they fight as well
-                if (always || (may && UnityEngine.Random.Range(0f, 100f) < Bm.Cfg.Wild.DefendChance))
+                // the animals on the list always fight back, an animal that has just attacked this player goes on attacking; the others run,
+                // and now and then they fight as well
+                bool defend = always || AttackedRecently(npc, by, now) || (may && UnityEngine.Random.Range(0f, 100f) < Bm.Cfg.Wild.DefendChance);
+                decisions[key] = new Decision { Defend = defend, Until = now + (defend ? Bm.Cfg.Wild.DefendSeconds : Bm.Cfg.Wild.FleeSeconds) };
+                if (defend)
                 {
                     Defend(npc, by);
                 }
@@ -15886,6 +18551,40 @@ namespace Oxide.Plugins
                     Scare(npc, by);
                 }
                 return null;
+            }
+
+            private sealed class Decision
+            {
+                public bool Defend;
+                public float Until;
+            }
+
+            private readonly Dictionary<ulong, Decision> decisions = new Dictionary<ulong, Decision>();
+            private readonly Dictionary<string, float> aggressors = new Dictionary<string, float>();
+
+            private static string PairKey(BaseEntity animal, BaseEntity victim)
+            {
+                return animal.net.ID.Value + ">" + (victim.net != null ? victim.net.ID.Value : 0UL);
+            }
+
+            private bool AttackedRecently(BaseNPC2 npc, BaseCombatEntity victim, float now)
+            {
+                float at;
+                return victim != null && victim.net != null && aggressors.TryGetValue(PairKey(npc, victim), out at) && now - at < 30f;
+            }
+
+            // A wild animal hurts somebody: remembered, so that it keeps attacking when it is hit back.
+            internal void NoteAggression(BaseNPC2 npc, BaseCombatEntity victim)
+            {
+                if (npc == null || victim == null || npc.net == null || victim.net == null)
+                {
+                    return;
+                }
+                if (aggressors.Count > 500)
+                {
+                    aggressors.Clear();
+                }
+                aggressors[PairKey(npc, victim)] = Time.time;
             }
 
             // Who hurt the animal: a player, or the animal body a player rides or has become.

@@ -199,7 +199,7 @@ namespace Oxide.Plugins
         }
 
         // The smoke of a transformation (config path, else the nearest looking effect of the game).
-        internal void FormSmoke(Vector3 position, BasePlayer hearer = null)
+        internal void FormSmoke(Vector3 position, BasePlayer hearer = null, float hearerDelay = 0f)
         {
             if (!Cfg.Form.Smoke)
             {
@@ -210,11 +210,11 @@ namespace Oxide.Plugins
             {
                 prefab = FindPrefabPath("fx", "smoke") ?? FindPrefabPath("fx", "poof") ?? FindPrefabPath("fx", "explosion", "small");
             }
-            RunEffectFor(prefab, position + Vector3.up * 0.8f, hearer);
+            RunEffectFor(prefab, position + Vector3.up * 0.8f, hearer, hearerDelay);
         }
 
         // The human shows up again: the game's appear effect with its sound.
-        internal void FormAppear(Vector3 position, BasePlayer hearer = null)
+        internal void FormAppear(Vector3 position, BasePlayer hearer = null, float hearerDelay = 0f)
         {
             if (!Cfg.Form.Smoke)
             {
@@ -223,7 +223,7 @@ namespace Oxide.Plugins
             string prefab = Cfg.Form.AppearPrefab;
             if (!string.IsNullOrEmpty(prefab) && GameManager.server.FindPrefab(prefab) != null)
             {
-                RunEffectFor(prefab, position + Vector3.up * 0.8f, hearer);
+                RunEffectFor(prefab, position + Vector3.up * 0.8f, hearer, hearerDelay);
             }
         }
 
@@ -232,33 +232,44 @@ namespace Oxide.Plugins
         // The effect is sent straight to the connection of every player near it, and to the player it is about (the hearer) wherever he is:
         // exactly once each. It does not depend on the network group the hidden body of the hearer is in at that moment (the body is
         // parented to the animal and switched to the spectator view right at the transformation, which used to swallow the effect now and then).
-        internal void RunEffectFor(string prefab, Vector3 position, BasePlayer hearer)
+        // hearerDelay: the player's own copy comes a moment later - right after the switch of the view (spectator camera on or off) the
+        // game's client may still be busy with the switch and drop an effect that arrives in that instant.
+        internal void RunEffectFor(string prefab, Vector3 position, BasePlayer hearer, float hearerDelay = 0f)
         {
             if (string.IsNullOrEmpty(prefab))
             {
                 return;
             }
-            bool hearerDone = false;
             foreach (BasePlayer p in BasePlayer.activePlayerList)
             {
-                if (p == null || !p.IsConnected || p.net == null || p.net.connection == null)
+                if (p == null || p == hearer || !p.IsConnected || p.net == null || p.net.connection == null)
                 {
                     continue;
                 }
-                bool isHearer = hearer != null && p == hearer;
-                if (!isHearer && Vector3.Distance(p.transform.position, position) > EffectHearRange)
+                if (Vector3.Distance(p.transform.position, position) <= EffectHearRange)
                 {
-                    continue;
-                }
-                EffectNetwork.Send(new Effect(prefab, position, Vector3.up), p.net.connection);
-                if (isHearer)
-                {
-                    hearerDone = true;
+                    EffectNetwork.Send(new Effect(prefab, position, Vector3.up), p.net.connection);
                 }
             }
-            if (hearer != null && !hearerDone && hearer.IsConnected && hearer.net != null && hearer.net.connection != null)
+            if (hearer == null)
             {
-                EffectNetwork.Send(new Effect(prefab, position, Vector3.up), hearer.net.connection);
+                return;
+            }
+            BasePlayer target = hearer;
+            Action send = () =>
+            {
+                if (target != null && target.IsConnected && target.net != null && target.net.connection != null)
+                {
+                    EffectNetwork.Send(new Effect(prefab, position, Vector3.up), target.net.connection);
+                }
+            };
+            if (hearerDelay > 0.01f)
+            {
+                timer.Once(hearerDelay, send);
+            }
+            else
+            {
+                send();
             }
         }
 

@@ -69,6 +69,23 @@ namespace Oxide.Plugins
             return best;
         }
 
+        // The prompt of E for leading: "Lead the cow" / "Let the cow go" (null = no animal to lead in front of the head).
+        internal string LeadPrompt(Driver d)
+        {
+            if (!Cfg.Features.Lead || d.Kind != ControlKind.Form || Leads == null)
+            {
+                return null;
+            }
+            BaseNPC2 target = LeadCandidate(d);
+            if (target == null)
+            {
+                return null;
+            }
+            SpeciesDef species = SpeciesOf(target);
+            string name = species != null ? species.Display.ToLowerInvariant() : "animal";
+            return Leads.ChainOf(d).Contains(target) ? "Let the " + name + " go" : "Lead the " + name;
+        }
+
         // E from the animal's head: lead the tamed animal in front of it, or let it go if it is led already.
         internal bool TryLeadToggle(Driver d)
         {

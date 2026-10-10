@@ -232,10 +232,14 @@ namespace Oxide.Plugins
                 Vector3 pos = Animal.transform.position;
                 Vector3 to = target.transform.position - pos;
                 to.y = 0f;
-                float reach = (Animal.bounds.extents.z + 1.8f) * ModelScale(Animal);
-                if (to.magnitude > reach)
+                // close enough for the hit, which lands right at the nose: the nose has to come up to the target's body
+                float k = ModelScale(Animal);
+                float reach = (Animal.bounds.center.z + Animal.bounds.extents.z) * k + bm.Cfg.Combat.HitReach * 0.7f * k;
+                Vector3 gap = target.ClosestPoint(pos) - pos;
+                gap.y = 0f;
+                if (gap.magnitude > reach)
                 {
-                    Go(target.transform.position, RustNavMeshAgent.Speeds.Sprint, reach * 0.6f);
+                    Go(target.transform.position, RustNavMeshAgent.Speeds.Sprint, Mathf.Max(0.3f, reach * 0.5f));
                     return;
                 }
                 agent.ResetPath();

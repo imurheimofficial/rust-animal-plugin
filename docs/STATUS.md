@@ -64,3 +64,18 @@ Transport: through the game's own lead + livestock flatbed module (trust is cred
 The whole code was reviewed against the owner's requests; 23 bugs and unfinished parts were fixed. The list with the cause and the fix of
 each one, the limits a server cannot get past and the test list are in [AUDIT.md](AUDIT.md).
 The inventory picture (the panel over the player model) described above was removed at the owner's request; its config section is gone.
+
+## Version 1.2.0 (2026-10-10) - the owner's test of 1.1.0
+
+Every point of the owner's test report and the three additions sent during the work are built; the list (Czech) with what is
+uncertain and the test plan is at the top of [AUDIT.md](AUDIT.md). In short:
+- Inventory: every rideable animal has the horse's inventory (saddle, horseshoes, saddle bag, horse armour, storage); E / Ctrl + E /
+  hold E (a small menu) open it; the saddle model is shown on the back; riding (also a player's animal) needs a saddle, a double saddle
+  carries two (horse, bull, cow, ram, sheep, stag); armour gives protection and costs speed but is not shown.
+- Stamina like the horse's for riding and animal forms, with a bar (and the animal's health for riders).
+- Seats: the horse's saddle seat, fixed to the spine bone, `/bm seat` no longer drifts, the head turns to the sides only.
+- Attacks follow the fresh camera direction; rear kicks for the hoofed animals; hits measured from the nose / tail; charges and wall
+  crashes only at the full sprint; every species falls in a wall crash and the rider is thrown.
+- Transformation: no forced network resubscription (the world no longer reloads), stable effects, horse form fixed, sexes enforced.
+- Animal life: E prompts, dung, rare eggs, no visible rope when an animal form leads, wild animals do not jump, normal loot.
+- New: `Life.cs` (prompts, dung, eggs, ropes, wild jumps), `/bm bag`, `/bm saddle`, config sections Stamina and Life.

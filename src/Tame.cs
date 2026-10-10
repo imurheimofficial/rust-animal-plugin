@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Oxide.Core;
+using Oxide.Game.Rust.Cui;
 using Rust.Ai.Gen2;
 using UnityEngine;
 
@@ -19,7 +21,48 @@ namespace Oxide.Plugins
             if (animal != null)
             {
                 animal.IsMale = true;
+                animal.SendNetworkUpdate();
             }
+        }
+
+        // The sex of the kind: a ram is male and a sheep is female (both use the sheep's body), a bull is male and a cow is female. The game rolls
+        // the sex (and the coat and the name) when a livestock animal spawns, over anything set before: so it is set after the spawn, and once
+        // more a moment later. genes / name / male: the exact look to keep (the ritual copies the look of the killed animal).
+        internal void EnforceLook(BaseEntity entity, SpeciesDef species, int? genes = null, string name = null, bool? male = null)
+        {
+            Action apply = () =>
+            {
+                LivestockAnimal ls = entity as LivestockAnimal;
+                if (ls == null || !Valid(ls) || species == null)
+                {
+                    return;
+                }
+                bool? sex = male;
+                if (species.Id == "ram" || species.Id == "bull") sex = true;
+                else if (species.Id == "sheep" || species.Id == "cow") sex = false;
+                bool changed = false;
+                if (sex.HasValue && ls.IsMale != sex.Value)
+                {
+                    ls.IsMale = sex.Value;
+                    changed = true;
+                }
+                if (genes.HasValue && ls.Genes != genes.Value)
+                {
+                    ls.Genes = genes.Value;
+                    changed = true;
+                }
+                if (!string.IsNullOrEmpty(name) && ls.AnimalName != name)
+                {
+                    ls.AnimalName = name;
+                    changed = true;
+                }
+                if (changed)
+                {
+                    ls.SendNetworkUpdate();
+                }
+            };
+            apply();
+            timer.Once(0.5f, apply);
         }
 
         internal bool IsTamed(BaseEntity e)
@@ -314,55 +357,142 @@ namespace Oxide.Plugins
         }
 
         // ---------------------------------------------------------------- the use key (E) on animals
+        // A tap of E does the obvious thing with the animal in front of the player: rides it when it has a saddle, opens its inventory when it has
+        // none, tames, claims. Ctrl + E opens the inventory (on a player's animal: takes or drops the leash). Holding E a moment shows everything
+        // that can be done with that animal right now. The horse keeps the game's own E (mount, and its own menu when E is held).
 
-        // E in front of an animal: syringe on a trapped predator, the deer's inventory, gear and mounting of owned animals, claiming a bonded one.
-        internal void UseKey(BasePlayer player)
+        private sealed class UsePress
         {
-            if (!Cfg.Features.Riding && !Cfg.Features.Taming)
+            public BaseNPC2 Target;
+            public float Start;
+            public bool Crouch;
+            public bool Done;
+        }
+
+        private readonly Dictionary<ulong, UsePress> usePresses = new Dictionary<ulong, UsePress>();
+        private const float UseHoldTime = 0.45f;
+
+        private bool UseAllowed(BasePlayer player)
+        {
+            return (Cfg.Features.Riding || Cfg.Features.Taming || Cfg.Features.Gear || Cfg.Features.AnimalForm)
+                && Has(player, PermUse) && DriverOf(player) == null && !player.isMounted && !player.IsDead() && !player.IsSleeping();
+        }
+
+        // The game's own handling of livestock works with a tool in the hand (the knife shears, the bucket milks, the rope leads): with one of
+        // those the plugin leaves E alone.
+        private static bool VanillaTool(Item item)
+        {
+            if (item == null)
+            {
+                return false;
+            }
+            string n = item.info.shortname;
+            return n.Contains("knife") || n.Contains("rope") || n.Contains("bucket") || n.Contains("jug") || n == "water.jar" || n.Contains("bota") || n.Contains("canteen");
+        }
+
+        internal void UsePressed(BasePlayer player)
+        {
+            usePresses.Remove(player.userID);
+            CloseBeastMenu(player);
+            if (!UseAllowed(player))
             {
                 return;
             }
-            if (!Has(player, PermUse) || DriverOf(player) != null)
-            {
-                return;
-            }
+            bool crouch = player.serverInput.IsDown(BUTTON.DUCK);
             BaseNPC2 animal = AnimalInSight(player, Cfg.Riding.MountDistance, 20f);
             if (animal == null)
             {
                 RidableHorse horse = HorseInSight(player, Cfg.Riding.MountDistance + 1f, 20f);
                 if (horse != null)
                 {
-                    Driver horseHost = DriverOfAnimal(horse);
-                    if (horseHost != null)
-                    {
-                        if (horseHost.Kind == ControlKind.Form)
-                        {
-                            TryFormHandle(player, horseHost);   // crouch + E leads it; riding is the game's own mount
-                        }
-                        return;
-                    }
-                    if (LeftOwnedBy(horse, player))
-                    {
-                        if (player.serverInput.IsDown(BUTTON.DUCK))
-                        {
-                            OpenFormBag(player, LeftForms[horse.net.ID.Value]);     // Ctrl + E: what the horse carried for its player
-                        }
-                        return;                                 // E: the game's own mount of the horse the player has just left
-                    }
-                    HorseUse(player, horse);
+                    HorseKey(player, horse, crouch);
                 }
                 return;
             }
-            Driver hostDriver = DriverOfAnimal(animal);
-            if (hostDriver != null)
+            if (animal is LivestockAnimal && VanillaTool(player.GetActiveItem()))
             {
-                if (hostDriver.Kind == ControlKind.Form)
+                return;
+            }
+            usePresses[player.userID] = new UsePress { Target = animal, Start = Time.time, Crouch = crouch };
+        }
+
+        internal void UseHeld(BasePlayer player)
+        {
+            UsePress press;
+            if (!usePresses.TryGetValue(player.userID, out press) || press.Done || Time.time - press.Start < UseHoldTime)
+            {
+                return;
+            }
+            press.Done = true;
+            if (!Valid(press.Target) || press.Target.IsDead() || !UseAllowed(player))
+            {
+                return;
+            }
+            List<string[]> choices = BeastChoices(player, press.Target);
+            if (choices.Count == 0)
+            {
+                UseTap(player, press.Target, press.Crouch);           // nothing to choose from: the hold counts as a tap
+                return;
+            }
+            ShowBeastMenu(player, press.Target, choices);
+        }
+
+        internal void UseReleased(BasePlayer player)
+        {
+            UsePress press;
+            if (!usePresses.TryGetValue(player.userID, out press))
+            {
+                return;
+            }
+            usePresses.Remove(player.userID);
+            if (press.Done || !Valid(press.Target) || press.Target.IsDead())
+            {
+                return;
+            }
+            UseTap(player, press.Target, press.Crouch);
+        }
+
+        // E on a horse: the game mounts it and shows its menu; the plugin adds the leash of a horse that is a player (Ctrl + E), the inventory
+        // of the horse a player has left (Ctrl + E) and taming of the wild ones.
+        private void HorseKey(BasePlayer player, RidableHorse horse, bool crouch)
+        {
+            Driver horseHost = DriverOfAnimal(horse);
+            if (horseHost != null)
+            {
+                if (horseHost.Kind == ControlKind.Form && crouch)
                 {
-                    TryFormHandle(player, hostDriver);        // the animal is a player: a rider, a leash
+                    TryFormHandle(player, horseHost, true);
+                }
+                return;
+            }
+            if (LeftOwnedBy(horse, player))
+            {
+                // E: the game mounts it when it has a saddle; Ctrl + E on a horse without one: its inventory (hold E: the game's own menu)
+                if (crouch && SeatsOf(horse) == 0 && !OpenEntityLoot(player, horse))
+                {
+                    TellRaw(player, "Hold E at the horse and choose its inventory.");
+                }
+                return;
+            }
+            HorseUse(player, horse);
+        }
+
+        private void UseTap(BasePlayer player, BaseNPC2 animal, bool crouch)
+        {
+            if (!UseAllowed(player))
+            {
+                return;
+            }
+            Driver host = DriverOfAnimal(animal);
+            if (host != null)
+            {
+                if (host.Kind == ControlKind.Form)
+                {
+                    FormKey(player, host, crouch);
                 }
                 else
                 {
-                    TryRideBehind(player, hostDriver);        // a ridden animal with a double saddle carries a second rider
+                    TryRideBehind(player, host);                    // a ridden animal with a double saddle carries a second rider
                 }
                 return;
             }
@@ -373,9 +503,13 @@ namespace Oxide.Plugins
             }
             if (LeftOwnedBy(animal, player))
             {
-                if (player.serverInput.IsDown(BUTTON.DUCK))
+                if (crouch || (species.Gear && Cfg.Features.Gear && SaddleOf(animal) <= 0 && !RideBypass(player)))
                 {
-                    OpenFormBag(player, LeftForms[animal.net.ID.Value]);      // Ctrl + E: what the animal carries
+                    if (!crouch)
+                    {
+                        TellRaw(player, "It has no saddle: fit one in slot 1 of its inventory to ride it.");
+                    }
+                    OpenInventory(player, animal);
                     return;
                 }
                 if (species.Ride != RideTier.None && !species.Critter)
@@ -396,21 +530,50 @@ namespace Oxide.Plugins
                     Tell(player, "NotYours");
                     return;
                 }
-                bool crouch = player.serverInput.IsDown(BUTTON.DUCK);
-                if (species.Gear && Cfg.Features.Gear && (crouch || rec.Gear.Saddle <= 0))
+                if (species.Gear && Cfg.Features.Gear && (crouch || (SaddleOf(animal) <= 0 && !RideBypass(player))))
                 {
-                    OpenGear(player, animal, rec);
+                    OpenInventory(player, animal);
                     return;
                 }
-                TryMountFromUse(player);
+                if (species.Ride != RideTier.None && !species.Critter)
+                {
+                    StartControl(player, animal, ControlKind.Ride);
+                }
                 return;
             }
             if (species.Ride == RideTier.Restricted)
             {
-                TryMountFromUse(player);
+                if (!crouch)
+                {
+                    StartControl(player, animal, ControlKind.Ride);
+                }
                 return;
             }
             TryClaim(player, animal, species);
+        }
+
+        private bool RideBypass(BasePlayer player)
+        {
+            return Cfg.Riding.AdminBypass && IsAdmin(player);
+        }
+
+        // E on another player's animal: rides it when it has a saddle, opens its inventory when it has none (so that one can be fitted).
+        // Ctrl + E: the leash.
+        private void FormKey(BasePlayer player, Driver host, bool crouch)
+        {
+            if (crouch)
+            {
+                TryFormHandle(player, host, true);
+                return;
+            }
+            if (host.Horse == null && host.Species != null && host.Species.Gear && Cfg.Features.Gear && !host.Species.Critter
+                && host.Species.Ride != RideTier.None && FormHandledBy(host, player) && MaxRiders(host) <= 0)
+            {
+                TellRaw(player, "It has no saddle yet: fit one in slot 1 of its inventory to ride it.");
+                OpenInventory(player, host.Body);
+                return;
+            }
+            TryFormHandle(player, host, false);
         }
 
         // E on an animal somebody rides: with a double saddle the player climbs on behind the rider (owner and team, like the riding rule).
@@ -420,13 +583,13 @@ namespace Oxide.Plugins
             {
                 return;
             }
-            TamedRecord rec = RecordOf(host.Animal);
-            if (rec == null || rec.Gear.Saddle < 2)
+            if (SaddleOf(host.Animal) < 2)
             {
                 TellRaw(player, "Only an animal with a double saddle carries a second rider.");
                 return;
             }
-            if (!MayUse(player, rec.Owner, Cfg.Riding.Ownership) && !SameParty(player, host.Player))
+            TamedRecord rec = RecordOf(host.Animal);
+            if (rec != null && !MayUse(player, rec.Owner, Cfg.Riding.Ownership) && !SameParty(player, host.Player))
             {
                 Tell(player, "NotYours");
                 return;
@@ -441,6 +604,236 @@ namespace Oxide.Plugins
             {
                 TellRaw(player, "You ride behind " + host.Player.displayName + ". Press Space to get off.");
             }
+        }
+
+        // ---------------------------------------------------------------- the menu of E held
+
+        private const string BeastUi = "BeastmasterBeast";
+
+        private sealed class BeastMenu
+        {
+            public BaseNPC2 Target;
+            public float Until;
+        }
+
+        private readonly Dictionary<ulong, BeastMenu> beastMenus = new Dictionary<ulong, BeastMenu>();
+
+        // What this player can do with that animal right now: { action, button text }.
+        internal List<string[]> BeastChoices(BasePlayer player, BaseNPC2 animal)
+        {
+            var list = new List<string[]>();
+            if (player == null || !Valid(animal) || animal.IsDead())
+            {
+                return list;
+            }
+            SpeciesDef species = SpeciesOf(animal);
+            if (species == null)
+            {
+                return list;
+            }
+            GearRecord ignored;
+            bool inventory = Cfg.Features.Gear && species.Gear && InventoryProblem(player, animal, out ignored) == null;
+            Driver host = DriverOfAnimal(animal);
+            if (host != null)
+            {
+                if (host.Kind == ControlKind.Form && host.Player != player)
+                {
+                    host.PruneGuests();
+                    if (host.Horse == null && FormMountCheck(player, host, false) && host.Guests.Count < MaxRiders(host))
+                    {
+                        list.Add(new[] { "ride", "Ride" });
+                    }
+                    if (inventory)
+                    {
+                        list.Add(new[] { "inventory", "Inventory" });
+                    }
+                    if (FormHandledBy(host, player))
+                    {
+                        list.Add(new[] { "lead", host.Leader == player ? "Let go" : "Lead" });
+                    }
+                }
+                else if (host.Kind == ControlKind.Ride && host.Player != player && SaddleOf(animal) >= 2)
+                {
+                    host.PruneGuests();
+                    if (host.Guests.Count == 0)
+                    {
+                        list.Add(new[] { "behind", "Ride behind" });
+                    }
+                }
+                return list;
+            }
+            object[] args;
+            bool rideable = species.Ride != RideTier.None && !species.Critter && ControlProblem(player, animal, ControlKind.Ride, out args) == null;
+            if (LeftOwnedBy(animal, player))
+            {
+                if (rideable)
+                {
+                    list.Add(new[] { "ride", "Ride" });
+                }
+                if (inventory)
+                {
+                    list.Add(new[] { "inventory", "Inventory" });
+                }
+                return list;
+            }
+            TamedRecord rec = RecordOf(animal);
+            if (rec != null && MayUse(player, rec.Owner, "team"))
+            {
+                if (rideable)
+                {
+                    list.Add(new[] { "ride", "Ride" });
+                }
+                if (inventory)
+                {
+                    list.Add(new[] { "inventory", "Inventory" });
+                }
+                if (Cfg.Features.Taming)
+                {
+                    list.Add(new[] { "follow", rec.State == "follow" ? "Follow (now)" : "Follow" });
+                    list.Add(new[] { "wait", rec.State == "wait" ? "Wait (now)" : "Wait" });
+                    list.Add(new[] { "guard", rec.State == "guard" ? "Guard (now)" : "Guard" });
+                }
+            }
+            return list;
+        }
+
+        private void ShowBeastMenu(BasePlayer player, BaseNPC2 animal, List<string[]> choices)
+        {
+            CloseBeastMenu(player);
+            SpeciesDef species = SpeciesOf(animal);
+            TamedRecord rec = RecordOf(animal);
+            Driver host = DriverOfAnimal(animal);
+            string title = species != null ? species.Display : "Animal";
+            if (host != null && host.Kind == ControlKind.Form && host.Player != null)
+            {
+                title += "  <size=12>(" + host.Player.displayName + ")</size>";
+            }
+            else if (rec != null && !string.IsNullOrEmpty(rec.Name))
+            {
+                title += "  <size=12>(" + rec.Name + ")</size>";
+            }
+            float rows = choices.Count + 1;
+            float height = 0.045f * rows + 0.06f;
+            var c = new CuiElementContainer();
+            c.Add(new CuiPanel { Image = { Color = "0.08 0.09 0.07 0.92" }, RectTransform = { AnchorMin = Pt(0.42f, 0.5f - height / 2f), AnchorMax = Pt(0.58f, 0.5f + height / 2f) }, CursorEnabled = true }, "Overlay", BeastUi);
+            float step = 1f / (rows + 1.3f);
+            UiLabel(c, BeastUi, "<b>" + title + "</b>", 14, 0.04f, 1f - step * 1.2f, 0.96f, 0.98f, TextAnchor.MiddleCenter);
+            string id = animal.net.ID.Value.ToString(CultureInfo.InvariantCulture);
+            for (int i = 0; i < choices.Count; i++)
+            {
+                float top = 1f - step * (1.3f + i);
+                UiButton(c, BeastUi, choices[i][1], "bm.ui beast " + id + " " + choices[i][0], 0.06f, top - step * 0.86f, 0.94f, top, choices[i][0] == "ride" || choices[i][0] == "behind" ? ColOn : ColBtn, 13);
+            }
+            float last = 1f - step * (1.3f + choices.Count);
+            UiButton(c, BeastUi, "Close", "bm.ui beast 0 close", 0.30f, last - step * 0.86f, 0.70f, last, ColOff, 12);
+            CuiHelper.AddUi(player, c);
+            beastMenus[player.userID] = new BeastMenu { Target = animal, Until = Time.time + 12f };
+        }
+
+        internal void CloseBeastMenu(BasePlayer player)
+        {
+            if (player == null)
+            {
+                return;
+            }
+            if (beastMenus.Remove(player.userID) && player.IsConnected)
+            {
+                CuiHelper.DestroyUi(player, BeastUi);
+            }
+        }
+
+        // A button of the menu: everything is checked again, the menu may be old by now.
+        internal void BeastButton(BasePlayer player, string[] args)
+        {
+            BeastMenu menu;
+            beastMenus.TryGetValue(player.userID, out menu);
+            CloseBeastMenu(player);
+            ulong id;
+            if (args.Length < 3 || !ulong.TryParse(args[1], out id) || id == 0UL || menu == null || !Valid(menu.Target) || menu.Target.net.ID.Value != id)
+            {
+                return;
+            }
+            BaseNPC2 animal = menu.Target;
+            string act = args[2].ToLowerInvariant();
+            if (!UseAllowed(player) || Vector3.Distance(player.transform.position, animal.transform.position) > Cfg.Riding.MountDistance + 3f)
+            {
+                return;
+            }
+            if (!BeastChoices(player, animal).Any(c => c[0] == act))
+            {
+                return;
+            }
+            Driver host = DriverOfAnimal(animal);
+            switch (act)
+            {
+                case "ride":
+                    if (host != null && host.Kind == ControlKind.Form)
+                    {
+                        TryFormHandle(player, host, false);
+                    }
+                    else
+                    {
+                        StartControl(player, animal, ControlKind.Ride);
+                    }
+                    break;
+                case "behind":
+                    TryRideBehind(player, host);
+                    break;
+                case "inventory":
+                    OpenInventory(player, animal);
+                    break;
+                case "lead":
+                    TryFormHandle(player, host, true);
+                    break;
+                case "follow":
+                case "wait":
+                case "guard":
+                    {
+                        TamedRecord rec = RecordOf(animal);
+                        if (rec != null)
+                        {
+                            rec.State = act;
+                            ApplyState(animal, rec);
+                            SpeciesDef sp = SpeciesOf(animal);
+                            TellRaw(player, "The " + (sp != null ? sp.Display.ToLowerInvariant() : "animal") + (act == "follow" ? " follows you." : act == "wait" ? " waits here." : " guards you."));
+                        }
+                        break;
+                    }
+            }
+        }
+
+        // /bm bag: the inventory of the animal the player looks at; as an animal: his own.
+        internal void BagCommand(BasePlayer player, Action<string> reply)
+        {
+            Driver d = DriverOf(player);
+            if (d != null)
+            {
+                if (d.Kind == ControlKind.Form)
+                {
+                    OpenOwnInventory(d);
+                }
+                else
+                {
+                    reply("Get off first; then look at the animal and use /bm bag (or Ctrl + E).");
+                }
+                return;
+            }
+            BaseNPC2 animal = AnimalInSight(player, 6f, 30f);
+            if (animal != null)
+            {
+                OpenInventory(player, animal);
+                return;
+            }
+            RidableHorse horse = HorseInSight(player, 6f, 30f);
+            if (horse != null)
+            {
+                if (!OpenEntityLoot(player, horse))
+                {
+                    reply("Hold E at the horse and choose its inventory.");
+                }
+                return;
+            }
+            reply("Look at an animal within 6 m.");
         }
 
         // ---------------------------------------------------------------- module (hooks, persistence)
@@ -479,6 +872,15 @@ namespace Oxide.Plugins
             {
                 Bm.StoreTamed();
                 Bm.StopAllFollowers();
+                foreach (ulong id in Bm.beastMenus.Keys.ToList())
+                {
+                    BasePlayer p = BasePlayer.FindByID(id);
+                    if (p != null)
+                    {
+                        Bm.CloseBeastMenu(p);
+                    }
+                }
+                Bm.beastMenus.Clear();
             }
 
             public override void OnDisable()
@@ -495,7 +897,15 @@ namespace Oxide.Plugins
             {
                 if (input.WasJustPressed(BUTTON.USE))
                 {
-                    Bm.UseKey(player);
+                    Bm.UsePressed(player);
+                }
+                else if (input.IsDown(BUTTON.USE))
+                {
+                    Bm.UseHeld(player);
+                }
+                if (input.WasJustReleased(BUTTON.USE))
+                {
+                    Bm.UseReleased(player);
                 }
                 if (!Bm.Cfg.Features.Commands)
                 {
@@ -579,6 +989,40 @@ namespace Oxide.Plugins
                     Bm.TagIndex.Remove(e.skinID);
                 }
                 Bm.StopFollower(entity);
+            }
+
+            private float nextMenuCheck;
+
+            // The menu of E held closes by itself: after a while, or when the animal is gone or far.
+            public override void Tick(float now)
+            {
+                if (now < nextMenuCheck || Bm.beastMenus.Count == 0)
+                {
+                    return;
+                }
+                nextMenuCheck = now + 0.5f;
+                foreach (KeyValuePair<ulong, BeastMenu> pair in Bm.beastMenus.ToList())
+                {
+                    BasePlayer p = BasePlayer.FindByID(pair.Key);
+                    BeastMenu m = pair.Value;
+                    if (p == null || !p.IsConnected || now > m.Until || !Valid(m.Target) || m.Target.IsDead() || Vector3.Distance(p.transform.position, m.Target.transform.position) > Bm.Cfg.Riding.MountDistance + 3f)
+                    {
+                        if (p != null)
+                        {
+                            Bm.CloseBeastMenu(p);
+                        }
+                        else
+                        {
+                            Bm.beastMenus.Remove(pair.Key);
+                        }
+                    }
+                }
+            }
+
+            public override void OnPlayerDisconnected(BasePlayer player, string reason)
+            {
+                Bm.usePresses.Remove(player.userID);
+                Bm.beastMenus.Remove(player.userID);
             }
 
             public override void SelfTest(List<string> report)
@@ -669,10 +1113,7 @@ namespace Oxide.Plugins
                     {
                         c.health = Mathf.Min(rec.Health, c.MaxHealth());
                     }
-                    if (species.Id == "ram")
-                    {
-                        MakeMale(e as LivestockAnimal);
-                    }
+                    EnforceLook(e, species, rec.Genes != 0UL ? (int?)unchecked((int)(uint)rec.Genes) : null, rec.Name);
                 }
                 TagIndex[rec.Tag] = e;
                 ApplyState(e, rec);

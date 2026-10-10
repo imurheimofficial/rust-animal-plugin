@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Rust.Ai.Gen2;
 using UnityEngine;
 
@@ -21,6 +22,7 @@ namespace Oxide.Plugins
             public object Data;
             public bool Filling;
             public bool Done;
+            public float Opened;
             public Func<VirtualBox, Item, int, bool> Accept;
             public Action<VirtualBox, Item> Added;
             public Action<VirtualBox> Closed;
@@ -42,10 +44,19 @@ namespace Oxide.Plugins
                 return null;
             }
             box.enableSaving = false;
+            // the box hangs under the player's feet: the deployable's own ground checks would destroy it there before the panel shows
+            foreach (Component part in box.GetComponents<Component>())
+            {
+                string kindName = part != null ? part.GetType().Name : string.Empty;
+                if (kindName == "GroundWatch" || kindName == "DestroyOnGroundMissing" || kindName == "DeployableDecay")
+                {
+                    UnityEngine.Object.DestroyImmediate(part);
+                }
+            }
             box.Spawn();
             box.inventorySlots = slots;
             box.inventory.capacity = slots;
-            var vb = new VirtualBox { Box = box, Player = player, Kind = kind, Data = data, Accept = accept, Added = added, Closed = closed, Filling = true };
+            var vb = new VirtualBox { Box = box, Player = player, Kind = kind, Data = data, Accept = accept, Added = added, Closed = closed, Filling = true, Opened = Time.realtimeSinceStartup };
             Boxes[box.inventory] = vb;
             if (contents != null)
             {
@@ -59,7 +70,12 @@ namespace Oxide.Plugins
                 }
             }
             vb.Filling = false;
-            if (!box.PlayerOpenLoot(player, box.panelName, false))
+            bool opened;
+            using (new VanillaScope(player))             // an animal form (a spectator) may open it too
+            {
+                opened = box.PlayerOpenLoot(player, box.panelName, false);
+            }
+            if (!opened)
             {
                 FinishBox(vb, false);
                 return null;
@@ -111,123 +127,279 @@ namespace Oxide.Plugins
             return item;
         }
 
-        // ---------------------------------------------------------------- the gear panel of an owned animal (E, or crouch + E)
-        // Slot 0 = saddle (single or double), slot 1 = horseshoes, slot 2 = saddle bag, everything after that is the bag's own storage.
 
-        private const int GearFixedSlots = 3;
+        // ---------------------------------------------------------------- the inventory of an animal (the horse's, for every animal)
+        // Slot 1 = saddle (single or double), slot 2 = horseshoes, slot 3 = saddle bag, slot 4 = horse armour; from slot 5 on the storage: the
+        // saddle bag gives it (12 slots), the wooden armour adds 6, exactly like the horse. The horseshoes add speed, the bag and the armour cost
+        // some, the armour takes damage off. The horse itself keeps the game's own inventory.
 
-        internal void OpenGear(BasePlayer player, BaseEntity animal, TamedRecord rec)
+        internal const int SlotSaddle = 0, SlotShoes = 1, SlotBag = 2, SlotArmor = 3, GearFixedSlots = 4;
+        private static readonly string[] ArmorItems = { string.Empty, "horse.armor.wood", "horse.armor.roadsign", "horse.armor.lny26" };
+
+        internal static int ArmorIndex(string shortname)
+        {
+            for (int i = 1; i < ArmorItems.Length; i++)
+            {
+                if (ArmorItems[i] == shortname)
+                {
+                    return i;
+                }
+            }
+            return 0;
+        }
+
+        internal int StorageOf(GearRecord g)
+        {
+            return g == null ? 0 : (g.HasBag ? Mathf.Max(0, Cfg.Gear.BagSlots) : 0) + (g.Armor == 1 ? Mathf.Max(0, Cfg.Gear.WoodArmorSlots) : 0);
+        }
+
+        private int MaxStorage => Mathf.Max(0, Cfg.Gear.BagSlots) + Mathf.Max(0, Cfg.Gear.WoodArmorSlots);
+
+        // The double saddle fits the big hoofed animals.
+        internal static bool DoubleSaddleSpecies(SpeciesDef s)
+        {
+            if (s == null)
+            {
+                return false;
+            }
+            switch (s.Id)
+            {
+                case "horse": case "bull": case "cow": case "ram": case "sheep": case "stag": case "doe": return true;
+                default: return false;
+            }
+        }
+
+        // The inventory of an animal form that is not a tamed animal (a tamed one keeps its record's): it goes with the animal when the player
+        // leaves it, and with the player when he logs out.
+        internal readonly Dictionary<ulong, GearRecord> FormGears = new Dictionary<ulong, GearRecord>();
+
+        internal GearRecord FormGearOf(Driver d)
+        {
+            TamedRecord rec = RecordOf(d.Body);
+            if (rec != null)
+            {
+                return rec.Gear;
+            }
+            GearRecord g;
+            if (!FormGears.TryGetValue(d.Player.userID, out g) || g == null)
+            {
+                g = new GearRecord();
+                FormGears[d.Player.userID] = g;
+            }
+            return g;
+        }
+
+        // The inventory of an animal: a player's form, an animal a player has left, a tamed animal. Null = it has none (wild animals, horses).
+        internal GearRecord GearOf(BaseEntity animal)
+        {
+            if (animal == null || animal is RidableHorse)
+            {
+                return null;
+            }
+            Driver d = DriverOfAnimal(animal);
+            if (d != null && d.Kind == ControlKind.Form)
+            {
+                return FormGearOf(d);
+            }
+            LeftForm lf;
+            if (animal.net != null && LeftForms.TryGetValue(animal.net.ID.Value, out lf))
+            {
+                return lf.Gear;
+            }
+            TamedRecord rec = RecordOf(animal);
+            return rec != null ? rec.Gear : null;
+        }
+
+        internal int SaddleOf(BaseEntity animal)
+        {
+            RidableHorse horse = animal as RidableHorse;
+            if (horse != null)
+            {
+                return SeatsOf(horse);
+            }
+            GearRecord g = GearOf(animal);
+            return g != null ? g.Saddle : 0;
+        }
+
+        // Why a player may not open the inventory of an animal; null = he may.
+        internal string InventoryProblem(BasePlayer player, BaseEntity animal, out GearRecord gear)
+        {
+            gear = GearOf(animal);
+            SpeciesDef species = SpeciesOf(animal);
+            if (gear == null || species == null || !species.Gear)
+            {
+                return "This animal has no inventory.";
+            }
+            Driver d = DriverOfAnimal(animal);
+            if (d != null && d.Kind == ControlKind.Form)
+            {
+                if (d.Player == player)
+                {
+                    return null;                     // the player's own animal (Ctrl + E as the animal)
+                }
+                return FormHandledBy(d, player) ? null : "This animal does not let you into its inventory.";
+            }
+            if (d != null)
+            {
+                return "Somebody rides it: its inventory opens when nobody is on it.";
+            }
+            if (LeftOwnedBy(animal, player))
+            {
+                return null;
+            }
+            LeftForm lf;
+            if (animal.net != null && LeftForms.TryGetValue(animal.net.ID.Value, out lf))
+            {
+                return L("NotYours", player.UserIDString);
+            }
+            TamedRecord rec = RecordOf(animal);
+            if (rec != null && Cfg.Gear.BagPrivate && !MayUse(player, rec.Owner, "team"))
+            {
+                return L("NotYours", player.UserIDString);
+            }
+            return null;
+        }
+
+        internal sealed class InventoryContext
+        {
+            public GearRecord Gear;
+            public SpeciesDef Species;
+            public BaseEntity Animal;
+        }
+
+        private readonly HashSet<GearRecord> openGears = new HashSet<GearRecord>();
+
+        internal void OpenInventory(BasePlayer player, BaseEntity animal)
         {
             if (!Cfg.Features.Gear)
             {
                 Tell(player, "FeatureOff");
                 return;
             }
-            SpeciesDef species = SpeciesOf(animal);
-            if (species == null || !species.Gear)
+            GearRecord gear;
+            string problem = InventoryProblem(player, animal, out gear);
+            if (problem != null)
             {
+                TellRaw(player, problem);
                 return;
             }
-            if (Cfg.Gear.BagPrivate && rec.Owner != player.userID && !MayUse(player, rec.Owner, "team"))
+            foreach (VirtualBox own in Boxes.Values.Where(b => b.Player == player).ToList())
             {
-                Tell(player, "NotYours");
-                return;
+                FinishBox(own);                      // a panel of the same player still counted as open (saved first)
             }
-            var contents = new List<KeyValuePair<int, ItemRecord>>();
-            if (rec.Gear.Saddle > 0)
+            if (openGears.Contains(gear))
             {
-                contents.Add(new KeyValuePair<int, ItemRecord>(0, new ItemRecord { Shortname = rec.Gear.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single" }));
-            }
-            if (rec.Gear.Shoes > 0)
-            {
-                contents.Add(new KeyValuePair<int, ItemRecord>(1, new ItemRecord { Shortname = rec.Gear.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic" }));
-            }
-            if (rec.Gear.HasBag)
-            {
-                contents.Add(new KeyValuePair<int, ItemRecord>(2, new ItemRecord { Shortname = "horse.saddlebag" }));
-                foreach (ItemRecord bag in rec.Gear.Bag)
+                // the game of a player in animal form may not show the panel at all (the spectator view): such a panel never keeps others out
+                foreach (VirtualBox held in Boxes.Values.ToList())
                 {
-                    contents.Add(new KeyValuePair<int, ItemRecord>(GearFixedSlots + Mathf.Max(0, bag.Slot), bag));
+                    InventoryContext hc = held.Data as InventoryContext;
+                    Driver holder = held.Player != null ? DriverOf(held.Player) : null;
+                    if (hc != null && hc.Gear == gear && (held.Player == null || !held.Player.IsConnected || (holder != null && holder.Spectating)))
+                    {
+                        FinishBox(held);
+                    }
                 }
             }
-            int slots = GearFixedSlots + Cfg.Gear.BagSlots;
-            ulong tag = rec.Tag;
-            VirtualBox vb = OpenBox(player, "gear", slots, contents, tag,
-                GearAccept,
-                null,
-                GearClosed);
+            if (openGears.Contains(gear))
+            {
+                TellRaw(player, "Somebody is in its inventory right now.");
+                return;
+            }
+            SpeciesDef species = SpeciesOf(animal);
+            var contents = new List<KeyValuePair<int, ItemRecord>>();
+            if (gear.Saddle > 0)
+            {
+                contents.Add(new KeyValuePair<int, ItemRecord>(SlotSaddle, new ItemRecord { Shortname = gear.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single" }));
+            }
+            if (gear.Shoes > 0)
+            {
+                contents.Add(new KeyValuePair<int, ItemRecord>(SlotShoes, new ItemRecord { Shortname = gear.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic" }));
+            }
+            if (gear.HasBag)
+            {
+                contents.Add(new KeyValuePair<int, ItemRecord>(SlotBag, new ItemRecord { Shortname = "horse.saddlebag" }));
+            }
+            if (gear.Armor > 0 && gear.Armor < ArmorItems.Length)
+            {
+                contents.Add(new KeyValuePair<int, ItemRecord>(SlotArmor, new ItemRecord { Shortname = ArmorItems[gear.Armor] }));
+            }
+            foreach (ItemRecord stored in gear.Bag)
+            {
+                contents.Add(new KeyValuePair<int, ItemRecord>(GearFixedSlots + Mathf.Max(0, stored.Slot), stored));
+            }
+            var ctx = new InventoryContext { Gear = gear, Species = species, Animal = animal };
+            VirtualBox vb = OpenBox(player, "inventory", GearFixedSlots + MaxStorage, contents, ctx, InventoryAccept, null, InventoryClosed);
             if (vb != null)
             {
-                Tell(player, "GearOpen", species.Display);
+                openGears.Add(gear);
+                Tell(player, "GearOpen", species.Display, Cfg.Gear.BagSlots, Cfg.Gear.WoodArmorSlots);
             }
         }
 
-        private bool GearAccept(VirtualBox vb, Item item, int slot)
+        private bool InventoryAccept(VirtualBox vb, Item item, int slot)
         {
-            string name = item.info.shortname;
-            if (slot < 0)
+            InventoryContext ctx = vb.Data as InventoryContext;
+            if (ctx == null || slot < 0)
             {
                 return false;
             }
+            string name = item.info.shortname;
             switch (slot)
             {
-                case 0: return name == "horse.saddle.single" || name == "horse.saddle.double";
-                case 1: return name == "horse.shoes.basic" || name == "horse.shoes.advanced";
-                case 2: return name == "horse.saddlebag";
+                case SlotSaddle: return name == "horse.saddle.single" || (name == "horse.saddle.double" && DoubleSaddleSpecies(ctx.Species));
+                case SlotShoes: return name == "horse.shoes.basic" || name == "horse.shoes.advanced";
+                case SlotBag: return name == "horse.saddlebag";
+                case SlotArmor: return ArmorIndex(name) > 0;
                 default:
                     {
-                        Item bag = vb.Box.inventory.GetSlot(2);
-                        return bag != null && bag.info.shortname == "horse.saddlebag" && item != bag;
+                        Item bag = vb.Box.inventory.GetSlot(SlotBag);
+                        Item armor = vb.Box.inventory.GetSlot(SlotArmor);
+                        int capacity = (bag != null && bag.info.shortname == "horse.saddlebag" ? Cfg.Gear.BagSlots : 0)
+                            + (armor != null && ArmorIndex(armor.info.shortname) == 1 ? Cfg.Gear.WoodArmorSlots : 0);
+                        return slot - GearFixedSlots < capacity && item != bag && item != armor;
                     }
             }
         }
 
-        private void GearClosed(VirtualBox vb)
+        private void InventoryClosed(VirtualBox vb)
         {
-            TamedRecord rec;
-            if (!Data.Tamed.TryGetValue((ulong)vb.Data, out rec))
+            InventoryContext ctx = vb.Data as InventoryContext;
+            if (ctx == null)
             {
                 ReturnAll(vb);
                 return;
             }
+            openGears.Remove(ctx.Gear);
             ItemContainer inv = vb.Box.inventory;
-            Item saddle = inv.GetSlot(0), shoes = inv.GetSlot(1), bagItem = inv.GetSlot(2);
-            rec.Gear.Saddle = saddle == null ? 0 : saddle.info.shortname == "horse.saddle.double" ? 2 : 1;
-            rec.Gear.Shoes = shoes == null ? 0 : shoes.info.shortname == "horse.shoes.advanced" ? 2 : 1;
-            rec.Gear.HasBag = bagItem != null;
-            rec.Gear.Bag.Clear();
-            var leftovers = new List<Item>();
+            Item saddle = inv.GetSlot(SlotSaddle), shoes = inv.GetSlot(SlotShoes), bagItem = inv.GetSlot(SlotBag), armor = inv.GetSlot(SlotArmor);
+            GearRecord g = ctx.Gear;
+            g.Saddle = saddle == null ? 0 : saddle.info.shortname == "horse.saddle.double" ? 2 : saddle.info.shortname == "horse.saddle.single" ? 1 : 0;
+            g.Shoes = shoes == null ? 0 : shoes.info.shortname == "horse.shoes.advanced" ? 2 : 1;
+            g.HasBag = bagItem != null && bagItem.info.shortname == "horse.saddlebag";
+            g.Armor = armor != null ? ArmorIndex(armor.info.shortname) : 0;
+            int capacity = StorageOf(g);
+            g.Bag.Clear();
             foreach (Item item in inv.itemList.ToList())
             {
                 if (item.position < GearFixedSlots)
                 {
                     continue;
                 }
-                if (rec.Gear.HasBag)
+                int index = item.position - GearFixedSlots;
+                if (index < capacity)
                 {
-                    rec.Gear.Bag.Add(RecordFromItem(item, item.position - GearFixedSlots));
+                    g.Bag.Add(RecordFromItem(item, index));
                 }
                 else
                 {
-                    leftovers.Add(item);     // the bag was taken out: its contents go back to the player
-                }
-            }
-            foreach (Item item in leftovers)
-            {
-                GiveBack(vb.Player, item);
-            }
-            // the gear items themselves are stored in the record; they are made again when the panel opens
-            foreach (Item fixedItem in new[] { saddle, shoes, bagItem })
-            {
-                if (fixedItem != null)
-                {
-                    fixedItem.Remove();
+                    GiveBack(vb.Player, item);        // no room without the bag (or the armour): back to the player
                 }
             }
             foreach (Item rest in inv.itemList.ToList())
             {
                 rest.Remove();
             }
+            RefreshSaddle(ctx.Animal);
             Tell(vb.Player, "GearSaved");
         }
 
@@ -239,6 +411,170 @@ namespace Oxide.Plugins
             }
         }
 
+        // Ctrl + E as an animal: the animal's own inventory (the horse: the game's own horse inventory).
+        internal void OpenOwnInventory(Driver d)
+        {
+            if (d == null || d.Kind != ControlKind.Form || d.Player == null || !d.Alive)
+            {
+                return;
+            }
+            if (d.Horse != null)
+            {
+                if (!OpenEntityLoot(d.Player, d.Horse))
+                {
+                    TellRaw(d.Player, "The inventory of the horse cannot be opened right now.");
+                }
+                return;
+            }
+            if (d.Species == null || !d.Species.Gear)
+            {
+                TellRaw(d.Player, "A " + (d.Species != null ? d.Species.Display.ToLowerInvariant() : "creature") + " carries nothing: it has no inventory.");
+                return;
+            }
+            OpenInventory(d.Player, d.Body);
+            if (Boxes.Values.Any(b => b.Player == d.Player))
+            {
+                TellRaw(d.Player, "If no panel shows up, your game does not open panels in the animal view: press X and Ctrl + E at your animal, or let another player open it (hold E at you).");
+            }
+        }
+
+        // The game's own loot panel of an entity that is no storage box (the horse): its PlayerOpenLoot, whatever its parameters are in this build.
+        private static readonly Dictionary<Type, MethodInfo> openLootMethods = new Dictionary<Type, MethodInfo>();
+
+        internal bool OpenEntityLoot(BasePlayer player, BaseEntity entity)
+        {
+            if (player == null || !Valid(entity))
+            {
+                return false;
+            }
+            StorageContainer storage = entity as StorageContainer;
+            Type type = entity.GetType();
+            MethodInfo method;
+            if (!openLootMethods.TryGetValue(type, out method))
+            {
+                method = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                    .Where(m => m.Name == "PlayerOpenLoot" && m.GetParameters().Length > 0 && m.GetParameters()[0].ParameterType == typeof(BasePlayer))
+                    .OrderByDescending(m => m.GetParameters().Length)
+                    .FirstOrDefault();
+                openLootMethods[type] = method;
+            }
+            try
+            {
+                using (new VanillaScope(player))
+                {
+                    if (storage != null)
+                    {
+                        return storage.PlayerOpenLoot(player, string.Empty, false);
+                    }
+                    if (method == null)
+                    {
+                        return false;
+                    }
+                    ParameterInfo[] ps = method.GetParameters();
+                    var args = new object[ps.Length];
+                    args[0] = player;
+                    for (int i = 1; i < ps.Length; i++)
+                    {
+                        Type t = ps[i].ParameterType;
+                        args[i] = t == typeof(string) ? (object)string.Empty : t == typeof(bool) ? (object)false : ps[i].HasDefaultValue ? ps[i].DefaultValue : (t.IsValueType ? Activator.CreateInstance(t) : null);
+                    }
+                    object result = method.Invoke(entity, args);
+                    return !(result is bool) || (bool)result;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log(1, "Opening the loot of " + entity.ShortPrefabName + " failed: " + ex.Message);
+                return false;
+            }
+        }
+
+        // The storage of the game's horse (its saddle bag), found by name in this build.
+        private static FieldInfo horseStorageField;
+        private static PropertyInfo horseStorageProperty;
+        private static bool horseStorageLooked;
+
+        internal static ItemContainer HorseStorage(RidableHorse horse)
+        {
+            if (horse == null)
+            {
+                return null;
+            }
+            if (!horseStorageLooked)
+            {
+                horseStorageLooked = true;
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                for (Type t = typeof(RidableHorse); t != null && horseStorageField == null && horseStorageProperty == null; t = t.BaseType)
+                {
+                    horseStorageField = t.GetField("storageInventory", flags | BindingFlags.DeclaredOnly);
+                    if (horseStorageField == null)
+                    {
+                        horseStorageProperty = t.GetProperty("storageInventory", flags | BindingFlags.DeclaredOnly);
+                    }
+                }
+            }
+            try
+            {
+                if (horseStorageField != null)
+                {
+                    return horseStorageField.GetValue(horse) as ItemContainer;
+                }
+                if (horseStorageProperty != null)
+                {
+                    return horseStorageProperty.GetValue(horse, null) as ItemContainer;
+                }
+            }
+            catch
+            {
+            }
+            return null;
+        }
+
+        // An item for a player's animal (picked up, given): into the saddle bag of its inventory - the horse's own one for the horse.
+        internal bool StoreForForm(Driver d, Item item, out string why)
+        {
+            why = null;
+            if (d == null || item == null)
+            {
+                why = "There is nothing to put it in.";
+                return false;
+            }
+            if (d.Horse != null)
+            {
+                ItemContainer storage = HorseStorage(d.Horse);
+                if (storage == null || storage.capacity <= 0)
+                {
+                    why = "The horse has no saddle bag: things can only be carried in a saddle bag.";
+                    return false;
+                }
+                if (!item.MoveToContainer(storage))
+                {
+                    why = "The horse's saddle bag is full.";
+                    return false;
+                }
+                return true;
+            }
+            if (d.Species == null || !d.Species.Gear)
+            {
+                why = "A " + (d.Species != null ? d.Species.Display.ToLowerInvariant() : "creature") + " cannot carry anything.";
+                return false;
+            }
+            return AddToGear(FormGearOf(d), item, out why);
+        }
+
+        // An open panel of this inventory is closed first (its contents are saved), so that nothing is dropped and kept at the same time.
+        internal void CloseInventoriesOf(GearRecord g)
+        {
+            foreach (VirtualBox vb in Boxes.Values.ToList())
+            {
+                InventoryContext ctx = vb.Data as InventoryContext;
+                if (ctx != null && ctx.Gear == g)
+                {
+                    FinishBox(vb);
+                }
+            }
+        }
+
         internal static void GiveBack(BasePlayer player, Item item)
         {
             if (player == null || !player.IsConnected || !item.MoveToContainer(player.inventory.containerMain))
@@ -247,14 +583,60 @@ namespace Oxide.Plugins
             }
         }
 
-        // Dying animals drop what they carried (R3.5).
-        internal void DropGear(BaseEntity animal, TamedRecord rec)
+        // Puts an item into the storage of an animal (what it picks up, what somebody gives it). False = no saddle bag, no room, or the
+        // inventory is open in a panel right now.
+        internal bool AddToGear(GearRecord g, Item item, out string why)
         {
-            Vector3 pos = animal.transform.position + Vector3.up * 0.6f;
+            why = null;
+            if (g == null)
+            {
+                why = "This animal has no inventory.";
+                return false;
+            }
+            if (openGears.Contains(g))
+            {
+                why = "Its inventory is open right now.";
+                return false;
+            }
+            int capacity = StorageOf(g);
+            if (capacity <= 0)
+            {
+                why = "It has no saddle bag: things can only be carried in a saddle bag (put one into its inventory).";
+                return false;
+            }
+            ItemRecord same = g.Bag.FirstOrDefault(r => r.Shortname == item.info.shortname && r.Skin == item.skin && r.Condition < 0f && !item.hasCondition && r.Amount + item.amount <= item.info.stackable);
+            if (same != null)
+            {
+                same.Amount += item.amount;
+                item.Remove();
+                return true;
+            }
+            for (int slot = 0; slot < capacity; slot++)
+            {
+                if (g.Bag.All(r => r.Slot != slot))
+                {
+                    g.Bag.Add(RecordFromItem(item, slot));
+                    item.Remove();
+                    return true;
+                }
+            }
+            why = "Its saddle bag is full.";
+            return false;
+        }
+
+        // Everything an animal carried falls to the ground (it died, or it vanished).
+        internal void DropGearRecord(GearRecord g, Vector3 pos)
+        {
+            if (g == null)
+            {
+                return;
+            }
+            CloseInventoriesOf(g);
             var names = new List<string>();
-            if (rec.Gear.Saddle > 0) names.Add(rec.Gear.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single");
-            if (rec.Gear.Shoes > 0) names.Add(rec.Gear.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic");
-            if (rec.Gear.HasBag) names.Add("horse.saddlebag");
+            if (g.Saddle > 0) names.Add(g.Saddle == 2 ? "horse.saddle.double" : "horse.saddle.single");
+            if (g.Shoes > 0) names.Add(g.Shoes == 2 ? "horse.shoes.advanced" : "horse.shoes.basic");
+            if (g.HasBag) names.Add("horse.saddlebag");
+            if (g.Armor > 0 && g.Armor < ArmorItems.Length) names.Add(ArmorItems[g.Armor]);
             foreach (string name in names)
             {
                 Item item = ItemManager.CreateByName(name, 1);
@@ -263,31 +645,239 @@ namespace Oxide.Plugins
                     item.Drop(pos, Vector3.up * 2f + UnityEngine.Random.insideUnitSphere);
                 }
             }
-            foreach (ItemRecord bag in rec.Gear.Bag)
+            foreach (ItemRecord stored in g.Bag)
             {
-                Item item = ItemFromRecord(bag);
+                Item item = ItemFromRecord(stored);
                 if (item != null)
                 {
                     item.Drop(pos, Vector3.up * 2f + UnityEngine.Random.insideUnitSphere);
                 }
             }
-            rec.Gear = new GearRecord();
+            g.Saddle = 0;
+            g.Shoes = 0;
+            g.HasBag = false;
+            g.Armor = 0;
+            g.Bag.Clear();
         }
 
-        // Speed change from the animal's gear (shoes add speed, the saddle bag costs some), like the horse's equipmentSpeedMod.
+        // Dying tamed animals drop what they carried (R3.5).
+        internal void DropGear(BaseEntity animal, TamedRecord rec)
+        {
+            DropGearRecord(rec.Gear, animal.transform.position + Vector3.up * 0.6f);
+            rec.Gear = new GearRecord();
+            RemoveSaddle(animal);
+        }
+
+        // Speed change from the inventory, the horse's numbers: horseshoes add speed, the saddle bag and the armour cost some.
         internal float GearSpeedBonus(BaseNPC2 animal)
         {
-            TamedRecord rec = RecordOf(animal);
-            if (rec == null)
+            GearRecord g = GearOf(animal);
+            if (g == null)
             {
                 return 0f;
             }
-            float bonus = rec.Gear.Shoes == 2 ? Cfg.Movement.ShoesAdvanced : rec.Gear.Shoes == 1 ? Cfg.Movement.ShoesBasic : 0f;
-            if (rec.Gear.HasBag)
+            float bonus = g.Shoes == 2 ? Cfg.Movement.ShoesAdvanced : g.Shoes == 1 ? Cfg.Movement.ShoesBasic : 0f;
+            if (g.HasBag)
             {
                 bonus += Cfg.Movement.SaddleBag;
             }
+            if (g.Armor == 1)
+            {
+                bonus += Cfg.Movement.ArmorWood;
+            }
+            else if (g.Armor > 1)
+            {
+                bonus += Cfg.Movement.ArmorRoadsign;
+            }
             return bonus;
+        }
+
+        private float ArmorProtection(GearRecord g)
+        {
+            if (g == null || g.Armor <= 0)
+            {
+                return 0f;
+            }
+            return Mathf.Clamp01(g.Armor == 1 ? Cfg.Gear.ArmorWoodProtection : Cfg.Gear.ArmorRoadsignProtection);
+        }
+
+        // ---------------------------------------------------------------- the saddle on the back
+        // The horse shows its saddle itself. On the other animals the saddle of the inventory is the game's own saddle model (the item's world
+        // model), fixed to the spine so that it moves with the back, scaled to the size of the animal. It can never be picked up.
+
+        internal sealed class SaddleVisual
+        {
+            public BaseEntity Entity;
+            public int Kind;
+        }
+
+        private readonly Dictionary<ulong, SaddleVisual> saddles = new Dictionary<ulong, SaddleVisual>();
+
+        internal void RefreshSaddle(BaseEntity animal)
+        {
+            BaseNPC2 npc = animal as BaseNPC2;
+            if (npc == null || !Valid(npc) || npc.IsDead())
+            {
+                RemoveSaddle(animal);
+                return;
+            }
+            GearRecord g = GearOf(npc);
+            int want = Cfg.Gear.ShowSaddle && g != null ? g.Saddle : 0;
+            ulong id = npc.net.ID.Value;
+            SaddleVisual current;
+            if (saddles.TryGetValue(id, out current) && current.Kind == want && Valid(current.Entity))
+            {
+                return;
+            }
+            RemoveSaddle(npc);
+            if (want <= 0)
+            {
+                return;
+            }
+            BaseEntity visual = MakeSaddle(npc, want);
+            if (visual != null)
+            {
+                saddles[id] = new SaddleVisual { Entity = visual, Kind = want };
+            }
+        }
+
+        // The saddles of one species are put on again (after /bm saddle changed how they sit).
+        internal void RefreshSaddlesOf(SpeciesDef species)
+        {
+            foreach (ulong id in saddles.Keys.ToList())
+            {
+                BaseNPC2 npc = BaseNetworkable.serverEntities.Find(new NetworkableId(id)) as BaseNPC2;
+                if (npc != null && SpeciesOf(npc) == species)
+                {
+                    RemoveSaddle(npc);
+                    RefreshSaddle(npc);
+                }
+            }
+        }
+
+        internal bool IsSaddleModel(BaseEntity e)
+        {
+            if (e == null || saddles.Count == 0)
+            {
+                return false;
+            }
+            foreach (SaddleVisual v in saddles.Values)
+            {
+                if (v.Entity == e)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // A world item vanishes after a while by itself (the game's despawn of dropped items); the saddle on the back must not.
+        private static void KeepFromDespawning(BaseEntity visual)
+        {
+            try
+            {
+                MethodInfo idle = visual.GetType().GetMethod("IdleDestroy", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (idle != null)
+                {
+                    visual.CancelInvoke((Action)Delegate.CreateDelegate(typeof(Action), visual, idle));
+                }
+            }
+            catch
+            {
+                // the Tick of the module puts a new saddle on the back if this one goes
+            }
+        }
+
+        internal void RemoveSaddle(BaseNetworkable animal)
+        {
+            if (animal == null || animal.net == null)
+            {
+                return;
+            }
+            SaddleVisual current;
+            if (saddles.TryGetValue(animal.net.ID.Value, out current))
+            {
+                saddles.Remove(animal.net.ID.Value);
+                if (Valid(current.Entity))
+                {
+                    current.Entity.Kill();
+                }
+            }
+        }
+
+        internal static Vector3 ParseVector(string text)
+        {
+            Vector3 v = Vector3.zero;
+            if (string.IsNullOrEmpty(text))
+            {
+                return v;
+            }
+            string[] parts = text.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
+            float f;
+            if (parts.Length > 0 && float.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out f)) v.x = f;
+            if (parts.Length > 1 && float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out f)) v.y = f;
+            if (parts.Length > 2 && float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out f)) v.z = f;
+            return v;
+        }
+
+        private BaseEntity MakeSaddle(BaseNPC2 animal, int kind)
+        {
+            SpeciesDef species = SpeciesOf(animal);
+            SpeciesOverride o = null;
+            if (species != null)
+            {
+                Cfg.Species.TryGetValue(species.Id, out o);
+            }
+            Item item = ItemManager.CreateByName(kind == 2 ? "horse.saddle.double" : "horse.saddle.single", 1);
+            if (item == null)
+            {
+                return null;
+            }
+            float k = ModelScale(animal);
+            float lift = Cfg.Gear.SaddleLift + (o != null && o.SaddleLift.HasValue ? o.SaddleLift.Value : 0f);
+            Vector3 local = BackPoint(animal) + Vector3.up * lift;
+            Vector3 turn = ParseVector(Cfg.Gear.SaddleRotation) + (o != null ? ParseVector(o.SaddleTurn) : Vector3.zero);
+            float yawOffset = species != null ? YawOffsetOf(species) : 0f;
+            Vector3 world = animal.transform.TransformPoint(local);
+            Quaternion rotation = animal.transform.rotation * Quaternion.Euler(0f, -yawOffset, 0f) * Quaternion.Euler(turn);
+            BaseEntity visual = item.CreateWorldObject(world, rotation);
+            if (visual == null)
+            {
+                item.Remove();
+                return null;
+            }
+            visual.enableSaving = false;
+            KeepFromDespawning(visual);
+            WorldItem worldItem = visual as WorldItem;
+            if (worldItem != null)
+            {
+                worldItem.allowPickup = false;
+            }
+            Rigidbody rb = visual.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.isKinematic = true;
+                rb.useGravity = false;
+                rb.detectCollisions = false;
+            }
+            Transform bone = BackBone(animal);
+            if (bone != null)
+            {
+                visual.SetParent(animal, bone.name, true, false);       // the saddle moves with the spine, like the horse's
+            }
+            else
+            {
+                visual.SetParent(animal, true, false);
+            }
+            // the size: a horse-sized saddle on a horse-sized animal, smaller on a sheep, bigger on a boss
+            float length = Mathf.Max(0.3f, animal.bounds.size.z) * k;
+            float size = Mathf.Clamp(length / 3.06f, 0.4f, 1.6f) * Mathf.Max(0.1f, Cfg.Gear.SaddleScale) * (o != null && o.SaddleScale.HasValue ? o.SaddleScale.Value : 1f);
+            Transform parent = visual.transform.parent;
+            float parentScale = parent != null ? Mathf.Max(0.0001f, parent.lossyScale.x) : 1f;
+            visual.networkEntityScale = true;
+            visual.transform.localScale = Vector3.one * (size / parentScale);
+            visual.SendNetworkUpdateImmediate();
+            return visual;
         }
 
         // ---------------------------------------------------------------- hooks
@@ -295,13 +885,14 @@ namespace Oxide.Plugins
         internal sealed class GearModule : Module
         {
             public override int Order => 40;
+            private float nextSaddleCheck;
 
             public override Dictionary<string, string> Messages()
             {
                 return new Dictionary<string, string>
                 {
-                    ["GearOpen"] = "{0} gear: slot 1 = saddle, slot 2 = horseshoes, slot 3 = saddle bag, the other slots are the bag. Close the panel to save.",
-                    ["GearSaved"] = "Gear saved.",
+                    ["GearOpen"] = "{0} inventory: slot 1 saddle, slot 2 horseshoes, slot 3 saddle bag, slot 4 horse armour; from slot 5 on the storage ({1} slots with a saddle bag, {2} more with the wooden armour). Close the panel to save.",
+                    ["GearSaved"] = "Saved.",
                 };
             }
 
@@ -337,6 +928,94 @@ namespace Oxide.Plugins
                 }
             }
 
+            // The horse armour of an animal takes damage off (the horse's armour works by itself).
+            public override object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
+            {
+                BaseNPC2 animal = entity as BaseNPC2;
+                if (animal == null || info == null)
+                {
+                    return null;
+                }
+                float protection = Bm.ArmorProtection(Bm.GearOf(animal));
+                if (protection > 0f)
+                {
+                    info.damageTypes.ScaleAll(1f - protection);
+                }
+                return null;
+            }
+
+            // The saddles on the backs follow the inventories (a saddle fitted or taken out, an animal that came or went).
+            public override void Tick(float now)
+            {
+                if (now < nextSaddleCheck)
+                {
+                    return;
+                }
+                nextSaddleCheck = now + 1f;
+                // a panel the player's game never showed, or one that was closed without the end hook, ends here (its contents are saved)
+                foreach (VirtualBox vb in Bm.Boxes.Values.ToList())
+                {
+                    if (Time.realtimeSinceStartup - vb.Opened > 2f && (vb.Player == null || !vb.Player.IsConnected || vb.Player.inventory.loot.entitySource != vb.Box))
+                    {
+                        Bm.FinishBox(vb);
+                    }
+                }
+                var wanted = new HashSet<ulong>();
+                foreach (Driver d in Bm.Drivers.Values.ToList())
+                {
+                    if (d != null && d.Alive && d.Animal != null && Valid(d.Animal))
+                    {
+                        wanted.Add(d.Animal.net.ID.Value);
+                        Bm.RefreshSaddle(d.Animal);
+                    }
+                }
+                foreach (LeftForm lf in Bm.LeftForms.Values.ToList())
+                {
+                    BaseNPC2 npc = lf.Animal as BaseNPC2;
+                    if (npc != null && Valid(npc) && wanted.Add(npc.net.ID.Value))
+                    {
+                        Bm.RefreshSaddle(npc);
+                    }
+                }
+                foreach (TamedRecord rec in Bm.Data.Tamed.Values.ToList())
+                {
+                    BaseNPC2 npc = Bm.EntityOfRecord(rec) as BaseNPC2;
+                    if (npc != null && wanted.Add(npc.net.ID.Value))
+                    {
+                        Bm.RefreshSaddle(npc);
+                    }
+                }
+                foreach (ulong id in Bm.saddles.Keys.ToList())
+                {
+                    if (!wanted.Contains(id))
+                    {
+                        SaddleVisual v = Bm.saddles[id];
+                        Bm.saddles.Remove(id);
+                        if (Valid(v.Entity))
+                        {
+                            v.Entity.Kill();
+                        }
+                    }
+                }
+            }
+
+            // A dying animal takes its saddle model with it (the inventory itself is dropped by its owner's rules).
+            public override void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
+            {
+                if (entity is BaseNPC2)
+                {
+                    Bm.RemoveSaddle(entity);
+                }
+            }
+
+            public override void OnEntityKill(BaseNetworkable entity)
+            {
+                if (entity is BaseNPC2)
+                {
+                    Bm.RemoveSaddle(entity);
+                }
+            }
+
             public override void OnPlayerDisconnected(BasePlayer player, string reason)
             {
                 foreach (VirtualBox vb in Bm.Boxes.Values.Where(b => b.Player == player).ToList())
@@ -351,11 +1030,24 @@ namespace Oxide.Plugins
                 {
                     Bm.FinishBox(vb);
                 }
+                foreach (SaddleVisual v in Bm.saddles.Values.ToList())
+                {
+                    if (Valid(v.Entity))
+                    {
+                        v.Entity.Kill();
+                    }
+                }
+                Bm.saddles.Clear();
             }
 
             public override void OnDisable()
             {
                 Unload();
+            }
+
+            public override void SelfTest(List<string> report)
+            {
+                report.Add("Gear: " + Bm.saddles.Count + " saddles shown on animals; armour items " + string.Join(", ", ArmorItems.Where(a => a.Length > 0).Select(a => a + (ItemManager.FindItemDefinition(a) != null ? " OK" : " MISSING")).ToArray()));
             }
         }
     }

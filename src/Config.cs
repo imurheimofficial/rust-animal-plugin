@@ -18,6 +18,8 @@ namespace Oxide.Plugins
             [JsonProperty("Movement")] public MovementCfg Movement = new MovementCfg();
             [JsonProperty("Combat")] public CombatCfg Combat = new CombatCfg();
             [JsonProperty("Animal form")] public FormCfg Form = new FormCfg();
+            [JsonProperty("Stamina (like the horse's)")] public StaminaCfg Stamina = new StaminaCfg();
+            [JsonProperty("Animal life (prompts, dung, eggs, wild jumps)")] public LifeCfg Life = new LifeCfg();
             [JsonProperty("Taming")] public TamingCfg Taming = new TamingCfg();
             [JsonProperty("Gear")] public GearCfg Gear = new GearCfg();
             [JsonProperty("Transformation ritual")] public RitualCfg Ritual = new RitualCfg();
@@ -76,8 +78,10 @@ namespace Oxide.Plugins
             [JsonProperty("Riding needs a tamed animal (standard species)")] public bool RequireTame = true;
             [JsonProperty("Riding needs a saddle in the animal's gear (standard species)")] public bool RequireSaddle = true;
             [JsonProperty("Who may ride an owned animal (owner, team, friends, clan, anyone)")] public string Ownership = "team";
-            [JsonProperty("Seat used for riders on non-horse animals")] public string SeatPrefab = "assets/prefabs/vehicle/seats/snowmobilepassengerseat.prefab";
-            [JsonProperty("Seat of the second rider (double saddle)")] public string RearSeatPrefab = "assets/prefabs/vehicle/seats/snowmobilepassengerseat.prefab";
+            [JsonProperty("Seat used for riders on non-horse animals (the horse's saddle seat: the rider sits the way he sits on a horse)")] public string SeatPrefab = "assets/prefabs/vehicle/seats/horsesaddle.prefab";
+            [JsonProperty("Seat of the second rider (double saddle)")] public string RearSeatPrefab = "assets/prefabs/vehicle/seats/horsesaddle.prefab";
+            [JsonProperty("The rider's seat is fixed to the animal's spine, so the rider moves with its back like on the horse")] public bool SeatOnSpine = true;
+            [JsonProperty("A rider can turn his head this far to each side (degrees, like on the horse; 0 = no limit)")] public float ViewClamp = 100f;
             [JsonProperty("Maximum distance to mount (m)")] public float MountDistance = 3.5f;
             [JsonProperty("Block riding in safe zones")] public bool BlockInSafeZone = false;
             [JsonProperty("Maximum riders on the whole server (0 = unlimited)")] public int MaxRiders = 0;
@@ -94,6 +98,8 @@ namespace Oxide.Plugins
             [JsonProperty("First person: height of the eyes as a share of the animal's height")] public float EyeHeight = 0.98f;
             [JsonProperty("First person: how far forward the eyes sit (share of the distance from the middle of the body to the nose)")] public float EyeForward = 0.58f;
             [JsonProperty("Height of the camera pivot as a share of the animal's height (every species also has its own factor)")] public float PivotHeight = 0.95f;
+            [JsonProperty("Animal form: the game lowers the camera of a crouching player; Ctrl (the brake) lifts the hidden body by this much so the camera stays (m)")] public float DuckLift = 0.6f;
+            [JsonProperty("Animal form: refresh the network subscriptions when the form begins and ends (makes the game load the surroundings again; switch on only if other players stay unseen in animal form)")] public bool RefreshSubscriptions = false;
             [JsonProperty("First person of the animal form (spectate = the human is completely invisible, seat = hidden seat, legs may show)")] public string FirstPersonMode = "spectate";
             [JsonProperty("Seat of the hidden body when the first person mode is seat")] public string FirstPersonSeat = "assets/bundled/prefabs/static/chair.invisible.static.prefab";
         }
@@ -111,6 +117,8 @@ namespace Oxide.Plugins
             [JsonProperty("Speed bonus of basic horseshoes (m/s)")] public float ShoesBasic = 1.5f;
             [JsonProperty("Speed bonus of high quality horseshoes (m/s)")] public float ShoesAdvanced = 2.5f;
             [JsonProperty("Speed change of the saddle bag (m/s)")] public float SaddleBag = -1.0f;
+            [JsonProperty("Speed change of the wooden and of the roadsign horse armour (m/s)")] public float ArmorWood = -2.25f;
+            public float ArmorRoadsign = -4.5f;
             [JsonProperty("Turn rate in degrees per second at standstill / at full speed")] public float TurnRateSlow = 150f;
             public float TurnRateFast = 105f;
             [JsonProperty("Water: slows animals like the horse")] public bool WaterSlowdown = true;
@@ -142,7 +150,9 @@ namespace Oxide.Plugins
             [JsonProperty("Auto aim: widest angle to a target (degrees)")] public float AutoAimAngle = 100f;
             [JsonProperty("Never hit team members and friends")] public bool SparePartyMembers = true;
             [JsonProperty("Never hit anything in a safe zone")] public bool SparesSafeZone = true;
-            [JsonProperty("Damage of running into a player or an animal at a run (bull, ram, cow, sheep, stag, boar, horse)")] public float ChargeDamage = 22f;
+            [JsonProperty("Damage of running into a player or an animal at a full sprint (bull, ram, cow, sheep, stag, boar, horse)")] public float ChargeDamage = 22f;
+            [JsonProperty("A charge counts when the nose is this close to the other body (m)")] public float ChargeContact = 0.35f;
+            [JsonProperty("An attack reaches this far beyond the nose (or the tail, for a kick) (m)")] public float HitReach = 0.6f;
             [JsonProperty("Stag: effect prefab of its call when it attacks (empty = search the game for a stag sound)")] public string StagAttackSound = string.Empty;
             [JsonProperty("Stag: effect prefab of its call when it is hurt (empty = search the game for a stag sound, else the thud of the hit)")] public string StagHurtSound = string.Empty;
         }
@@ -173,12 +183,38 @@ namespace Oxide.Plugins
             [JsonProperty("Salt water quenches thirst this much (share of fresh water; 0 = only fresh water can be drunk)")] public float SeaWaterShare = 0f;
             [JsonProperty("Four key hint cells beside the hotbar (F attack, Ctrl brake, Shift sprint, Space jump)")] public bool KeyHints = true;
             [JsonProperty("Who may ride, lead, milk and shear an animal form (anyone, team, nobody)")] public string HandledBy = "anyone";
-            [JsonProperty("These animal forms carry riders only after they have eaten food that lay in front of them", ObjectCreationHandling = ObjectCreationHandling.Replace)]
-            public List<string> RideFedSpecies = new List<string> { "horse", "bull", "cow", "ram", "sheep", "stag" };
-            [JsonProperty("Riders on a fed animal form")] public int RidersFed = 2;
-            [JsonProperty("Riders on the other animal forms")] public int RidersOther = 1;
-            [JsonProperty("Seconds a fed animal form stays ready to carry riders")] public float FedSeconds = 300f;
             [JsonProperty("Length of the leash of an animal form (m)")] public float LeashLength = 5f;
+        }
+
+        // Running tires an animal the way it tires the horse: a full sprint lasts a quarter of a minute or so, walking and standing give the breath
+        // back. Out of breath, the animal trots at most until enough has come back. Ridden animals and animal forms alike; the bar is shown.
+        internal partial class StaminaCfg
+        {
+            [JsonProperty("Animals have stamina (riding and animal form)")] public bool Enabled = true;
+            [JsonProperty("Stamina used per second at the full sprint (of 100)")] public float FullSprint = 6f;
+            [JsonProperty("Stamina used per second at a sprint")] public float Sprint = 3f;
+            [JsonProperty("Stamina used per second at a run")] public float Run = 0.8f;
+            [JsonProperty("Stamina won back per second while walking or standing")] public float Recover = 7f;
+            [JsonProperty("Seconds after the last effort before the stamina comes back")] public float RecoverDelay = 1.2f;
+            [JsonProperty("Stamina a jump costs")] public float Jump = 8f;
+            [JsonProperty("Stamina an attack costs")] public float Attack = 4f;
+            [JsonProperty("Out of breath below this stamina (a trot at most, no jumps)")] public float ExhaustedBelow = 5f;
+            [JsonProperty("Stamina needed to run again after being out of breath")] public float RecoverTo = 25f;
+            [JsonProperty("Show the stamina bar (and the animal's health while riding) above the game's own bars")] public bool ShowBar = true;
+        }
+
+        internal partial class LifeCfg
+        {
+            [JsonProperty("Show on the screen of an animal form what E does (open, loot, eat, drink, lead)")] public bool Prompts = true;
+            [JsonProperty("A played animal leaves dung now and then")] public bool Dung = true;
+            [JsonProperty("Species that leave dung", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> DungSpecies = new List<string> { "horse", "cow", "bull", "calf", "sheep", "ram", "lamb" };
+            [JsonProperty("Minutes between two droppings, at least")] public float DungMinMinutes = 4f;
+            [JsonProperty("Minutes between two droppings, at most")] public float DungMaxMinutes = 9f;
+            [JsonProperty("Item of the dung")] public string DungItem = "horsedung";
+            [JsonProperty("A played chicken lays eggs now and then (very rarely, sometimes more at once)")] public bool Eggs = true;
+            [JsonProperty("Chance (%) per minute that a played chicken lays")] public float EggChancePerMinute = 2f;
+            [JsonProperty("Item of the egg")] public string EggItem = "egg";
+            [JsonProperty("Wild animals do not jump over obstacles (only an animal a player controls jumps)")] public bool NoWildJumps = true;
         }
 
         internal partial class TamingCfg
@@ -204,10 +240,19 @@ namespace Oxide.Plugins
             [JsonProperty("Gestures on foot command nearby owned animals (ok = wait, wave = follow, thumbs up = guard, point = attack)")] public bool GestureCommands = true;
         }
 
+        // Every animal has the inventory of the horse: saddle, horseshoes, saddle bag and horse armour, plus the storage the bag and the wooden
+        // armour give.
         internal partial class GearCfg
         {
-            [JsonProperty("Bag slots")] public int BagSlots = 18;
-            [JsonProperty("Only owner and team may open the bag")] public bool BagPrivate = true;
+            [JsonProperty("Storage slots a saddle bag gives")] public int BagSlots = 12;
+            [JsonProperty("Storage slots the wooden horse armour gives")] public int WoodArmorSlots = 6;
+            [JsonProperty("Only owner and team may open the inventory of a tamed animal")] public bool BagPrivate = true;
+            [JsonProperty("Damage the wooden horse armour takes off (0-1)")] public float ArmorWoodProtection = 0.25f;
+            [JsonProperty("Damage the roadsign horse armour takes off (0-1)")] public float ArmorRoadsignProtection = 0.4f;
+            [JsonProperty("A saddle in the inventory is seen on the animal's back (the horse shows its own)")] public bool ShowSaddle = true;
+            [JsonProperty("The saddle on the back: turn of the model (x y z, degrees)")] public string SaddleRotation = "0 0 0";
+            [JsonProperty("The saddle on the back: height above the spine (m)")] public float SaddleLift = 0.06f;
+            [JsonProperty("The saddle on the back: size on a horse-sized animal (it is scaled with the animal's length)")] public float SaddleScale = 1f;
         }
 
         internal partial class RitualCfg
@@ -379,6 +424,9 @@ namespace Oxide.Plugins
             [JsonProperty("Camera pivot height multiplier")] public float? PivotScale;
             [JsonProperty("Camera height added in metres (what /bm cam save stores)")] public float? PivotLift;
             [JsonProperty("Height of the rider's seat added in metres (what /bm seat up|down stores)")] public float? SeatLift;
+            [JsonProperty("The saddle on the back: height added (m), size factor, turn added (x y z)")] public float? SaddleLift;
+            public float? SaddleScale;
+            public string SaddleTurn;
         }
     }
 }

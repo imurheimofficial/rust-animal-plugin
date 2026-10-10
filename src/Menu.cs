@@ -336,8 +336,8 @@ namespace Oxide.Plugins
                 + "Tame animals, fit saddles and gear, command them and ride them. With the ritual of transformation you can become an animal yourself.\n\n"
                 + "<b>Quick start</b>\n"
                 + "1. Tame an animal (Help - Taming).\n"
-                + "2. Press E on it: the gear panel opens. Put a saddle into slot 1 and close the panel.\n"
-                + "3. Press E again to mount. W/A/S/D move, Shift faster, F attack, G or R switch first / third person, X gets you off.\n"
+                + "2. Press E on it: without a saddle its inventory opens. Put a saddle into slot 1 and close the panel.\n"
+                + "3. Press E again to mount (hold E for all choices). W/A/S/D move, Shift faster, F attack, G or R switch first / third person, X gets you off.\n"
                 + "4. Command it: /bm cmd follow | wait | guard | attack | release.\n\n"
                 + "<b>Switched on here</b>\n" + FeatureLine() + "\n\n"
                 + "Open this menu any time with /bm.";
@@ -351,12 +351,15 @@ namespace Oxide.Plugins
                 + "Ctrl  brake (with A or D at a run: the stop-and-turn)\n"
                 + "S while running  turn around 180 degrees (a slide for bulls and rams)\n"
                 + "Space  jump - over fences and onto raised surfaces: floors, roofs, crates, rocks (cooldown " + Cfg.Movement.JumpCooldown + " s)\n"
-                + "F  attack - turn the camera behind the animal for the rear attack (kicks)\n"
-                + "E  as an animal: eat food on the ground, drink fresh water, graze, pick things up into the animal's bag, open doors and containers, lead your tamed animals\n"
+                + "F  attack - camera to the front: the attack to the front; camera behind the animal: the rear kick (cow, bull, sheep, ram, stag, horse)\n"
+                + "E  as an animal: eat food on the ground, drink fresh water, graze, pick things up into the saddle bag, open doors and containers, lead your tamed animals (the prompt on the screen says what E does)\n"
+                + "Ctrl + E  as an animal: your animal's inventory (saddle, horseshoes, saddle bag, horse armour)\n"
+                + "E at an animal (as a human): ride it when it has a saddle, its inventory when it has none. Ctrl + E: its inventory (a player's animal: the leash). Hold E: all choices\n"
                 + "R  as an animal: another skin (cow, bull, sheep, ram, horse) - while riding: first / third person\n"
                 + "G  as an animal: night vision (goggles from your inventory) - while riding: first / third person\n"
                 + "B  gesture wheel: lie down, sit, roar, look around - /bm lie, sit, roar, look, stand do the same\n"
-                + "X  back to human / get off. X at the animal you have left: become it again. E at it: ride it. Ctrl + E at it: its bag\n"
+                + "X  back to human / get off. X at the animal you have left: become it again. E at it: ride it (with a saddle). Ctrl + E at it: its inventory\n"
+                + "Stamina  running tires the animal like a horse (the yellow bar above the game's bars); out of breath it only trots and cannot jump until it has rested\n"
                 + "Ctrl + R  this menu (empty hands, riding or as an animal), also /bm\n\n"
                 + "<color=#9aa58f>F5 and H need a one-time bind in the F1 console: bind f5 bm.menu and bind h bm.nv (the game keeps them).</color>";
         }
@@ -365,8 +368,10 @@ namespace Oxide.Plugins
         {
             return "<b>Riding</b> " + OnOff(Cfg.Features.Riding) + "\n\n"
                 + "Who: " + (Cfg.Riding.RequireTame ? "tamed animals" : "any animal") + (Cfg.Riding.RequireSaddle ? " with a saddle" : string.Empty) + ". Owner may ride; " + OwnershipText() + ".\n"
-                + "How: look at the animal within " + Cfg.Riding.MountDistance + " m and press E. A saddle fitted in the gear panel (E, or crouch + E when it already has one) is needed first.\n"
-                + "A double saddle carries a second rider behind you.\n"
+                + "How: look at the animal within " + Cfg.Riding.MountDistance + " m and press E. A saddle in slot 1 of its inventory is needed first (E opens the inventory while it has none, Ctrl + E always).\n"
+                + "A double saddle (horse, bull, cow, ram, sheep, stag) carries a second rider behind you. You sit on its back like on a horse and look to the sides at most.\n"
+                + "A player who is an animal can be ridden only when his animal has a saddle in its inventory (single: one rider, double: two).\n"
+                + "Stamina: like the horse, a sprint lasts a short while; walking and standing give the breath back. A crash into a wall or a fall throws the rider off.\n"
                 + "Chicken, crocodile, snake, rabbit, squirrel and frog are restricted species (permission beastmaster.ride.restricted).\n\n"
                 + "<b>Good to know</b>\n"
                 + "Deep water slows animals like the horse (" + Mathf.RoundToInt(Cfg.Movement.WaterMinSpeed * 100f) + " % at the deepest wading); bears and crocodiles are exempt.\n"
@@ -388,13 +393,16 @@ namespace Oxide.Plugins
 
         private string HelpGear(BasePlayer p)
         {
-            return "<b>Gear</b> " + OnOff(Cfg.Features.Gear) + "\n\n"
-                + "Press E on your animal (crouch + E if it already has a saddle) to open its gear panel:\n"
-                + "slot 1  saddle (single or double)\nslot 2  horseshoes\nslot 3  saddle bag\nother slots  the bag's contents (" + Cfg.Gear.BagSlots + " slots)\n"
-                + "Close the panel to save.\n\n"
-                + "<b>Speed</b>\nBasic horseshoes +" + Cfg.Movement.ShoesBasic + " m/s, high quality horseshoes +" + Cfg.Movement.ShoesAdvanced + " m/s, the saddle bag " + Cfg.Movement.SaddleBag + " m/s.\n"
-                + (Cfg.Gear.BagPrivate ? "Only the owner and the team can open the bag.\n" : "Anyone can open the bag.\n")
-                + "Gear is kept with the animal and survives restarts.";
+            return "<b>Inventory (like the horse's)</b> " + OnOff(Cfg.Features.Gear) + "\n\n"
+                + "Every animal that can be ridden has the horse's inventory. E at your animal opens it while it has no saddle, Ctrl + E always (hold E for all choices); as an animal yourself: Ctrl + E.\n"
+                + "slot 1  saddle - single, or double for horse, bull, cow, ram, sheep and stag (the saddle is seen on the back)\n"
+                + "slot 2  horseshoes - basic +" + Cfg.Movement.ShoesBasic + " m/s, high quality +" + Cfg.Movement.ShoesAdvanced + " m/s\n"
+                + "slot 3  saddle bag - " + Cfg.Gear.BagSlots + " storage slots, " + Cfg.Movement.SaddleBag + " m/s\n"
+                + "slot 4  horse armour - wooden: " + Mathf.RoundToInt(Cfg.Gear.ArmorWoodProtection * 100f) + " % less damage, +" + Cfg.Gear.WoodArmorSlots + " slots, " + Cfg.Movement.ArmorWood + " m/s; roadsign: " + Mathf.RoundToInt(Cfg.Gear.ArmorRoadsignProtection * 100f) + " % less damage, " + Cfg.Movement.ArmorRoadsign + " m/s (only the horse shows its armour)\n"
+                + "from slot 5  the storage the saddle bag (and the wooden armour) give\n"
+                + "Close the panel to save. What an animal form picks up goes into its saddle bag; without one it cannot carry anything.\n\n"
+                + (Cfg.Gear.BagPrivate ? "Only the owner and the team can open the inventory of a tamed animal.\n" : "Anyone can open the inventory of a tamed animal.\n")
+                + "The inventory stays with the animal (also with the animal you have left as a player) and survives restarts; a dying animal drops it.";
         }
 
         private string HelpTaming(BasePlayer p)
@@ -1087,6 +1095,9 @@ namespace Oxide.Plugins
                         }
                         break;
                     }
+                case "beast":
+                    BeastButton(player, args);
+                    return;
                 case "seat":
                     if (arg1 == "up" || arg1 == "down")
                     {
@@ -1284,7 +1295,7 @@ namespace Oxide.Plugins
         {
             "close", "noop", "page", "topic", "species", "tpage", "list", "search", "clearsearch", "lookhelp", "animal", "all", "view", "preset", "setting",
             "revert", "plugin", "feature", "species_toggle", "spawnspecies", "spawncount", "spawnmode", "spawnsaddle", "spawn", "spawnclear", "grant", "revoke",
-            "bossmini", "spawnboss", "aim", "gesture", "cam", "nv", "breed", "rename", "renameset", "seat"
+            "bossmini", "spawnboss", "aim", "gesture", "cam", "nv", "breed", "rename", "renameset", "seat", "beast"
         };
 
         // Builds every page and every Help topic for a stand-in player, checks the JSON and that every button names a known action.

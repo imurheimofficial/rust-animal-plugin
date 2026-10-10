@@ -65,12 +65,14 @@ namespace Oxide.Plugins
             public int Slot = -1;
         }
 
+        // The inventory of an animal, the same as the horse's: four equipment slots and the storage the saddle bag (and the wooden armour) give.
         internal partial class GearRecord
         {
             public int Saddle;                           // 0 none, 1 single, 2 double
             public int Shoes;                            // 0 none, 1 basic, 2 high quality
-            public List<ItemRecord> Bag = new List<ItemRecord>();
-            public bool HasBag;
+            public List<ItemRecord> Bag = new List<ItemRecord>();      // the storage (Slot = index in the storage)
+            public bool HasBag;                          // a saddle bag is fitted
+            public int Armor;                            // 0 none, 1 wooden, 2 roadsign, 3 lunar new year
         }
 
         // One owned animal. State: follow, wait, guard.
@@ -106,6 +108,7 @@ namespace Oxide.Plugins
             public bool Asleep;
             public ulong Tag;
             public bool OwnsAnimal;
+            public GearRecord Gear;                      // the inventory of the animal (when it is not a tamed one, whose record keeps it)
         }
 
         internal PlayerSettings SettingsOf(ulong id)

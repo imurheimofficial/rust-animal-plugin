@@ -17,14 +17,17 @@ namespace Oxide.Plugins
         internal string ResolveHits(BaseNPC2 animal, BasePlayer owner, float heading, AttackParams p, bool rear)
         {
             var summary = new List<string>();
-            Bounds b = animal.bounds;
             float k = ModelScale(animal);          // a bigger animal (a boss) reaches further
             Vector3 facing = Quaternion.Euler(0f, heading, 0f) * (rear ? Vector3.back : Vector3.forward);
-            Vector3 origin = animal.transform.position + Vector3.up * b.center.y * k + facing * (rear ? b.extents.z * 0.5f : b.extents.z * 0.8f) * k;
+            Vector3 center;
+            // the hit lands right at the nose (or, for a kick, right behind the tail) - never a metre in front of the animal
+            Vector3 origin = AttackTip(animal, heading, rear, out center);
+            float reach = (p.Range > 0f && p.Range < Cfg.Combat.HitReach ? p.Range : Cfg.Combat.HitReach) * k;
             var found = new List<BaseEntity>();
-            Vis.Entities(origin, p.Range * k + 1.5f, found);
+            Vis.Entities(origin, reach + 2f * k, found);
             var done = new HashSet<BaseEntity>();
             float scale = Cfg.Combat.DamageScale * ClimateDamageFactor(animal) * BossDamageFactor(animal, p.Damage);
+            float halfAngle = rear ? 70f : Mathf.Clamp(p.Angle, 30f, 70f);
             foreach (BaseEntity e in found)
             {
                 if (!Valid(e) || e == animal || (owner != null && e == owner) || e.GetParentEntity() == animal || !done.Add(e))
@@ -32,9 +35,9 @@ namespace Oxide.Plugins
                     continue;
                 }
                 Vector3 point = e.ClosestPoint(origin);
-                Vector3 v = point - origin;
+                Vector3 v = point - center;
                 v.y = 0f;
-                if (v.magnitude > p.Range * k || (p.Angle < 180f && v.sqrMagnitude > 0.01f && Vector3.Angle(facing, v) > p.Angle))
+                if (Vector3.Distance(point, origin) > reach || (v.sqrMagnitude > 0.01f && Vector3.Angle(facing, v) > halfAngle))
                 {
                     continue;
                 }
@@ -74,6 +77,17 @@ namespace Oxide.Plugins
                 }
             }
             return string.Join(", ", summary.ToArray());
+        }
+
+        // The tip of the attack: the nose of the animal, or the end of its body behind it for a kick, at the height of the middle of the body.
+        internal static Vector3 AttackTip(BaseEntity animal, float heading, bool rear, out Vector3 center)
+        {
+            Bounds b = animal.bounds;
+            float k = ModelScale(animal);
+            Quaternion rot = Quaternion.Euler(0f, heading, 0f);
+            center = animal.transform.position + Vector3.up * b.center.y * k;
+            float along = rear ? (b.center.z - b.extents.z) : (b.center.z + b.extents.z);
+            return center + rot * Vector3.forward * (along * k);
         }
 
         // The sound of what was hit: the thud of flesh, or of the wood, rock or metal of an object (the game's own impact effects).
@@ -185,7 +199,7 @@ namespace Oxide.Plugins
             {
                 return;
             }
-            AttackParams p = new AttackParams { Damage = 3f, Delay = 0f, Type = Rust.DamageType.Bite, Range = 1.0f, Angle = 60f, Push = Vector2.zero };
+            AttackParams p = new AttackParams { Damage = 3f, Delay = 0f, Type = Rust.DamageType.Bite, Range = 0.35f, Angle = 60f, Push = Vector2.zero };
             string summary = ResolveHits(d.Animal, d.Player, d.Heading, p, false);
             if (!string.IsNullOrEmpty(summary))
             {
@@ -201,12 +215,13 @@ namespace Oxide.Plugins
             {
                 return d.Heading;
             }
-            Bounds b = d.Animal.bounds;
             float heading = d.Heading;
             Vector3 facing = Quaternion.Euler(0f, heading, 0f) * Vector3.forward;
-            Vector3 origin = d.Animal.transform.position + Vector3.up * b.center.y;
+            Vector3 origin;
+            Vector3 nose = AttackTip(d.Animal, heading, false, out origin);
+            float reach = Vector3.Distance(new Vector3(nose.x, origin.y, nose.z), origin) + Cfg.Combat.HitReach * ModelScale(d.Animal) + 0.4f;
             var found = new List<BaseEntity>();
-            Vis.Entities(origin, p.Range + b.extents.z + 1.2f, found);
+            Vis.Entities(origin, reach + 1f, found);
             BaseEntity best = null;
             float bestScore = float.MaxValue;
             foreach (BaseEntity e in found)
@@ -223,7 +238,7 @@ namespace Oxide.Plugins
                 }
                 Vector3 to = e.ClosestPoint(origin) - origin;
                 to.y = 0f;
-                if (to.magnitude > p.Range + b.extents.z)
+                if (to.magnitude > reach)
                 {
                     continue;
                 }

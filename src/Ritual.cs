@@ -49,7 +49,7 @@ namespace Oxide.Plugins
 
         internal bool IsRitualCorpse(BaseEntity entity)
         {
-            return entity != null && RitualCorpses.Any(r => r.Corpse == entity);
+            return entity != null && RitualCorpses.Any(r => r.Corpse == entity && (r.Burning || r.StandIn));
         }
 
         internal sealed class RitualModule : Module
@@ -136,13 +136,22 @@ namespace Oxide.Plugins
                 }
             }
 
+            // Only the burning body (and a stand-in, which is no real body) is protected: before the fire every body is an ordinary body that
+            // gives its loot and its meat - harvesting it simply ends the ritual on it.
             public override object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
             {
-                if (Bm.RitualCorpses.Count == 0 || !(entity is BaseCorpse) || !Bm.IsRitualCorpse(entity))
+                if (Bm.RitualCorpses.Count == 0 || !(entity is BaseCorpse))
                 {
                     return null;
                 }
-                return true;
+                foreach (RitualCorpse rc in Bm.RitualCorpses)
+                {
+                    if (rc.Corpse == entity && (rc.Burning || rc.StandIn))
+                    {
+                        return true;
+                    }
+                }
+                return null;
             }
 
             // The killer's animal leaves a body that stays; the look of the animal is remembered for the transformation.
@@ -214,9 +223,10 @@ namespace Oxide.Plugins
                         continue;
                     }
                     bool mine = rc.Animal != null && corpse.parentEnt == rc.Animal;
-                    if (!mine && !Valid(rc.Animal) && Time.time - rc.Died < 20f && Vector3.Distance(rc.Position, corpse.transform.position) < 8f)
+                    if (!mine && Time.time - rc.Died < 20f && Vector3.Distance(rc.Position, corpse.transform.position) < 8f
+                        && (!Valid(rc.Animal) || CorpseOfKind(corpse, rc.Species)))
                     {
-                        mine = true;      // the dead animal is already gone: the nearest body in time and space
+                        mine = true;      // the body of that kind that appeared there right after the death (the horse's body has no parent)
                     }
                     if (mine)
                     {
@@ -229,7 +239,6 @@ namespace Oxide.Plugins
                         rc.Linked = true;
                         rc.Position = corpse.transform.position;
                         corpse.ResetRemovalTime(Bm.Cfg.Ritual.CorpseKeepSeconds);
-                        Protect(corpse);
                         return;
                     }
                 }
@@ -294,7 +303,10 @@ namespace Oxide.Plugins
                         Remove(rc);               // harvested some other way, despawned or destroyed: the ritual is off (R9.10)
                         continue;
                     }
-                    Protect(rc.Corpse);           // the game may fill the dispenser in after the spawn hook
+                    if (rc.Burning || rc.StandIn)
+                    {
+                        Protect(rc.Corpse);       // the game may fill the dispenser in after the spawn hook
+                    }
                     if (rc.Burning)
                     {
                         if (now > rc.BurnUntil)
@@ -308,9 +320,23 @@ namespace Oxide.Plugins
             }
 
             // The species' own body prefab if the game has one, else the chicken's: it is only the marker of the ritual spot.
+            private static bool CorpseOfKind(BaseCorpse corpse, SpeciesDef species)
+            {
+                if (corpse is HorseCorpse)
+                {
+                    return species.Id == "horse";
+                }
+                string name = corpse.ShortPrefabName.ToLowerInvariant();
+                string kind = species.Id == "ram" ? "sheep" : species.Id == "doe" ? "stag" : species.Id;
+                return name.StartsWith(kind) || (species.Short != null && name.StartsWith(species.Short));
+            }
+
             private void MakeStandIn(RitualCorpse rc)
             {
-                string path = Bm.FindPrefabPath("rust.ai/agents/" + rc.Species.Id + "/", ".corpse.prefab") ?? Bm.FindPrefabPath("rust.ai/agents/chicken/", ".corpse.prefab");
+                string path = rc.Species.Id == "horse"
+                    ? Bm.FindPrefabPath("vehicles/horse/", ".corpse.prefab")
+                    : Bm.FindPrefabPath("rust.ai/agents/" + rc.Species.Id + "/", ".corpse.prefab");
+                path = path ?? Bm.FindPrefabPath("rust.ai/agents/chicken/", ".corpse.prefab");
                 if (path == null)
                 {
                     Bm.Log(1, "Ritual: no body prefab for the stand-in of the " + rc.Species.Id);
@@ -412,6 +438,7 @@ namespace Oxide.Plugins
 
             private void Ignite(RitualCorpse rc, BasePlayer p, float now)
             {
+                Protect(rc.Corpse);               // the burning body cannot be harvested any more
                 rc.Burning = true;
                 rc.BurnUntil = now + Mathf.Max(3f, Bm.Cfg.Ritual.BurnSeconds);
                 rc.Performer = p.userID;
@@ -548,6 +575,10 @@ namespace Oxide.Plugins
                 Data.Bosses[tag] = new BossInfo { Kind = rc.Boss.Kind, Mini = rc.Boss.Mini, Tamed = true };
             }
             animal.Spawn();
+            if (livestock != null)
+            {
+                EnforceLook(animal, rc.Species, rc.Genes, rc.Name, rc.Male);      // the game rolls a new look at the spawn: the killed one's is put back
+            }
             if (reborn != null)
             {
                 reborn.SetBreed(rc.Genes);

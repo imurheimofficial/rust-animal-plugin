@@ -37,52 +37,24 @@ namespace Oxide.Plugins
         }
 
         // Use key in the third-person animal form: the nearest door, container, corpse or pickup in front of the animal's head.
-        internal void InteractFrom(Driver d)
+        internal void InteractFrom(Driver d, bool crouch)
         {
             BasePlayer player = d.Player;
+            if (crouch)
+            {
+                OpenOwnInventory(d);                    // Ctrl + E: the animal's own inventory (saddle, shoes, saddle bag, armour)
+                return;
+            }
             if (TryLeadToggle(d))
             {
                 return;
             }
             if (!Cfg.Form.Doors && !Cfg.Form.Looting)
             {
+                TryEat(d);
                 return;
             }
-            Vector3 head = d.HeadPosition();
-            Vector3 dir = Quaternion.Euler(10f, d.Heading, 0f) * Vector3.forward;
-            var found = new List<BaseEntity>();
-            Vis.Entities(head + dir * 1.1f, 2.4f, found);
-            BaseEntity best = null;
-            float bestScore = float.MaxValue;
-            foreach (BaseEntity e in found)
-            {
-                if (!Valid(e) || e == d.Body || e == player)
-                {
-                    continue;
-                }
-                bool wanted = (Cfg.Form.Doors && e is Door) || (Cfg.Form.Looting && (e is StorageContainer || e is LootableCorpse || e is DroppedItemContainer || e is CollectibleEntity || e is WorldItem));
-                if (!wanted)
-                {
-                    continue;
-                }
-                Vector3 to = e.ClosestPoint(head) - head;
-                float dist = to.magnitude;
-                if (dist > 2.6f)
-                {
-                    continue;
-                }
-                float angle = Vector3.Angle(dir, to);
-                if (angle > 65f)
-                {
-                    continue;
-                }
-                float score = angle * 0.04f + dist;
-                if (score < bestScore)
-                {
-                    bestScore = score;
-                    best = e;
-                }
-            }
+            BaseEntity best = InteractTarget(d);
             if (best == null)
             {
                 TryEat(d);
@@ -105,6 +77,108 @@ namespace Oxide.Plugins
             {
                 Log(0, "Interaction with " + best.ShortPrefabName + " failed: " + ex.Message);
             }
+        }
+
+        // The door, container, corpse or thing in front of the animal's head that E would use.
+        internal BaseEntity InteractTarget(Driver d)
+        {
+            if (!Cfg.Form.Doors && !Cfg.Form.Looting)
+            {
+                return null;
+            }
+            Vector3 head = d.HeadPosition();
+            Vector3 dir = Quaternion.Euler(10f, d.Heading, 0f) * Vector3.forward;
+            var found = new List<BaseEntity>();
+            Vis.Entities(head + dir * 1.1f, 2.4f, found);
+            BaseEntity best = null;
+            float bestScore = float.MaxValue;
+            foreach (BaseEntity e in found)
+            {
+                if (!Valid(e) || e == d.Body || e == d.Player)
+                {
+                    continue;
+                }
+                bool wanted = (Cfg.Form.Doors && e is Door) || (Cfg.Form.Looting && (e is StorageContainer || e is LootableCorpse || e is DroppedItemContainer || e is CollectibleEntity || e is WorldItem));
+                if (!wanted || IsSaddleModel(e))
+                {
+                    continue;
+                }
+                Vector3 to = e.ClosestPoint(head) - head;
+                float dist = to.magnitude;
+                if (dist > 2.6f)
+                {
+                    continue;
+                }
+                float angle = Vector3.Angle(dir, to);
+                if (angle > 65f)
+                {
+                    continue;
+                }
+                float score = angle * 0.04f + dist;
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best = e;
+                }
+            }
+            return best;
+        }
+
+        // What E would do right now, for the prompt on the screen of an animal form (null = nothing).
+        internal string UsePrompt(Driver d)
+        {
+            if (d == null || d.Kind != ControlKind.Form || !d.Alive || d.Body == null)
+            {
+                return null;
+            }
+            string lead = LeadPrompt(d);
+            if (lead != null)
+            {
+                return lead;
+            }
+            BaseEntity target = InteractTarget(d);
+            if (target != null)
+            {
+                Door door = target as Door;
+                if (door != null)
+                {
+                    if (!door.canHandOpen)
+                    {
+                        return null;
+                    }
+                    return door.IsLocked() ? "Locked" : door.IsOpen() ? "Close" : "Open";
+                }
+                if (target is LootableCorpse)
+                {
+                    return "Loot";
+                }
+                if (target is StorageContainer || target is DroppedItemContainer)
+                {
+                    return "Open";
+                }
+                if (target is CollectibleEntity)
+                {
+                    return "Pick up";
+                }
+                WorldItem lying = target as WorldItem;
+                if (lying != null && lying.item != null)
+                {
+                    return StatsModule.OnDiet(d.Species, lying.item.info.shortname) ? "Eat " + lying.item.info.displayName.english : "Pick up " + lying.item.info.displayName.english;
+                }
+            }
+            if (!Cfg.Form.Needs)
+            {
+                return null;
+            }
+            Vector3 fwd = Quaternion.Euler(0f, d.Heading, 0f) * Vector3.forward;
+            foreach (float reach in new[] { 0.5f, 1.2f, 2f })
+            {
+                if (WaterLevel.GetWaterDepth(d.Body.transform.position + fwd * reach, true, true, null) > 0.02f)
+                {
+                    return "Drink";
+                }
+            }
+            return null;
         }
 
         private void InteractWith(BasePlayer player, BaseEntity entity)
@@ -150,14 +224,15 @@ namespace Oxide.Plugins
                 {
                     lying.Kill();                           // the item lies in the bag now, the empty world item goes away
                 }
-                if (AddToBag(player, picked))
+                string why;
+                if (StoreForForm(DriverOf(player), picked, out why))
                 {
-                    TellRaw(player, "Picked up: " + pickedName + " (it is in your animal's bag).");
+                    TellRaw(player, "Picked up: " + pickedName + " (it is in your saddle bag; Ctrl + E opens your inventory).");
                 }
                 else
                 {
-                    picked.Drop(at + Vector3.up * 0.3f, Vector3.up);       // the bag is full: it stays where it lay
-                    TellRaw(player, "Your animal's bag is full.");
+                    picked.Drop(at + Vector3.up * 0.3f, Vector3.up);       // no saddle bag or no room: it stays where it lay
+                    TellRaw(player, why);
                 }
             }
         }
