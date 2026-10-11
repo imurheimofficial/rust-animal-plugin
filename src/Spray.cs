@@ -103,7 +103,7 @@ namespace Oxide.Plugins
 
         private readonly Dictionary<ulong, SkinState> skinMenus = new Dictionary<ulong, SkinState>();
 
-        // May this player change the look of that animal right now? He plays it as an animal, or he stands at a tamed animal of his (or his team's).
+        // May this player change the look of that animal right now? He plays it as an animal, or he stands at a tamed animal of his (or his team's): only a tamed animal can be reskinned.
         private bool MaySkin(BasePlayer player, BaseEntity animal)
         {
             if (player == null || !Valid(animal) || !(animal is RidableHorse || animal is LivestockAnimal))
@@ -120,7 +120,7 @@ namespace Oxide.Plugins
                 return false;
             }
             TamedRecord rec = RecordOf(animal);
-            if (!(IsAdmin(player) || (rec != null && MayUse(player, rec.Owner, "team"))))
+            if (rec == null || !MayUse(player, rec.Owner, "team"))
             {
                 return false;
             }

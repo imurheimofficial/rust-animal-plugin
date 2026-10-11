@@ -1,3 +1,9 @@
+# Změny verze 1.2.10 (2026-10-11)
+
+* **Reskin:** u zvířete jde změnit jen ochočené zvíře (vlastní nebo týmové). Admin to už neobchází. Za zvíře, kterým jsi, se okno otevírá jako dřív.
+
+---
+
 # Změny verze 1.2.9 (2026-10-11)
 
 Tvůj test 1.2.8.
