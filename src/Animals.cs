@@ -540,6 +540,8 @@ namespace Oxide.Plugins
             return bone != null && StringPool.Get(bone.name) != 0u ? bone : null;
         }
 
+        internal static int SeatBoneStepValue = 1;
+
         private static Vector3 SeatSpot(BaseNPC2 animal, out Transform bone)
         {
             bone = null;
@@ -564,6 +566,21 @@ namespace Oxide.Plugins
             float z = Mathf.Lerp(minZ, maxZ, 0.55f);
             KeyValuePair<Transform, Vector3> nearest = spine.OrderBy(p => Mathf.Abs(p.Value.z - z)).First();
             bone = nearest.Key;
+            if (SeatBoneStepValue > 0)
+            {
+                // the seat hangs on a bone nearer the hips: the spine bends less there, so the rider's camera is shaken less; the seat itself
+                // stays at the same place on the back
+                List<KeyValuePair<Transform, Vector3>> byZ = spine.OrderBy(p => p.Value.z).ToList();
+                int at = byZ.FindIndex(p => p.Key == nearest.Key);
+                for (int i = Mathf.Max(0, at - SeatBoneStepValue); i < at; i++)
+                {
+                    if (StringPool.Get(byZ[i].Key.name) != 0u)
+                    {
+                        bone = byZ[i].Key;                  // the nearest one to the hips that the players' games know by name
+                        break;
+                    }
+                }
+            }
             // the height of the back there: the spine between its neighbours, never below the bone the seat hangs on
             float y = nearest.Value.y;
             float span = Mathf.Max(0.05f, (maxZ - minZ) * 0.25f);

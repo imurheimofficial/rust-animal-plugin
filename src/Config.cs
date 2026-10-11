@@ -77,11 +77,12 @@ namespace Oxide.Plugins
         {
             [JsonProperty("Admins may ride any animal without taming or a saddle (for testing)")] public bool AdminBypass = true;
             [JsonProperty("Riding needs a tamed animal (standard species)")] public bool RequireTame = true;
-            [JsonProperty("Riding needs a saddle in the animal's gear (standard species)")] public bool RequireSaddle = true;
+            [JsonProperty("Riding needs a saddle in the rider's own inventory (standard species; a double saddle seats a second rider)")] public bool RequireSaddle = true;
             [JsonProperty("Who may ride an owned animal (owner, team, friends, clan, anyone)")] public string Ownership = "team";
             [JsonProperty("Seat used for riders on non-horse animals (the horse's saddle seat: the rider sits the way he sits on a horse)")] public string SeatPrefab = "assets/prefabs/vehicle/seats/horsesaddle.prefab";
             [JsonProperty("Seat of the second rider (double saddle)")] public string RearSeatPrefab = "assets/prefabs/vehicle/seats/horsesaddlerear.prefab";
             [JsonProperty("The rider's seat is fixed to the animal's spine, so the rider stays on its back like on the horse (false: fixed to the body, the camera shakes less but the rider slides on the back)")] public bool SeatOnSpine = true;
+            [JsonProperty("The seat hangs on the spine bone this many steps nearer the hips than the middle of the back (0 = the middle; more = a calmer camera)")] public int SeatBoneStep = 1;
             [JsonProperty("A rider can turn his head this far to each side (degrees; the horse's saddle seat itself allows 120; 0 = no limit)")] public float ViewClamp = 85f;
             [JsonProperty("Maximum distance to mount (m)")] public float MountDistance = 3.5f;
             [JsonProperty("Block riding in safe zones")] public bool BlockInSafeZone = false;

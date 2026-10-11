@@ -41,12 +41,9 @@ namespace Oxide.Plugins
             {
                 return 0;
             }
-            int saddle = SaddleOf(host.Body);
-            if (!Cfg.Riding.RequireSaddle || !Cfg.Features.Gear)
-            {
-                return Mathf.Max(1, saddle);        // the server rides without saddles: one rider, two with a double saddle
-            }
-            return saddle;
+            // the seats of the species: two for the horse, bull and cow, one for every other animal (the player who is the animal does not sit)
+            int seats = host.Species != null && DoubleSaddleSpecies(host.Species) ? 2 : 1;
+            return host.Kind == ControlKind.Form ? seats : seats - 1;
         }
 
         // May this player climb on that animal form right now? (the horse form uses this in its vanilla mount hook, the others in TryFormHandle)
@@ -68,11 +65,11 @@ namespace Oxide.Plugins
                 }
                 return false;
             }
-            if (MaxRiders(host) <= 0)
+            if (!SaddleSupplied(player, host))
             {
                 if (tell)
                 {
-                    TellRaw(player, "It has no saddle: put a saddle into its inventory (hold E at it, then Inventory) to ride it.");
+                    TellRaw(player, "You need a saddle in your inventory to ride it (a double saddle of the animal's player also does).");
                 }
                 return false;
             }

@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Beastmaster", "Claude", "1.2.6")]
+    [Info("Beastmaster", "Claude", "1.2.7")]
     [Description("Ride, tame, command and become animals: horses, livestock, predators and small creatures.")]
     public partial class Beastmaster : RustPlugin
     {
@@ -203,6 +203,7 @@ namespace Oxide.Plugins
             Cfg.Relations.Rules = (Cfg.Relations.Rules ?? new List<RelationRule>()).Where(r => r != null && !string.IsNullOrEmpty(r.Observer) && !string.IsNullOrEmpty(r.Subject))
                 .GroupBy(r => r.Observer.ToLowerInvariant() + ">" + r.Subject.ToLowerInvariant()).Select(g => g.First()).ToList();
             UpgradeConfig();
+            SeatBoneStepValue = Mathf.Clamp(Cfg.Riding.SeatBoneStep, 0, 3);
             float sum = Cfg.Horse.CalmShare + Cfg.Horse.ShyShare + Cfg.Horse.AggressiveShare;
             if (sum <= 0f)
             {

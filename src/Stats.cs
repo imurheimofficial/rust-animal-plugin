@@ -200,12 +200,21 @@ namespace Oxide.Plugins
 
             public float SpeedFactor(BaseEntity animal)
             {
-                if (stats.Count == 0)
+                if (stats.Count == 0 && rideNeeds.Count == 0)
                 {
                     return 1f;
                 }
                 Driver d = Bm.DriverOfAnimal(animal);
                 FormStats s;
+                if (d != null && d.Kind == ControlKind.Ride && animal != null && animal.net != null)
+                {
+                    RideNeeds rn;
+                    if (!rideNeeds.TryGetValue(animal.net.ID.Value, out rn))
+                    {
+                        return 1f;
+                    }
+                    return (rn.Hunger <= 0.5f ? 0.75f : 1f) * (rn.Thirst <= 0.5f ? 0.75f : 1f);
+                }
                 if (d == null || d.Kind != ControlKind.Form || !stats.TryGetValue(d.Player.userID, out s))
                 {
                     return 1f;
@@ -351,6 +360,10 @@ namespace Oxide.Plugins
                     {
                         Breathe(d, now, dt);
                     }
+                    if (d.Kind == ControlKind.Ride)
+                    {
+                        RideNeedsUpdate(d, now, dt);
+                    }
                     if (DrawBars(d, now))
                     {
                         shown.Add(d.Player.userID);
@@ -374,6 +387,10 @@ namespace Oxide.Plugins
                 foreach (ulong id in breaths.Where(kv => now - kv.Value.Seen > 900f).Select(kv => kv.Key).ToList())
                 {
                     breaths.Remove(id);
+                }
+                foreach (ulong id in rideNeeds.Where(kv => now - kv.Value.Seen > 1800f).Select(kv => kv.Key).ToList())
+                {
+                    rideNeeds.Remove(id);
                 }
                 foreach (ulong id in stats.Keys.Where(k => !present.Contains(k)).ToList())
                 {
@@ -428,11 +445,55 @@ namespace Oxide.Plugins
             // The stamina gets a bar above the game's own bars, the way the horse shows its own; a rider also sees the health of the animal (an
             // animal form sees its health in the game's own health bar). Drawn once, then only updated, so that nothing flickers.
 
-            // The animal's bars stand in a column right beside the game's own bars, row for row: food, water, health and above them the stamina.
-            // A form sees all four (the animal's health, hunger and thirst), a rider the stamina of the animal. The place never changes.
+            // Hunger and thirst of an animal somebody rides: they run down while it carries a rider and come back while it rests (it grazes and
+            // drinks by itself then). The same rates as for an animal form.
+            private sealed class RideNeeds
+            {
+                public float Hunger = 100f;
+                public float Thirst = 100f;
+                public float Seen;
+            }
+
+            private readonly Dictionary<ulong, RideNeeds> rideNeeds = new Dictionary<ulong, RideNeeds>();
+
+            private RideNeeds RideNeedsOf(Driver d, float now)
+            {
+                ulong id = d.Body.net.ID.Value;
+                RideNeeds n;
+                if (!rideNeeds.TryGetValue(id, out n))
+                {
+                    n = new RideNeeds { Seen = now };
+                    rideNeeds[id] = n;
+                }
+                else if (now - n.Seen > 2f)
+                {
+                    float rest = now - n.Seen;
+                    n.Hunger = Mathf.Min(100f, n.Hunger + 0.25f * rest);
+                    n.Thirst = Mathf.Min(100f, n.Thirst + 0.25f * rest);
+                }
+                n.Seen = now;
+                return n;
+            }
+
+            private void RideNeedsUpdate(Driver d, float now, float dt)
+            {
+                if (!Bm.Cfg.Form.Needs || d.Body == null || d.Body.net == null)
+                {
+                    return;
+                }
+                RideNeeds n = RideNeedsOf(d, now);
+                float rate = Bm.Cfg.Form.NeedsRate;
+                n.Hunger = Mathf.Max(0f, n.Hunger - 0.045f * rate * dt);
+                n.Thirst = Mathf.Max(0f, n.Thirst - 0.07f * rate * dt);
+            }
+
+            // The animal's bars stand in a column right beside the game's own bars, row for row: food, water, health and above them the stamina,
+            // each with a small picture in front (a fork and a knife, a bucket, a plus, a bolt) and its value on the left inside the bar. An animal
+            // form and a rider both see them; the place never changes.
             private sealed class BarState
             {
-                public int[] Values = { -1, -1, -1, -1 };      // food, water, health, stamina
+                public int[] Fill = { -1, -1, -1, -1 };      // food, water, health, stamina (0..100, the length of the bar)
+                public int[] Num = { -1, -1, -1, -1 };       // the number shown (the health in points, the others in per cent)
                 public int Mask;
                 public float At;
             }
@@ -448,6 +509,8 @@ namespace Oxide.Plugins
                 "0.86 0.76 0.24 0.85",       // stamina: yellow
             };
 
+            private const float IconWidth = 22f;
+
             // True = the bars of this player are up.
             private bool DrawBars(Driver d, float now)
             {
@@ -457,26 +520,35 @@ namespace Oxide.Plugins
                     return false;
                 }
                 bool form = d.Kind == ControlKind.Form;
-                FormStats needs;
-                bool hasNeeds = form && Bm.Cfg.Form.Needs && stats.TryGetValue(p.userID, out needs) && needs != null;
-                var values = new int[4];
-                values[3] = Mathf.RoundToInt(Mathf.Clamp(StaminaOf(d), 0f, 100f));
-                int mask = 8;
-                if (form)
+                var fill = new int[4];
+                var num = new int[4];
+                int mask = 12;
+                fill[3] = num[3] = Mathf.RoundToInt(Mathf.Clamp(StaminaOf(d), 0f, 100f));
+                float max = Mathf.Max(1f, d.Body.MaxHealth());
+                fill[2] = Mathf.RoundToInt(Mathf.Clamp01(d.Body.health / max) * 100f);
+                num[2] = Mathf.Max(0, Mathf.CeilToInt(d.Body.health));
+                if (Bm.Cfg.Form.Needs)
                 {
-                    values[2] = Mathf.RoundToInt(Mathf.Clamp01(d.Body.health / Mathf.Max(1f, d.Body.MaxHealth())) * 100f);
-                    mask |= 4;
-                    if (hasNeeds)
+                    float hunger, thirst;
+                    if (form)
                     {
-                        FormStats fs = stats[p.userID];
-                        values[0] = Mathf.RoundToInt(Mathf.Clamp(fs.Hunger, 0f, 100f));
-                        values[1] = Mathf.RoundToInt(Mathf.Clamp(fs.Thirst, 0f, 100f));
-                        mask |= 3;
+                        FormStats fs = Of(p);
+                        hunger = fs.Hunger;
+                        thirst = fs.Thirst;
                     }
+                    else
+                    {
+                        RideNeeds rn = RideNeedsOf(d, now);
+                        hunger = rn.Hunger;
+                        thirst = rn.Thirst;
+                    }
+                    fill[0] = num[0] = Mathf.RoundToInt(Mathf.Clamp(hunger, 0f, 100f));
+                    fill[1] = num[1] = Mathf.RoundToInt(Mathf.Clamp(thirst, 0f, 100f));
+                    mask |= 3;
                 }
                 BarState st;
                 bool fresh = !bars.TryGetValue(p.userID, out st) || st.Mask != mask || now - st.At >= 30f;
-                if (!fresh && st.Values.SequenceEqual(values))
+                if (!fresh && st.Fill.SequenceEqual(fill) && st.Num.SequenceEqual(num))
                 {
                     return true;
                 }
@@ -498,7 +570,7 @@ namespace Oxide.Plugins
                     {
                         if ((mask & (1 << row)) != 0)
                         {
-                            AddBar(c, BarIds[row], BarColors[row], values[row], row * pitch / total, (row * pitch + h) / total);
+                            AddBar(c, row, BarColors[row], fill[row], num[row], row * pitch / total, (row * pitch + h) / total, w, h);
                         }
                     }
                     CuiHelper.DestroyUi(p, Hud);
@@ -508,54 +580,111 @@ namespace Oxide.Plugins
                 {
                     for (int row = 0; row < 4; row++)
                     {
-                        if ((mask & (1 << row)) != 0 && st.Values[row] != values[row])
+                        if ((mask & (1 << row)) != 0 && (st.Fill[row] != fill[row] || st.Num[row] != num[row]))
                         {
-                            UpdateBar(c, BarIds[row], BarColors[row], values[row]);
+                            UpdateBar(c, BarIds[row], BarColors[row], fill[row], num[row]);
                         }
                     }
                     CuiHelper.AddUi(p, c);
                 }
-                st.Values = values;
+                st.Fill = fill;
+                st.Num = num;
                 return true;
             }
 
-            private static void AddBar(CuiElementContainer c, string id, string color, int value, float y0, float y1)
+            // A rectangle of a picture, in units from the bottom left of the row.
+            private static void Shape(CuiElementContainer c, string parent, string name, string color, float x0, float y0, float x1, float y1, float w, float h)
             {
-                string name = Hud + "." + id;
+                c.Add(new CuiElement
+                {
+                    Name = name,
+                    Parent = parent,
+                    Components = { new CuiImageComponent { Color = color }, new CuiRectTransformComponent { AnchorMin = Pt(x0 / w, y0 / h), AnchorMax = Pt(x1 / w, y1 / h) } }
+                });
+            }
+
+            // The pictures are drawn from plain rectangles (the game's own icons cannot be relied upon): fork and knife, bucket, plus, bolt.
+            private static void AddIcon(CuiElementContainer c, string row, int kind, float w, float h)
+            {
+                float k = h / 20f;
+                Action<int, string, float, float, float, float> r = (i, color, x0, y0, x1, y1) => Shape(c, row, row + ".i" + i, color, x0 * k, y0 * k, x1 * k, y1 * k, w, h);
+                switch (kind)
+                {
+                    case 0:                 // fork and knife
+                        r(0, "0.95 0.85 0.6 1", 4f, 12f, 5.2f, 17f);
+                        r(1, "0.95 0.85 0.6 1", 6.4f, 12f, 7.6f, 17f);
+                        r(2, "0.95 0.85 0.6 1", 8.8f, 12f, 10f, 17f);
+                        r(3, "0.95 0.85 0.6 1", 4f, 10f, 10f, 12f);
+                        r(4, "0.95 0.85 0.6 1", 6.4f, 3f, 7.6f, 10f);
+                        r(5, "0.95 0.85 0.6 1", 13f, 9f, 15f, 17f);
+                        r(6, "0.95 0.85 0.6 1", 13.4f, 3f, 14.6f, 9f);
+                        break;
+                    case 1:                 // bucket
+                        r(0, "0.7 0.82 1 1", 5f, 3f, 15f, 12f);
+                        r(1, "0.85 0.92 1 1", 4f, 12f, 16f, 14f);
+                        r(2, "0.85 0.92 1 1", 6f, 14f, 7.2f, 17f);
+                        r(3, "0.85 0.92 1 1", 12.8f, 14f, 14f, 17f);
+                        r(4, "0.85 0.92 1 1", 6f, 16f, 14f, 17.2f);
+                        break;
+                    case 2:                 // plus
+                        r(0, "1 0.9 0.88 1", 8f, 4f, 12f, 16f);
+                        r(1, "1 0.9 0.88 1", 4f, 8f, 16f, 12f);
+                        break;
+                    default:                // bolt
+                        r(0, "1 0.95 0.5 1", 10f, 14f, 13.5f, 17.5f);
+                        r(1, "1 0.95 0.5 1", 8.5f, 11f, 12f, 14f);
+                        r(2, "1 0.95 0.5 1", 6f, 9f, 12.5f, 11f);
+                        r(3, "1 0.95 0.5 1", 7.5f, 6f, 11f, 9f);
+                        r(4, "1 0.95 0.5 1", 6f, 2.5f, 9.5f, 6f);
+                        break;
+                }
+            }
+
+            private static void AddBar(CuiElementContainer c, int row, string color, int fill, int number, float y0, float y1, float w, float h)
+            {
+                string name = Hud + "." + BarIds[row];
+                float split = Mathf.Clamp01(IconWidth / w);
                 c.Add(new CuiElement
                 {
                     Name = name,
                     Parent = Hud,
-                    Components = { new CuiImageComponent { Color = "0.09 0.10 0.08 0.45" }, new CuiRectTransformComponent { AnchorMin = Pt(0f, y0), AnchorMax = Pt(1f, y1) } }
+                    Components = { new CuiImageComponent { Color = "0.09 0.10 0.08 0.55" }, new CuiRectTransformComponent { AnchorMin = Pt(0f, y0), AnchorMax = Pt(1f, y1) } }
+                });
+                AddIcon(c, name, row, w, h);
+                c.Add(new CuiElement
+                {
+                    Name = name + ".b",
+                    Parent = name,
+                    Components = { new CuiImageComponent { Color = "0 0 0 0.35" }, new CuiRectTransformComponent { AnchorMin = Pt(split, 0.1f), AnchorMax = Pt(1f, 0.9f) } }
                 });
                 c.Add(new CuiElement
                 {
                     Name = name + ".fill",
-                    Parent = name,
-                    Components = { new CuiImageComponent { Color = color }, new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = Pt(value / 100f, 1f) } }
+                    Parent = name + ".b",
+                    Components = { new CuiImageComponent { Color = color }, new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = Pt(fill / 100f, 1f) } }
                 });
                 c.Add(new CuiElement
                 {
                     Name = name + ".num",
-                    Parent = name,
-                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 13, Align = TextAnchor.MiddleRight, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.5 0", AnchorMax = "0.97 1" } }
+                    Parent = name + ".b",
+                    Components = { new CuiTextComponent { Text = number.ToString(), FontSize = 13, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.04 0", AnchorMax = "0.7 1" } }
                 });
             }
 
-            private static void UpdateBar(CuiElementContainer c, string id, string color, int value)
+            private static void UpdateBar(CuiElementContainer c, string id, string color, int fill, int number)
             {
                 string name = Hud + "." + id;
                 c.Add(new CuiElement
                 {
                     Name = name + ".fill",
                     Update = true,
-                    Components = { new CuiImageComponent { Color = color }, new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = Pt(value / 100f, 1f) } }
+                    Components = { new CuiImageComponent { Color = color }, new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = Pt(fill / 100f, 1f) } }
                 });
                 c.Add(new CuiElement
                 {
                     Name = name + ".num",
                     Update = true,
-                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 13, Align = TextAnchor.MiddleRight, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.5 0", AnchorMax = "0.97 1" } }
+                    Components = { new CuiTextComponent { Text = number.ToString(), FontSize = 13, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.04 0", AnchorMax = "0.7 1" } }
                 });
             }
 

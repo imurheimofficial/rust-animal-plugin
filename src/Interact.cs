@@ -293,7 +293,7 @@ namespace Oxide.Plugins
                 string why;
                 if (StoreForForm(DriverOf(player), picked, out why))
                 {
-                    TellRaw(player, "Picked up: " + pickedName + " (it is in your saddle bag; Ctrl + E opens your inventory).");
+                    TellRaw(player, "Picked up: " + pickedName + " (it is in your inventory).");
                 }
                 else
                 {

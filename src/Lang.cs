@@ -18,7 +18,7 @@ namespace Oxide.Plugins
                 ["UnknownSpecies"] = "Unknown species '{0}'. Known: {1}",
                 ["SpeciesOff"] = "{0} is not available (disabled or not in this game build).",
                 ["NeedTame"] = "This animal is not tamed. Tame it first (see Help - Taming).",
-                ["NeedSaddle"] = "This animal has no saddle: open its inventory (E, or Ctrl + E) and put a saddle into slot 1.",
+                ["NeedSaddle"] = "You need a saddle in your inventory to ride (a double saddle also seats a second rider).",
                 ["NotYours"] = "This animal belongs to someone else.",
                 ["AlreadyControlling"] = "You are already riding or in animal form. Press X first.",
                 ["Riding"] = "Riding the {0}. W/A/S/D move, Shift faster, Ctrl brake, Space jump, F attack, G view, X get off.",

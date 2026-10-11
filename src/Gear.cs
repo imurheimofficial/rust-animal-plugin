@@ -359,8 +359,59 @@ namespace Oxide.Plugins
             {
                 return SeatsOf(horse);
             }
-            GearRecord g = GearOf(animal);
-            return g != null ? g.Saddle : 0;
+            // an animal has no saddle of its own: the saddle is the one the rider (or the player who is the animal) carries in his inventory
+            Driver d = DriverOfAnimal(animal);
+            return d != null && d.Player != null ? CarriedSaddle(d.Player) : 0;
+        }
+
+        // The saddle a player carries in his inventory: 2 = a double saddle, 1 = a single one, 0 = none. It is not used up.
+        internal static int CarriedSaddle(BasePlayer p)
+        {
+            if (p == null || p.inventory == null)
+            {
+                return 0;
+            }
+            int best = 0;
+            foreach (Item it in PlayerItems(p))
+            {
+                string n = it.info.shortname;
+                if (n == "horse.saddle.double")
+                {
+                    return 2;
+                }
+                if (n == "horse.saddle.single")
+                {
+                    best = 1;
+                }
+            }
+            return best;
+        }
+
+        // May this player sit on that animal as well (or at all)? He needs a saddle in his own inventory, unless the rider (or the player who is
+        // the animal) or somebody already sitting on it carries a double saddle.
+        internal bool SaddleSupplied(BasePlayer joining, Driver host)
+        {
+            if (!Cfg.Riding.RequireSaddle || (Cfg.Riding.AdminBypass && IsAdmin(joining)) || CarriedSaddle(joining) > 0)
+            {
+                return true;
+            }
+            if (host == null)
+            {
+                return false;
+            }
+            if (CarriedSaddle(host.Player) >= 2)
+            {
+                return true;
+            }
+            foreach (BaseMountable seat in host.Guests)
+            {
+                BasePlayer sitting = seat != null && !seat.IsDestroyed ? seat.GetMounted() : null;
+                if (sitting != null && CarriedSaddle(sitting) >= 2)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         // Why a player may not open the inventory of an animal; null = he may.
@@ -420,8 +471,17 @@ namespace Oxide.Plugins
 
         private readonly HashSet<GearRecord> openGears = new HashSet<GearRecord>();
 
+        // The virtual inventory of the animals (saddle, shoes, bag, armour in a panel) is switched off: the rider carries the saddle himself.
+        private bool AnimalInventories => false;
+
         internal void OpenInventory(BasePlayer player, BaseEntity animal)
         {
+            // animals have no inventory of their own any more (the horse keeps the game's): a saddle is carried by the rider
+            if (!AnimalInventories)
+            {
+                TellRaw(player, "Animals have no inventory: carry a saddle in your own inventory to ride one (a double saddle also seats a second rider).");
+                return;
+            }
             if (!Cfg.Features.Gear)
             {
                 Tell(player, "FeatureOff");
@@ -611,9 +671,9 @@ namespace Oxide.Plugins
                 }
                 return;
             }
-            if (d.Species == null || !d.Species.Gear)
+            if (!AnimalInventories)
             {
-                TellRaw(d.Player, "A " + (d.Species != null ? d.Species.Display.ToLowerInvariant() : "creature") + " carries nothing: it has no inventory.");
+                TellRaw(d.Player, "Animals have no inventory of their own: your own inventory is yours. Carry a saddle in it so that others can ride you.");
                 return;
             }
             OpenInventory(d.Player, d.Body);
@@ -744,12 +804,14 @@ namespace Oxide.Plugins
                 }
                 return true;
             }
-            if (d.Species == null || !d.Species.Gear)
+            // an animal has no inventory of its own: what it picks up goes into the player's own inventory
+            BasePlayer carrier = d.Player;
+            if (carrier == null || carrier.inventory == null || (!item.MoveToContainer(carrier.inventory.containerMain) && !item.MoveToContainer(carrier.inventory.containerBelt)))
             {
-                why = "A " + (d.Species != null ? d.Species.Display.ToLowerInvariant() : "creature") + " cannot carry anything.";
+                why = "Your inventory is full.";
                 return false;
             }
-            return AddToGear(FormGearOf(d), item, out why);
+            return true;
         }
 
         // The game of a player in animal form may not show a panel at all (the spectator view), and a player who left cannot close his: such

@@ -184,6 +184,7 @@ namespace Oxide.Plugins
             {
                 return;
             }
+            EndLootTrip(rec.Tag, npc);
             StopFollower(npc);
             ulong owner = rec.Owner;
             Func<Vector3?> ownerPos = () =>
@@ -197,13 +198,25 @@ namespace Oxide.Plugins
                 case "wait":
                     StartFollower(npc, "tame", () => null);
                     break;
+                case "loot":
+                    {
+                        ulong tag = rec.Tag;
+                        f = StartFollower(npc, "tame", () => LootDestination(npc, owner, tag));
+                        if (f != null)
+                        {
+                            f.StopDistance = 2f;
+                            f.RunDistance = 12f;
+                            f.TeleportDistance = Cfg.Taming.TeleportDistance;
+                        }
+                        break;
+                    }
                 case "guard":
                     f = StartFollower(npc, "tame", ownerPos);
                     if (f != null)
                     {
                         f.StopDistance = Cfg.Taming.GuardRadius * 0.45f;
                         f.TeleportDistance = Cfg.Taming.TeleportDistance;
-                        f.Target = () => FindThreat(npc, owner, 20f);
+                        f.Target = () => DefendTargetOf(owner);                 // it goes for whoever hit the owner, or whom the owner hit
                     }
                     break;
                 default:
@@ -260,14 +273,14 @@ namespace Oxide.Plugins
 
         // ---------------------------------------------------------------- commands (R6)
 
-        private static readonly string[] CommandNames = { "follow", "wait", "guard", "attack", "release" };
+        private static readonly string[] CommandNames = { "follow", "wait", "guard", "defend", "loot", "attack", "release" };
 
         private void CommandAnimals(BasePlayer player, string[] args, Action<string> reply)
         {
             string cmd = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
             if (!CommandNames.Contains(cmd))
             {
-                reply("Usage: bm.cmd follow | wait | guard | attack | release  (aim at an animal's head for just that one)");
+                reply("Usage: bm.cmd follow | wait | defend | loot | attack | release  (aim at an animal's head for just that one)");
                 return;
             }
             int n = ApplyCommand(player, cmd);
@@ -341,7 +354,7 @@ namespace Oxide.Plugins
                         }
                         break;
                     default:
-                        rec.State = cmd;
+                        rec.State = cmd == "defend" ? "guard" : cmd;
                         ApplyState(e, rec);
                         break;
                 }
@@ -376,6 +389,7 @@ namespace Oxide.Plugins
             public float Start;
             public bool Crouch;
             public bool Done;
+            public bool Wheel;                 // a controlled animal seen from afar: holding E shows the wheel of orders
         }
 
         private readonly Dictionary<ulong, UsePress> usePresses = new Dictionary<ulong, UsePress>();
@@ -412,6 +426,12 @@ namespace Oxide.Plugins
             BaseNPC2 animal = AnimalInSight(player, Cfg.Riding.MountDistance, 20f);
             if (animal == null)
             {
+                BaseNPC2 far = ControlledAnimalInSight(player);
+                if (far != null)
+                {
+                    usePresses[player.userID] = new UsePress { Target = far, Start = Time.time, Crouch = crouch, Wheel = true };
+                    return;
+                }
                 RidableHorse horse = HorseInSight(player, Cfg.Riding.MountDistance + 1f, 20f);
                 if (horse != null)
                 {
@@ -438,6 +458,11 @@ namespace Oxide.Plugins
             {
                 return;
             }
+            if (press.Wheel)
+            {
+                ShowWheel(player, press.Target);
+                return;
+            }
             List<string[]> choices = BeastChoices(player, press.Target);
             if (choices.Count == 0)
             {
@@ -455,7 +480,7 @@ namespace Oxide.Plugins
                 return;
             }
             usePresses.Remove(player.userID);
-            if (press.Done || !Valid(press.Target) || press.Target.IsDead())
+            if (press.Done || press.Wheel || !Valid(press.Target) || press.Target.IsDead())
             {
                 return;
             }
@@ -531,34 +556,11 @@ namespace Oxide.Plugins
             {
                 return;
             }
-            if (LeftOwnedBy(animal, player))
-            {
-                if (crouch || (species.Gear && Cfg.Features.Gear && SaddleOf(animal) <= 0 && !RideBypass(player)))
-                {
-                    if (!crouch)
-                    {
-                        TellRaw(player, "It has no saddle: fit one in slot 1 of its inventory to ride it.");
-                    }
-                    OpenInventory(player, animal);
-                    return;
-                }
-                if (species.Ride != RideTier.None && !species.Critter)
-                {
-                    StartControl(player, animal, ControlKind.Ride);        // E at the animal one has left: riding it, like the horse
-                }
-                return;
-            }
             if (LeftUsableBy(animal, player))
             {
-                // another player's left animal: ridden with a saddle (it stays for good afterwards)
-                if (species.Gear && Cfg.Features.Gear && SaddleOf(animal) <= 0 && !RideBypass(player))
-                {
-                    TellRaw(player, "It has no saddle: its player has to fit one first.");
-                    return;
-                }
                 if (species.Ride != RideTier.None && !species.Critter)
                 {
-                    StartControl(player, animal, ControlKind.Ride);
+                    StartControl(player, animal, ControlKind.Ride);        // E at the animal a player has left: riding it (the saddle is the rider's own)
                 }
                 return;
             }
@@ -574,34 +576,18 @@ namespace Oxide.Plugins
                     Tell(player, "NotYours");
                     return;
                 }
-                if (species.Gear && Cfg.Features.Gear && (crouch || (SaddleOf(animal) <= 0 && !RideBypass(player))))
-                {
-                    OpenInventory(player, animal);
-                    return;
-                }
                 if (species.Ride != RideTier.None && !species.Critter)
                 {
                     StartControl(player, animal, ControlKind.Ride);
                 }
                 return;
             }
-            if (crouch && species.Gear && Cfg.Features.Gear)
-            {
-                OpenInventory(player, animal);                            // Ctrl + E: the inventory of a wild animal too
-                return;
-            }
             if (species.Ride == RideTier.Restricted)
             {
-                if (!crouch)
-                {
-                    StartControl(player, animal, ControlKind.Ride);
-                }
+                StartControl(player, animal, ControlKind.Ride);
                 return;
             }
-            if (!TryClaim(player, animal, species) && species.Gear && Cfg.Features.Gear && !crouch)
-            {
-                OpenInventory(player, animal);                            // nothing to tame with E: its inventory
-            }
+            TryClaim(player, animal, species);
         }
 
         private bool RideBypass(BasePlayer player)
@@ -618,13 +604,6 @@ namespace Oxide.Plugins
                 TryFormHandle(player, host, true);
                 return;
             }
-            if (host.Horse == null && host.Species != null && host.Species.Gear && Cfg.Features.Gear && !host.Species.Critter
-                && host.Species.Ride != RideTier.None && FormHandledBy(host, player) && MaxRiders(host) <= 0)
-            {
-                TellRaw(player, "It has no saddle yet: fit one in slot 1 of its inventory to ride it.");
-                OpenInventory(player, host.Body);
-                return;
-            }
             TryFormHandle(player, host, false);
         }
 
@@ -635,9 +614,14 @@ namespace Oxide.Plugins
             {
                 return;
             }
-            if (SaddleOf(host.Animal) < 2)
+            if (host.Species == null || !DoubleSaddleSpecies(host.Species))
             {
-                TellRaw(player, "Only an animal with a double saddle carries a second rider.");
+                TellRaw(player, "This animal carries one rider only (the horse, the bull and the cow carry two).");
+                return;
+            }
+            if (!SaddleSupplied(player, host))
+            {
+                TellRaw(player, "You need a saddle in your inventory to ride behind (a double saddle of the rider seats you without one).");
                 return;
             }
             TamedRecord rec = RecordOf(host.Animal);
@@ -683,8 +667,7 @@ namespace Oxide.Plugins
             {
                 return list;
             }
-            GearRecord ignored;
-            bool inventory = Cfg.Features.Gear && species.Gear && InventoryProblem(player, animal, out ignored, false) == null;
+            bool inventory = false;                       // animals have no inventory of their own any more
             Driver host = DriverOfAnimal(animal);
             if (host != null)
             {
@@ -705,7 +688,7 @@ namespace Oxide.Plugins
                         list.Add(new[] { "lead", host.Leader == player ? "Let go" : "Lead" });
                     }
                 }
-                else if (host.Kind == ControlKind.Ride && host.Player != player && SaddleOf(animal) >= 2)
+                else if (host.Kind == ControlKind.Ride && host.Player != player && DoubleSaddleSpecies(species) && SaddleSupplied(player, host))
                 {
                     host.PruneGuests();
                     if (host.Guests.Count == 0)
@@ -750,13 +733,7 @@ namespace Oxide.Plugins
                 {
                     list.Add(new[] { "inventory", "Inventory" });
                 }
-                AddHandLead(list, player, animal);
-                if (Cfg.Features.Taming)
-                {
-                    list.Add(new[] { "follow", rec.State == "follow" ? "Follow (now)" : "Follow" });
-                    list.Add(new[] { "wait", rec.State == "wait" ? "Wait (now)" : "Wait" });
-                    list.Add(new[] { "guard", rec.State == "guard" ? "Guard (now)" : "Guard" });
-                }
+                AddHandLead(list, player, animal);              // Control: the wheel with Follow, Wait, Defend, Loot
             }
             else if (rec == null && inventory && BossOf(animal) == null && (Flow == null || !Flow.InFlow(animal))
                 && species.Tame != TameFlow.Bond && species.Ride != RideTier.Restricted)
@@ -768,15 +745,16 @@ namespace Oxide.Plugins
             return list;
         }
 
+        // The control of a tamed animal (or the animal a player has left): the wheel of orders, also from a distance.
         private void AddHandLead(List<string[]> list, BasePlayer player, BaseNPC2 animal)
         {
-            if (HandLedBy(animal, player))
+            if (Cfg.Features.Taming && DriverOfAnimal(animal) == null && !player.isMounted && (RecordOf(animal) != null || LeftUsableBy(animal, player)))
             {
-                list.Add(new[] { "handlead", "Let go" });
-            }
-            else if (MayHandLead(player, animal))
-            {
-                list.Add(new[] { "handlead", "Lead" });
+                TamedRecord rec = RecordOf(animal);
+                if (rec == null || MayUse(player, rec.Owner, "team"))
+                {
+                    list.Add(new[] { "control", "Control" });
+                }
             }
         }
 
@@ -887,23 +865,15 @@ namespace Oxide.Plugins
                 case "lead":
                     TryFormHandle(player, host, true);
                     break;
-                case "handlead":
-                    ToggleHandLead(player, animal);
+                case "control":
+                    controlled[player.userID] = animal.net.ID.Value;
+                    ShowWheel(player, animal);
                     break;
                 case "follow":
                 case "wait":
                 case "guard":
-                    {
-                        TamedRecord rec = RecordOf(animal);
-                        if (rec != null)
-                        {
-                            rec.State = act;
-                            ApplyState(animal, rec);
-                            SpeciesDef sp = SpeciesOf(animal);
-                            TellRaw(player, "The " + (sp != null ? sp.Display.ToLowerInvariant() : "animal") + (act == "follow" ? " follows you." : act == "wait" ? " waits here." : " guards you."));
-                        }
-                        break;
-                    }
+                    GiveOrder(player, animal, act);
+                    break;
             }
         }
 
@@ -926,7 +896,7 @@ namespace Oxide.Plugins
             BaseNPC2 animal = AnimalInSight(player, 6f, 30f);
             if (animal != null)
             {
-                OpenInventory(player, animal);
+                OpenInventory(player, animal);                  // tells that animals have no inventory
                 return;
             }
             RidableHorse horse = HorseInSight(player, 6f, 30f);
@@ -954,7 +924,7 @@ namespace Oxide.Plugins
             {
                 return new Dictionary<string, string>
                 {
-                    ["Tamed"] = "The {0} is tamed now and follows you. Commands: /bm cmd follow|wait|guard|attack|release, a Bone in hand, or the gestures ok (wait), wave (follow), thumbs up (guard), point (attack).",
+                    ["Tamed"] = "The {0} is tamed now and follows you. Orders: hold E at it and choose Control (Follow, Wait, Defend, Loot; from up to 50 m when you look at it), or /bm cmd follow|wait|defend|loot|attack|release, a Bone in hand, or the gestures ok (wait), wave (follow), thumbs up (defend), point (attack).",
                     ["TameLimit"] = "You already own {0} animals.",
                     ["FeatureOff"] = "That feature is switched off on this server.",
                     ["BondProgress"] = "It is getting used to you: {0}/{1} s. Stay near it and be gentle, then press E again.",

@@ -1,3 +1,23 @@
+# Změny verze 1.2.7 (2026-10-11)
+
+Tvůj test 1.2.6.
+
+* **Staty zvířete:** vidí je hráč za zvíře i jezdec, vždy čtyři bary vedle tvých statů: stamina (žlutá), health (zelená), voda (modrá), jídlo (oranžová). Číslo je vlevo uvnitř baru a před každým barem je obrázek (blesk, plus, kbelík, příbor). Obrázky jsou nakreslené z obdélníků, protože cesty k ikonám hry jsem neměl odkud ověřit.
+  * Health ukazuje skutečné životy zvířete v bodech, ostatní procenta.
+  * Zvíře, na kterém jedeš, má hlad a žízeň, které při jízdě klesají a při odpočinku se vrací. Při nule zvíře zpomalí jako u formy.
+* **Kamera na zvířeti:** sedadlo visí na kosti páteře o kousek blíž k pánvi, kde se hřbet ohýbá míň. Sedí na stejném místě. Další krok je v configu (Riding → SeatBoneStep).
+* **Inventář zvířat je zrušený.** Kůň si nechává herní inventář.
+  * Na zvíře si sedneš, když máš v inventáři sedlo (jednoduché nebo dvojité). Nespotřebuje se.
+  * Druhý jezdec: jen kůň, býk a kráva mají dvě místa. Druhý musí mít v inventáři také sedlo, nebo má dvojité sedlo ten, kdo už sedí.
+  * Zvíře, za které hraješ, nese, co seberete, v tvém inventáři.
+* **Nabídka na podržení E:** místo Lead a Let go je tam Control. Otevře kolečko Follow, Wait, Defend, Loot na černém průhledném pozadí. Dokud zvíře ovládáš, kolečko vyjede i při podržení E, když se na zvíře díváš do 50 m.
+  * Defend: zvíře se rozběhne na toho, kdo zaútočí na tebe, i na toho, na koho zaútočíš ty. Tým a tvoje zvířata nenapadá.
+  * Loot: do 25 m najde věci, bedny, sudy, spadlé tašky a těla, vezme věci a dá je rovnou do tvého inventáře. Co se nevejde, donese a hodí před tebe.
+  * Wait: zvíře stojí. Ležení jsem nedělal.
+* **Útok na vlastní zvíře:** když ho udeříš, přestane být ochočené.
+
+---
+
 # Změny verze 1.2.6 (2026-10-11)
 
 Tvůj test 1.2.5.

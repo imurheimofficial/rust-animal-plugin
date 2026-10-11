@@ -76,7 +76,7 @@ namespace Oxide.Plugins
                 if (LeftUsableBy(animal, player))
                 {
                     // the animal a player has left carries him (and whom the riding rule allows), once it has a saddle (like the horse)
-                    return !Cfg.Riding.RequireSaddle || SaddleOf(animal) > 0 || !species.Gear || (Cfg.Riding.AdminBypass && IsAdmin(player)) ? null : "NeedSaddle";
+                    return !Cfg.Riding.RequireSaddle || CarriedSaddle(player) > 0 || !species.Gear || (Cfg.Riding.AdminBypass && IsAdmin(player)) ? null : "NeedSaddle";
                 }
                 if (!Cfg.Features.Riding)
                 {
@@ -108,7 +108,7 @@ namespace Oxide.Plugins
                 {
                     return "NotYours";
                 }
-                if (Cfg.Riding.RequireSaddle && species.Gear && SaddleOf(animal) <= 0)
+                if (Cfg.Riding.RequireSaddle && species.Gear && CarriedSaddle(player) <= 0)
                 {
                     return "NeedSaddle";
                 }
