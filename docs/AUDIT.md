@@ -1,3 +1,14 @@
+# Změny verze 1.2.5 (2026-10-11)
+
+Verze 1.2.4 se nepřeložila: `'BasePlayer.PlayerFlags' does not contain a definition for 'HasBuildingPrivilege'`.
+
+* **Oprava:** jestli stojíš v building privilege, plugin teď zjistí podle jména metody za běhu (reflexí). Když ji tvoje verze hry nemá, nic se nestane, jen se stamina bar v base neposune. Na tom příznaku teď kód při překladu nezávisí.
+* **Kontrola proti 1.2.2 (poslední přeložená verze):**
+  * Z herních funkcí zbývá jen `SplitItem`, a ta je ve výpisu tvé verze hry.
+  * Další nové názvy jsou standardní: `Vector3.Dot` z Unity, z C# `Concat`, `IsOptional`, `DBNull` a `Missing`.
+
+---
+
 # Změny verze 1.2.4 (2026-10-11)
 
 Verze 1.2.3 se nepřeložila: `'StorageContainer' does not contain a definition for 'SetFlag'`. Tahle verze hry má místo toho `SetFlagLocal` a ten už plugin jinde používá. Opraveno.

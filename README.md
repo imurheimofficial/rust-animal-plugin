@@ -3,7 +3,7 @@
 Ride, tame, command and *become* animals on a Rust server (Oxide / Carbon).
 Deliverable: one C# file, `dist/Beastmaster.cs`, uploaded to the server at wespner.eu.
 
-**Status:** version 1.2.4 (2026-10-11) - the owner's test of 1.1.0 is worked through: the horse's inventory on every animal, saddles
+**Status:** version 1.2.5 (2026-10-11) - the owner's test of 1.1.0 is worked through: the horse's inventory on every animal, saddles
 on the back, stamina, seats fixed to the spine, camera-true attacks and more. The changes, what is uncertain and what to test are in
 [docs/AUDIT.md](docs/AUDIT.md). Install: [INSTALL.md](INSTALL.md).
 

@@ -20,7 +20,7 @@ using UnityEngine;
 namespace Oxide.Plugins
 {
     // ======================================== Beastmaster.cs
-    [Info("Beastmaster", "Claude", "1.2.4")]
+    [Info("Beastmaster", "Claude", "1.2.5")]
     [Description("Ride, tame, command and become animals: horses, livestock, predators and small creatures.")]
     public partial class Beastmaster : RustPlugin
     {
@@ -17226,6 +17226,44 @@ namespace Oxide.Plugins
 
             private readonly Dictionary<ulong, BarState> bars = new Dictionary<ulong, BarState>();
 
+            // Inside building privilege (the game shows its privilege rows then)? The method is looked up by name: its parameters differ
+            // between game builds. Not found: false.
+            private static MethodInfo privilegeMethod;
+            private static object[] privilegeArgs;
+            private static bool privilegeLooked;
+
+            private static bool InBuildingPrivilege(BasePlayer p)
+            {
+                if (!privilegeLooked)
+                {
+                    privilegeLooked = true;
+                    privilegeMethod = typeof(BasePlayer).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                        .Where(m => m.Name == "GetBuildingPrivilege" && m.GetParameters().All(x => x.IsOptional))
+                        .OrderBy(m => m.GetParameters().Length)
+                        .FirstOrDefault();
+                    if (privilegeMethod != null)
+                    {
+                        privilegeArgs = privilegeMethod.GetParameters()
+                            .Select(x => x.DefaultValue != null && x.DefaultValue != System.DBNull.Value && x.DefaultValue != System.Reflection.Missing.Value ? x.DefaultValue
+                                : x.ParameterType.IsValueType ? Activator.CreateInstance(x.ParameterType) : null)
+                            .ToArray();
+                    }
+                }
+                if (privilegeMethod == null || p == null)
+                {
+                    return false;
+                }
+                try
+                {
+                    return privilegeMethod.Invoke(p, privilegeArgs) != null;
+                }
+                catch
+                {
+                    privilegeMethod = null;
+                    return false;
+                }
+            }
+
             private const string StaminaColor = "0.86 0.76 0.24 0.85";
             private const string HealthColor = "0.47 0.69 0.24 0.85";
 
@@ -17246,7 +17284,7 @@ namespace Oxide.Plugins
                 if (!had || now >= st.BaseCheckAt)
                 {
                     // inside building privilege the game shows two more rows (privilege, upkeep) above its bars: the bar moves up past them
-                    inBase = p.HasPlayerFlag(BasePlayer.PlayerFlags.HasBuildingPrivilege);
+                    inBase = InBuildingPrivilege(p);
                 }
                 bool fresh = !had || st.Rider != rider || st.InBase != inBase || now - st.At >= 30f;
                 if (had && now >= st.BaseCheckAt)
