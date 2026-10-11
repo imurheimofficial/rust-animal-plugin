@@ -460,7 +460,7 @@ namespace Oxide.Plugins
                 if (!had || now >= st.BaseCheckAt)
                 {
                     // inside building privilege the game shows two more rows (privilege, upkeep) above its bars: the bar moves up past them
-                    inBase = p.GetBuildingPrivilege() != null;
+                    inBase = p.HasPlayerFlag(BasePlayer.PlayerFlags.HasBuildingPrivilege);
                 }
                 bool fresh = !had || st.Rider != rider || st.InBase != inBase || now - st.At >= 30f;
                 if (had && now >= st.BaseCheckAt)

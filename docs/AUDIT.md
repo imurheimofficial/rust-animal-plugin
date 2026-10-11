@@ -1,3 +1,15 @@
+# Změny verze 1.2.4 (2026-10-11)
+
+Verze 1.2.3 se nepřeložila: `'StorageContainer' does not contain a definition for 'SetFlag'`. Tahle verze hry má místo toho `SetFlagLocal` a ten už plugin jinde používá. Opraveno.
+
+Pro jistotu jsem nahradil i dvě další nové herní funkce těmi, které se už jednou přeložily:
+* `GetBuildingPrivilege()` je nahrazená příznakem hráče `HasBuildingPrivilege` (posun stamina baru v base).
+* `GiveItem` je nahrazený přesunem do inventáře (vrácení sedla).
+
+Ostatní je stejné jako v 1.2.3.
+
+---
+
 # Změny verze 1.2.3 (2026-10-11)
 
 Tvůj test 1.2.2.

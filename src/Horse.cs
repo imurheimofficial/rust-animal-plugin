@@ -1566,9 +1566,9 @@ namespace Oxide.Plugins
                 {
                     return name == "horse.saddle.double" ? "double saddle" : "saddle";
                 }
-                if (one != saddle)
+                if (one != saddle && !one.MoveToContainer(player.inventory.containerMain) && !one.MoveToContainer(player.inventory.containerBelt))
                 {
-                    player.GiveItem(one);
+                    one.Drop(player.transform.position + Vector3.up, Vector3.up);
                 }
             }
             return null;

@@ -91,7 +91,7 @@ namespace Oxide.Plugins
                 FinishBox(vb, false);
                 return null;
             }
-            box.SetFlag(BaseEntity.Flags.Open, true);
+            box.SetFlagLocal(BaseEntity.Flags.Open, true);
             player.inventory.loot.AddContainer(box.inventory);
             player.inventory.loot.SendImmediate();
             Driver.SendPlayerRpc(player, Driver.ClientRpcString, "RPC_OpenLootPanel", "generic_resizable");

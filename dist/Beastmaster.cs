@@ -20,7 +20,7 @@ using UnityEngine;
 namespace Oxide.Plugins
 {
     // ======================================== Beastmaster.cs
-    [Info("Beastmaster", "Claude", "1.2.3")]
+    [Info("Beastmaster", "Claude", "1.2.4")]
     [Description("Ride, tame, command and become animals: horses, livestock, predators and small creatures.")]
     public partial class Beastmaster : RustPlugin
     {
@@ -8097,7 +8097,7 @@ namespace Oxide.Plugins
                 FinishBox(vb, false);
                 return null;
             }
-            box.SetFlag(BaseEntity.Flags.Open, true);
+            box.SetFlagLocal(BaseEntity.Flags.Open, true);
             player.inventory.loot.AddContainer(box.inventory);
             player.inventory.loot.SendImmediate();
             Driver.SendPlayerRpc(player, Driver.ClientRpcString, "RPC_OpenLootPanel", "generic_resizable");
@@ -11310,9 +11310,9 @@ namespace Oxide.Plugins
                 {
                     return name == "horse.saddle.double" ? "double saddle" : "saddle";
                 }
-                if (one != saddle)
+                if (one != saddle && !one.MoveToContainer(player.inventory.containerMain) && !one.MoveToContainer(player.inventory.containerBelt))
                 {
-                    player.GiveItem(one);
+                    one.Drop(player.transform.position + Vector3.up, Vector3.up);
                 }
             }
             return null;
@@ -17246,7 +17246,7 @@ namespace Oxide.Plugins
                 if (!had || now >= st.BaseCheckAt)
                 {
                     // inside building privilege the game shows two more rows (privilege, upkeep) above its bars: the bar moves up past them
-                    inBase = p.GetBuildingPrivilege() != null;
+                    inBase = p.HasPlayerFlag(BasePlayer.PlayerFlags.HasBuildingPrivilege);
                 }
                 bool fresh = !had || st.Rider != rider || st.InBase != inBase || now - st.At >= 30f;
                 if (had && now >= st.BaseCheckAt)
