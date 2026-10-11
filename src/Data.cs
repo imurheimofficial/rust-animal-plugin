@@ -75,6 +75,7 @@ namespace Oxide.Plugins
             public bool HasBag;                          // a saddle bag is fitted
             public int Armor;                            // 0 none, 1 wooden, 2 roadsign, 3 lunar new year
             public List<ItemRecord> Worn = new List<ItemRecord>();     // the items of the four equipment slots as they were (skin, condition)
+            public V3 Seen;                              // a wild animal: where it was last seen (its things fall there if it is gone after a restart)
         }
 
         // One owned animal. State: follow, wait, guard.

@@ -18,6 +18,20 @@ Některé příčiny jsem ověřil v datech hry, která jsou v repu (`docs/_data
 | Saddle bag nejde dát zvířatům, nenabízí inventář. | Inventář měla jen ochočená zvířata a zvířata hráčů. Divoká a nově spawnutá ho neměla vůbec. | Inventář má každé zvíře, které nosí výbavu, i divoké: Ctrl + E, podržené E → Inventory, nebo E u zvířete, které nejde ochočit klávesou. Věci zůstanou zvířeti i po restartu. Po ochočení jsou majitele, po smrti spadnou na zem. |
 | Sedla nejsou vidět na zádech. | Sedla šla vidět jen u ochočených zvířat. A pokud hra nezná název kosti páteře, hra hráče připevnila sedlo jinam. | Sedlo se ukáže u každého zvířete se sedlem v inventáři. Připevní se na kost jen tehdy, když ji hra zná jménem, jinak na tělo. `/bm saddle` (admin, při pohledu na zvíře) napíše, kolik sedel má v inventáři, jestli je model na zádech a na čem drží. |
 
+**Druhá kontrola kódu** našla a opravil jsem:
+* **Ochočení koně stáním u něj nefunguje u:**
+  * koně, kterého hráč jako zvíře právě opustil;
+  * bosse (ten se ochočuje svým sedlem);
+  * hráče bez práva ochočovat nebo s plným počtem zvířat (dřív mu chodila zpráva 4× za sekundu).
+* **Shift ve stoje** si vybraný krok podrží, nevrací se na chůzi.
+* **Divoké zvíře, na kterém někdo jede,** nepřijde o inventář, sedlo na zádech ani armor.
+* **Propuštění zvířete s otevřeným inventářem:** věci se nejdřív uloží, neztratí se.
+* **Ochočení jelena nebo bosse:** nepřepíše sedlo, které zvíře už mělo v divokém inventáři. Sedlo navíc dostaneš zpátky.
+* **Spící zvíře odhlášeného hráče** se už nebere jako divoké s druhým, prázdným inventářem.
+* **Restart a zmizelé divoké zvíře:** jeho věci se už nesmažou, spadnou tam, kde bylo naposled.
+* **Podržené E u divokého zvířete,** kde má E jinou práci (ochočení, boss, past, uspaný jelen), dělá tu práci. Inventář je tam přes Ctrl + E.
+* **Prázdný inventář divokého zvířete,** které jen někdo otevřel, se zapomene.
+
 **Po nahrání:** nahraj `dist/Beastmaster.cs`, smaž `oxide/config/Beastmaster.json` a `oxide/lang/en/Beastmaster.json`, zadej `oxide.reload Beastmaster`.
 V konzoli musí být `Beastmaster 1.2.1 ready`. Bez smazání configu zůstane staré sedadlo, starý dosah útoku a stará lišta.
 

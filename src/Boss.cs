@@ -705,9 +705,9 @@ namespace Oxide.Plugins
                 {
                     Bm.Stable.GiveSaddle(horse, 1);
                 }
-                else
+                else if (rec.Gear.Saddle <= 0)
                 {
-                    rec.Gear.Saddle = 1;
+                    rec.Gear.Saddle = 1;                  // a saddle it already carried (its wild inventory) stays
                 }
                 Run r;
                 if (runs.TryGetValue(entity.skinID, out r))

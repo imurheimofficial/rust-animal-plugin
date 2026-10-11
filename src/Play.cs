@@ -513,6 +513,7 @@ namespace Oxide.Plugins
             }
             if (!AddToGear(gear, held, out why))
             {
+                ForgetEmptyWild(gear);
                 reply(why);
                 return;
             }

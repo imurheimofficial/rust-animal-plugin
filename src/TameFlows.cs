@@ -81,6 +81,17 @@ namespace Oxide.Plugins
             private readonly Dictionary<ulong, Slow> slows = new Dictionary<ulong, Slow>();
             private readonly Dictionary<ulong, Trap> traps = new Dictionary<ulong, Trap>();
             private readonly Dictionary<ulong, Sedated> sedated = new Dictionary<ulong, Sedated>();
+
+            // An animal in the middle of a taming flow (a trapped predator, a sedated deer): E has its own job there.
+            public bool InFlow(BaseNetworkable animal)
+            {
+                if (animal == null || animal.net == null)
+                {
+                    return false;
+                }
+                Trap t;
+                return sedated.ContainsKey(animal.net.ID.Value) || (traps.TryGetValue(animal.net.ID.Value, out t) && !t.Freed);
+            }
             private float lastTick;
 
             public override void Init(Beastmaster bm)
@@ -538,9 +549,21 @@ namespace Oxide.Plugins
                         sedated.Remove(animal.net.ID.Value);
                         Bm.Unpark(animal, "sedated");
                         TamedRecord rec = Bm.TameAnimal(animal, owner);
-                        if (rec != null)
+                        if (rec != null && rec.Gear.Saddle <= 0)
                         {
                             rec.Gear.Saddle = saddle;
+                        }
+                        else
+                        {
+                            // it already carries a saddle (its wild inventory), or it could not be tamed: the saddle goes back to the player
+                            Item back = ItemManager.CreateByName(saddle == 2 ? "horse.saddle.double" : "horse.saddle.single", 1);
+                            if (back != null)
+                            {
+                                GiveBack(owner, back);
+                            }
+                        }
+                        if (rec != null)
+                        {
                             SpeciesDef species = SpeciesOf(animal);
                             Bm.Tell(owner, "DeerTamed", species != null ? species.Display : "deer");
                         }

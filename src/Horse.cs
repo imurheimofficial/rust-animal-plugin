@@ -695,7 +695,7 @@ namespace Oxide.Plugins
             // Familiarity grows while a player stays near a calm horse and fades when they are away (R5.2).
             private void Bond(HorseState s, float dt)
             {
-                if (!Bm.Cfg.Features.Taming || (s.Info.Temperament == "aggressive" && !s.Info.Calmed))
+                if (!Bm.HorseTameable(s.Horse))
                 {
                     return;
                 }
@@ -711,18 +711,23 @@ namespace Oxide.Plugins
                     float d = Vector3.Distance(p.transform.position, pos);
                     if (d < 6f)
                     {
+                        if (!Bm.MayTameHorse(p))
+                        {
+                            continue;                              // no right to tame, or already owns as many animals as allowed
+                        }
                         have = Mathf.Min(have + dt, 900f);
                         s.Bond[p.userID] = have;
                         // a calm horse that a player has stood next to long enough is his: no key, no saddle needed for that
-                        if (have >= Mathf.Max(1f, Bm.Cfg.Horse.BondSeconds) && Bm.Has(p, PermTame) && !p.isMounted && Bm.DriverOf(p) == null
-                            && s.ScaredUntil <= Time.time && !s.Asleep(Time.time) && Bm.RecordOf(s.Horse) == null)
+                        if (have >= Mathf.Max(1f, Bm.Cfg.Horse.BondSeconds) && !p.isMounted && Bm.DriverOf(p) == null
+                            && s.ScaredUntil <= Time.time && !s.Asleep(Time.time))
                         {
                             if (Bm.TameAnimal(s.Horse, p) != null)
                             {
                                 s.Bond.Clear();
                                 Bm.TellRaw(p, "The horse trusts you now - it is yours. Put a saddle into its inventory (hold E at it) to ride it.");
+                                return;
                             }
-                            return;
+                            s.Bond.Remove(p.userID);              // it could not be his: start over, no message every tick
                         }
                     }
                     else if (have > 0f && d > 15f)
@@ -936,6 +941,10 @@ namespace Oxide.Plugins
                 if (!Bm.Cfg.Features.Taming || !Bm.Has(player, PermTame))
                 {
                     return false;
+                }
+                if (Bm.BossOf(s.Horse) != null || (s.Horse.net != null && Bm.LeftForms.ContainsKey(s.Horse.net.ID.Value)) || Bm.DriverOfAnimal(s.Horse) != null)
+                {
+                    return false;                         // a boss is tamed with its saddle; a horse a player has left is still his
                 }
                 float now = Time.time;
                 if (s.Asleep(now))
@@ -1449,13 +1458,28 @@ namespace Oxide.Plugins
             return TryBossSaddle(player, horse) || Stable.Claim(player, s);
         }
 
+        // A wild horse that can be tamed by standing near it: not owned, not a boss (bosses take their own saddle), not a horse a player has just
+        // left (it is still his), calm.
+        internal bool HorseTameable(RidableHorse horse)
+        {
+            HorseState s = Stable != null ? Stable.StateOf(horse) : null;
+            return s != null && Cfg.Features.Taming && Valid(horse) && RecordOf(horse) == null && BossOf(horse) == null
+                && !(horse.net != null && LeftForms.ContainsKey(horse.net.ID.Value)) && DriverOfAnimal(horse) == null
+                && !(s.Info.Temperament == "aggressive" && !s.Info.Calmed);
+        }
+
+        internal bool MayTameHorse(BasePlayer player)
+        {
+            return player != null && Has(player, PermTame) && OwnedCount(player.userID) < Cfg.Taming.MaxOwned;
+        }
+
         // Seconds a player has stood near a wild horse, and how many it needs (for the taming prompt). False = nothing to show.
         internal bool HorseBondOf(RidableHorse horse, BasePlayer player, out float have, out float need)
         {
             have = 0f;
             need = Mathf.Max(1f, Cfg.Horse.BondSeconds);
             HorseState s = Stable != null ? Stable.StateOf(horse) : null;
-            if (s == null || RecordOf(horse) != null || !Cfg.Features.Taming || (s.Info.Temperament == "aggressive" && !s.Info.Calmed))
+            if (s == null || !HorseTameable(horse) || !MayTameHorse(player))
             {
                 return false;
             }

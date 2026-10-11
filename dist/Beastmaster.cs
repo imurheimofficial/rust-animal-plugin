@@ -2035,9 +2035,9 @@ namespace Oxide.Plugins
                 {
                     Bm.Stable.GiveSaddle(horse, 1);
                 }
-                else
+                else if (rec.Gear.Saddle <= 0)
                 {
-                    rec.Gear.Saddle = 1;
+                    rec.Gear.Saddle = 1;                  // a saddle it already carried (its wild inventory) stays
                 }
                 Run r;
                 if (runs.TryGetValue(entity.skinID, out r))
@@ -4449,6 +4449,7 @@ namespace Oxide.Plugins
             public bool Spectating;
             public float FeedPoseUntil;     // the grazing or drinking pose of E at food or water, until then (0 = none)
             private float stoppedSince;
+            private bool shiftSinceStop;
             public bool OwnsAnimal;         // the animal was made for this form and vanishes in smoke when the form ends
             public int Gait = 1;
             public bool Alive => !released;
@@ -5104,6 +5105,14 @@ namespace Oxide.Plugins
                 if (pressed(BUTTON.SPRINT))
                 {
                     braking = false;
+                    if (!fwd && Mathf.Abs(currentSpeed) < 0.3f && !shiftSinceStop)
+                    {
+                        Gait = 1;                          // standing: the gaits count up from a walk again
+                    }
+                    if (!fwd && Mathf.Abs(currentSpeed) < 0.3f)
+                    {
+                        shiftSinceStop = true;             // a gait chosen before moving off is kept
+                    }
                     SetGait(Mathf.Max(Gait, 1) + 1);
                 }
                 if (pressed(BUTTON.DUCK))
@@ -6397,7 +6406,7 @@ namespace Oxide.Plugins
                     {
                         stoppedSince = Time.time;
                     }
-                    else if (Time.time - stoppedSince > 0.6f && Gait > 1)
+                    else if (Time.time - stoppedSince > 0.6f && Gait > 1 && !shiftSinceStop)
                     {
                         Gait = 1;
                     }
@@ -6405,6 +6414,10 @@ namespace Oxide.Plugins
                 else
                 {
                     stoppedSince = 0f;
+                    if (fwd)
+                    {
+                        shiftSinceStop = false;
+                    }
                 }
                 if (Horse != null)
                 {
@@ -6930,6 +6943,7 @@ namespace Oxide.Plugins
             public bool HasBag;                          // a saddle bag is fitted
             public int Armor;                            // 0 none, 1 wooden, 2 roadsign, 3 lunar new year
             public List<ItemRecord> Worn = new List<ItemRecord>();     // the items of the four equipment slots as they were (skin, condition)
+            public V3 Seen;                              // a wild animal: where it was last seen (its things fall there if it is gone after a restart)
         }
 
         // One owned animal. State: follow, wait, guard.
@@ -8085,9 +8099,9 @@ namespace Oxide.Plugins
         internal GearRecord WildGearOf(BaseEntity animal, bool create)
         {
             BaseNPC2 npc = animal as BaseNPC2;
-            if (npc == null || npc.IsDead())
+            if (npc == null || npc.IsDead() || IsFormSleeper(npc))
             {
-                return null;
+                return null;                         // the sleeping animal of a player who logged out keeps his inventory, it is not wild
             }
             SpeciesDef species = SpeciesOf(npc);
             if (species == null || !species.Gear)
@@ -8112,6 +8126,49 @@ namespace Oxide.Plugins
             Data.WildGears[npc.skinID] = g;
             WildIndex[npc.skinID] = npc;
             return g;
+        }
+
+        internal bool IsFormSleeper(BaseEntity animal)
+        {
+            if (FormSleepers.Count == 0 && Data.Forms.Count == 0)
+            {
+                return false;
+            }
+            foreach (BaseCombatEntity sleeper in FormSleepers.Values)
+            {
+                if (sleeper == animal)
+                {
+                    return true;
+                }
+            }
+            if (animal.skinID >= TagBase)
+            {
+                foreach (FormRecord rec in Data.Forms.Values)
+                {
+                    if (rec.Tag == animal.skinID)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // A wild animal's inventory that is empty again is forgotten (it was only opened, or a give failed).
+        internal void ForgetEmptyWild(GearRecord g)
+        {
+            if (g == null || !GearEmpty(g) || openGears.Contains(g))
+            {
+                return;
+            }
+            foreach (KeyValuePair<ulong, GearRecord> pair in Data.WildGears.ToList())
+            {
+                if (pair.Value == g)
+                {
+                    Data.WildGears.Remove(pair.Key);
+                    WildIndex.Remove(pair.Key);
+                }
+            }
         }
 
         internal static bool GearEmpty(GearRecord g)
@@ -8141,7 +8198,7 @@ namespace Oxide.Plugins
             {
                 return lf.Gear;
             }
-            return d == null ? WildGearOf(animal, false) : null;
+            return WildGearOf(animal, false);           // a wild animal (also while somebody rides it)
         }
 
         internal int SaddleOf(BaseEntity animal)
@@ -8164,7 +8221,7 @@ namespace Oxide.Plugins
             if (gear == null && species != null && species.Gear && DriverOfAnimal(animal) == null)
             {
                 gear = WildGearOf(animal, create);
-                if (gear == null && !create && animal is BaseNPC2 && RecordOf(animal) == null)
+                if (gear == null && !create && animal is BaseNPC2 && RecordOf(animal) == null && !IsFormSleeper(animal) && !((BaseNPC2)animal).IsDead())
                 {
                     return null;                     // a wild animal: it gets an inventory as soon as somebody opens it
                 }
@@ -8347,6 +8404,7 @@ namespace Oxide.Plugins
                 rest.Remove();
             }
             RefreshSaddle(ctx.Animal);
+            ForgetEmptyWild(g);
             Tell(vb.Player, "GearSaved");
         }
 
@@ -9031,6 +9089,11 @@ namespace Oxide.Plugins
                         Bm.WildIndex.Remove(pair.Key);
                         continue;
                     }
+                    GearRecord seen;
+                    if (Bm.Data.WildGears.TryGetValue(pair.Key, out seen) && seen != null)
+                    {
+                        seen.Seen = new V3(npc.transform.position);
+                    }
                     if (wanted.Add(npc.net.ID.Value))
                     {
                         Bm.RefreshSaddle(npc);
@@ -9106,9 +9169,22 @@ namespace Oxide.Plugins
                     }
                     foreach (ulong tag in Bm.Data.WildGears.Keys.ToList())
                     {
-                        if (!found.Contains(tag))
+                        if (found.Contains(tag))
                         {
-                            Bm.Data.WildGears.Remove(tag);
+                            continue;
+                        }
+                        GearRecord gone = Bm.Data.WildGears[tag];
+                        Bm.Data.WildGears.Remove(tag);
+                        if (gone != null && !GearEmpty(gone))
+                        {
+                            if (gone.Seen != null)
+                            {
+                                Bm.DropGearRecord(gone, gone.Seen.Value + Vector3.up * 0.8f);       // the animal is gone: its things lie where it was last
+                            }
+                            else
+                            {
+                                Bm.Log(1, "A wild animal's inventory (tag " + tag + ") was lost: the animal is gone and no place is known.");
+                            }
                         }
                     }
                 });
@@ -10236,7 +10312,7 @@ namespace Oxide.Plugins
             // Familiarity grows while a player stays near a calm horse and fades when they are away (R5.2).
             private void Bond(HorseState s, float dt)
             {
-                if (!Bm.Cfg.Features.Taming || (s.Info.Temperament == "aggressive" && !s.Info.Calmed))
+                if (!Bm.HorseTameable(s.Horse))
                 {
                     return;
                 }
@@ -10252,18 +10328,23 @@ namespace Oxide.Plugins
                     float d = Vector3.Distance(p.transform.position, pos);
                     if (d < 6f)
                     {
+                        if (!Bm.MayTameHorse(p))
+                        {
+                            continue;                              // no right to tame, or already owns as many animals as allowed
+                        }
                         have = Mathf.Min(have + dt, 900f);
                         s.Bond[p.userID] = have;
                         // a calm horse that a player has stood next to long enough is his: no key, no saddle needed for that
-                        if (have >= Mathf.Max(1f, Bm.Cfg.Horse.BondSeconds) && Bm.Has(p, PermTame) && !p.isMounted && Bm.DriverOf(p) == null
-                            && s.ScaredUntil <= Time.time && !s.Asleep(Time.time) && Bm.RecordOf(s.Horse) == null)
+                        if (have >= Mathf.Max(1f, Bm.Cfg.Horse.BondSeconds) && !p.isMounted && Bm.DriverOf(p) == null
+                            && s.ScaredUntil <= Time.time && !s.Asleep(Time.time))
                         {
                             if (Bm.TameAnimal(s.Horse, p) != null)
                             {
                                 s.Bond.Clear();
                                 Bm.TellRaw(p, "The horse trusts you now - it is yours. Put a saddle into its inventory (hold E at it) to ride it.");
+                                return;
                             }
-                            return;
+                            s.Bond.Remove(p.userID);              // it could not be his: start over, no message every tick
                         }
                     }
                     else if (have > 0f && d > 15f)
@@ -10477,6 +10558,10 @@ namespace Oxide.Plugins
                 if (!Bm.Cfg.Features.Taming || !Bm.Has(player, PermTame))
                 {
                     return false;
+                }
+                if (Bm.BossOf(s.Horse) != null || (s.Horse.net != null && Bm.LeftForms.ContainsKey(s.Horse.net.ID.Value)) || Bm.DriverOfAnimal(s.Horse) != null)
+                {
+                    return false;                         // a boss is tamed with its saddle; a horse a player has left is still his
                 }
                 float now = Time.time;
                 if (s.Asleep(now))
@@ -10990,13 +11075,28 @@ namespace Oxide.Plugins
             return TryBossSaddle(player, horse) || Stable.Claim(player, s);
         }
 
+        // A wild horse that can be tamed by standing near it: not owned, not a boss (bosses take their own saddle), not a horse a player has just
+        // left (it is still his), calm.
+        internal bool HorseTameable(RidableHorse horse)
+        {
+            HorseState s = Stable != null ? Stable.StateOf(horse) : null;
+            return s != null && Cfg.Features.Taming && Valid(horse) && RecordOf(horse) == null && BossOf(horse) == null
+                && !(horse.net != null && LeftForms.ContainsKey(horse.net.ID.Value)) && DriverOfAnimal(horse) == null
+                && !(s.Info.Temperament == "aggressive" && !s.Info.Calmed);
+        }
+
+        internal bool MayTameHorse(BasePlayer player)
+        {
+            return player != null && Has(player, PermTame) && OwnedCount(player.userID) < Cfg.Taming.MaxOwned;
+        }
+
         // Seconds a player has stood near a wild horse, and how many it needs (for the taming prompt). False = nothing to show.
         internal bool HorseBondOf(RidableHorse horse, BasePlayer player, out float have, out float need)
         {
             have = 0f;
             need = Mathf.Max(1f, Cfg.Horse.BondSeconds);
             HorseState s = Stable != null ? Stable.StateOf(horse) : null;
-            if (s == null || RecordOf(horse) != null || !Cfg.Features.Taming || (s.Info.Temperament == "aggressive" && !s.Info.Calmed))
+            if (s == null || !HorseTameable(horse) || !MayTameHorse(player))
             {
                 return false;
             }
@@ -14667,6 +14767,7 @@ namespace Oxide.Plugins
             }
             if (!AddToGear(gear, held, out why))
             {
+                ForgetEmptyWild(gear);
                 reply(why);
                 return;
             }
@@ -16860,11 +16961,14 @@ namespace Oxide.Plugins
             {
                 StopFollower(npc);
                 Unpark(npc, "tame");
-                if (rec.Gear != null && !GearEmpty(rec.Gear))
+                if (rec.Gear != null)
                 {
-                    CloseInventoriesOf(rec.Gear);
-                    Data.WildGears[rec.Tag] = rec.Gear;        // a released animal keeps what it carries, as a wild animal
-                    WildIndex[rec.Tag] = npc;
+                    CloseInventoriesOf(rec.Gear);              // an open panel is saved first, so that nothing in it is lost
+                    if (!GearEmpty(rec.Gear))
+                    {
+                        Data.WildGears[rec.Tag] = rec.Gear;    // a released animal keeps what it carries, as a wild animal
+                        WildIndex[rec.Tag] = npc;
+                    }
                 }
             }
             Data.Tamed.Remove(rec.Tag);
@@ -17427,9 +17531,12 @@ namespace Oxide.Plugins
                     list.Add(new[] { "guard", rec.State == "guard" ? "Guard (now)" : "Guard" });
                 }
             }
-            else if (rec == null && inventory)
+            else if (rec == null && inventory && BossOf(animal) == null && (Flow == null || !Flow.InFlow(animal))
+                && species.Tame != TameFlow.Bond && species.Ride != RideTier.Restricted)
             {
-                list.Add(new[] { "inventory", "Inventory" });            // a wild animal has the horse's inventory too
+                // a wild animal has the horse's inventory too; where E has another job (taming, a boss, a trapped or sedated animal) the held E
+                // does that job and the inventory is Ctrl + E
+                list.Add(new[] { "inventory", "Inventory" });
             }
             return list;
         }
@@ -17945,6 +18052,17 @@ namespace Oxide.Plugins
             private readonly Dictionary<ulong, Slow> slows = new Dictionary<ulong, Slow>();
             private readonly Dictionary<ulong, Trap> traps = new Dictionary<ulong, Trap>();
             private readonly Dictionary<ulong, Sedated> sedated = new Dictionary<ulong, Sedated>();
+
+            // An animal in the middle of a taming flow (a trapped predator, a sedated deer): E has its own job there.
+            public bool InFlow(BaseNetworkable animal)
+            {
+                if (animal == null || animal.net == null)
+                {
+                    return false;
+                }
+                Trap t;
+                return sedated.ContainsKey(animal.net.ID.Value) || (traps.TryGetValue(animal.net.ID.Value, out t) && !t.Freed);
+            }
             private float lastTick;
 
             public override void Init(Beastmaster bm)
@@ -18402,9 +18520,21 @@ namespace Oxide.Plugins
                         sedated.Remove(animal.net.ID.Value);
                         Bm.Unpark(animal, "sedated");
                         TamedRecord rec = Bm.TameAnimal(animal, owner);
-                        if (rec != null)
+                        if (rec != null && rec.Gear.Saddle <= 0)
                         {
                             rec.Gear.Saddle = saddle;
+                        }
+                        else
+                        {
+                            // it already carries a saddle (its wild inventory), or it could not be tamed: the saddle goes back to the player
+                            Item back = ItemManager.CreateByName(saddle == 2 ? "horse.saddle.double" : "horse.saddle.single", 1);
+                            if (back != null)
+                            {
+                                GiveBack(owner, back);
+                            }
+                        }
+                        if (rec != null)
+                        {
                             SpeciesDef species = SpeciesOf(animal);
                             Bm.Tell(owner, "DeerTamed", species != null ? species.Display : "deer");
                         }

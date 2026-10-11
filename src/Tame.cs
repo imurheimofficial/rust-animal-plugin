@@ -141,11 +141,14 @@ namespace Oxide.Plugins
             {
                 StopFollower(npc);
                 Unpark(npc, "tame");
-                if (rec.Gear != null && !GearEmpty(rec.Gear))
+                if (rec.Gear != null)
                 {
-                    CloseInventoriesOf(rec.Gear);
-                    Data.WildGears[rec.Tag] = rec.Gear;        // a released animal keeps what it carries, as a wild animal
-                    WildIndex[rec.Tag] = npc;
+                    CloseInventoriesOf(rec.Gear);              // an open panel is saved first, so that nothing in it is lost
+                    if (!GearEmpty(rec.Gear))
+                    {
+                        Data.WildGears[rec.Tag] = rec.Gear;    // a released animal keeps what it carries, as a wild animal
+                        WildIndex[rec.Tag] = npc;
+                    }
                 }
             }
             Data.Tamed.Remove(rec.Tag);
@@ -708,9 +711,12 @@ namespace Oxide.Plugins
                     list.Add(new[] { "guard", rec.State == "guard" ? "Guard (now)" : "Guard" });
                 }
             }
-            else if (rec == null && inventory)
+            else if (rec == null && inventory && BossOf(animal) == null && (Flow == null || !Flow.InFlow(animal))
+                && species.Tame != TameFlow.Bond && species.Ride != RideTier.Restricted)
             {
-                list.Add(new[] { "inventory", "Inventory" });            // a wild animal has the horse's inventory too
+                // a wild animal has the horse's inventory too; where E has another job (taming, a boss, a trapped or sedated animal) the held E
+                // does that job and the inventory is Ctrl + E
+                list.Add(new[] { "inventory", "Inventory" });
             }
             return list;
         }

@@ -206,9 +206,9 @@ namespace Oxide.Plugins
         internal GearRecord WildGearOf(BaseEntity animal, bool create)
         {
             BaseNPC2 npc = animal as BaseNPC2;
-            if (npc == null || npc.IsDead())
+            if (npc == null || npc.IsDead() || IsFormSleeper(npc))
             {
-                return null;
+                return null;                         // the sleeping animal of a player who logged out keeps his inventory, it is not wild
             }
             SpeciesDef species = SpeciesOf(npc);
             if (species == null || !species.Gear)
@@ -233,6 +233,49 @@ namespace Oxide.Plugins
             Data.WildGears[npc.skinID] = g;
             WildIndex[npc.skinID] = npc;
             return g;
+        }
+
+        internal bool IsFormSleeper(BaseEntity animal)
+        {
+            if (FormSleepers.Count == 0 && Data.Forms.Count == 0)
+            {
+                return false;
+            }
+            foreach (BaseCombatEntity sleeper in FormSleepers.Values)
+            {
+                if (sleeper == animal)
+                {
+                    return true;
+                }
+            }
+            if (animal.skinID >= TagBase)
+            {
+                foreach (FormRecord rec in Data.Forms.Values)
+                {
+                    if (rec.Tag == animal.skinID)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // A wild animal's inventory that is empty again is forgotten (it was only opened, or a give failed).
+        internal void ForgetEmptyWild(GearRecord g)
+        {
+            if (g == null || !GearEmpty(g) || openGears.Contains(g))
+            {
+                return;
+            }
+            foreach (KeyValuePair<ulong, GearRecord> pair in Data.WildGears.ToList())
+            {
+                if (pair.Value == g)
+                {
+                    Data.WildGears.Remove(pair.Key);
+                    WildIndex.Remove(pair.Key);
+                }
+            }
         }
 
         internal static bool GearEmpty(GearRecord g)
@@ -262,7 +305,7 @@ namespace Oxide.Plugins
             {
                 return lf.Gear;
             }
-            return d == null ? WildGearOf(animal, false) : null;
+            return WildGearOf(animal, false);           // a wild animal (also while somebody rides it)
         }
 
         internal int SaddleOf(BaseEntity animal)
@@ -285,7 +328,7 @@ namespace Oxide.Plugins
             if (gear == null && species != null && species.Gear && DriverOfAnimal(animal) == null)
             {
                 gear = WildGearOf(animal, create);
-                if (gear == null && !create && animal is BaseNPC2 && RecordOf(animal) == null)
+                if (gear == null && !create && animal is BaseNPC2 && RecordOf(animal) == null && !IsFormSleeper(animal) && !((BaseNPC2)animal).IsDead())
                 {
                     return null;                     // a wild animal: it gets an inventory as soon as somebody opens it
                 }
@@ -468,6 +511,7 @@ namespace Oxide.Plugins
                 rest.Remove();
             }
             RefreshSaddle(ctx.Animal);
+            ForgetEmptyWild(g);
             Tell(vb.Player, "GearSaved");
         }
 
@@ -1152,6 +1196,11 @@ namespace Oxide.Plugins
                         Bm.WildIndex.Remove(pair.Key);
                         continue;
                     }
+                    GearRecord seen;
+                    if (Bm.Data.WildGears.TryGetValue(pair.Key, out seen) && seen != null)
+                    {
+                        seen.Seen = new V3(npc.transform.position);
+                    }
                     if (wanted.Add(npc.net.ID.Value))
                     {
                         Bm.RefreshSaddle(npc);
@@ -1227,9 +1276,22 @@ namespace Oxide.Plugins
                     }
                     foreach (ulong tag in Bm.Data.WildGears.Keys.ToList())
                     {
-                        if (!found.Contains(tag))
+                        if (found.Contains(tag))
                         {
-                            Bm.Data.WildGears.Remove(tag);
+                            continue;
+                        }
+                        GearRecord gone = Bm.Data.WildGears[tag];
+                        Bm.Data.WildGears.Remove(tag);
+                        if (gone != null && !GearEmpty(gone))
+                        {
+                            if (gone.Seen != null)
+                            {
+                                Bm.DropGearRecord(gone, gone.Seen.Value + Vector3.up * 0.8f);       // the animal is gone: its things lie where it was last
+                            }
+                            else
+                            {
+                                Bm.Log(1, "A wild animal's inventory (tag " + tag + ") was lost: the animal is gone and no place is known.");
+                            }
                         }
                     }
                 });

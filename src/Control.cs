@@ -492,6 +492,7 @@ namespace Oxide.Plugins
             public bool Spectating;
             public float FeedPoseUntil;     // the grazing or drinking pose of E at food or water, until then (0 = none)
             private float stoppedSince;
+            private bool shiftSinceStop;
             public bool OwnsAnimal;         // the animal was made for this form and vanishes in smoke when the form ends
             public int Gait = 1;
             public bool Alive => !released;
@@ -1147,6 +1148,14 @@ namespace Oxide.Plugins
                 if (pressed(BUTTON.SPRINT))
                 {
                     braking = false;
+                    if (!fwd && Mathf.Abs(currentSpeed) < 0.3f && !shiftSinceStop)
+                    {
+                        Gait = 1;                          // standing: the gaits count up from a walk again
+                    }
+                    if (!fwd && Mathf.Abs(currentSpeed) < 0.3f)
+                    {
+                        shiftSinceStop = true;             // a gait chosen before moving off is kept
+                    }
                     SetGait(Mathf.Max(Gait, 1) + 1);
                 }
                 if (pressed(BUTTON.DUCK))
@@ -2440,7 +2449,7 @@ namespace Oxide.Plugins
                     {
                         stoppedSince = Time.time;
                     }
-                    else if (Time.time - stoppedSince > 0.6f && Gait > 1)
+                    else if (Time.time - stoppedSince > 0.6f && Gait > 1 && !shiftSinceStop)
                     {
                         Gait = 1;
                     }
@@ -2448,6 +2457,10 @@ namespace Oxide.Plugins
                 else
                 {
                     stoppedSince = 0f;
+                    if (fwd)
+                    {
+                        shiftSinceStop = false;
+                    }
                 }
                 if (Horse != null)
                 {
