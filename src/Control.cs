@@ -37,23 +37,6 @@ namespace Oxide.Plugins
             return null;
         }
 
-        // Ctrl is the brake of an animal form. The game takes the crouch of the player's own game from every tick it sends and shows it back to
-        // the player's camera (the camera of the animal form is the hidden body's eyes), so the camera sank with every press of Ctrl. The crouch
-        // is taken out of the tick before the game uses it.
-        private object OnPlayerTick(BasePlayer player, ProtoBuf.PlayerTick msg, bool wasPlayerStalled)
-        {
-            if (Drivers.Count == 0 || player == null || msg == null || msg.modelState == null || !msg.modelState.ducked)
-            {
-                return null;
-            }
-            Driver d;
-            if (Drivers.TryGetValue(player.userID, out d) && d != null && d.Kind == ControlKind.Form && d.Spectating)
-            {
-                msg.modelState.ducked = false;
-            }
-            return null;
-        }
-
         internal bool IsFormPlayer(BasePlayer player)
         {
             Driver d = DriverOf(player);

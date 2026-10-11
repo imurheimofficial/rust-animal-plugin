@@ -88,3 +88,10 @@ the crouch taken out of an animal form's ticks (no camera dip), a stamina bar of
 right in front of the head with a line-of-sight check, the horse saddle seat on the spine like the horse's own (with /bm seat
 forward|back), inventories for wild animals (kept by tag, handed to the owner when tamed, dropped at death), saddle models only on bones
 the game knows by name, /bm saddle diagnostics. Details (Czech) at the top of [AUDIT.md](AUDIT.md).
+
+## Version 1.2.2 (2026-10-11)
+
+1.2.1 did not compile on the server (`ProtoBuf.PlayerTick` / the `OnPlayerTick` hook do not exist in this game build); the hook and the
+crouch removal built on it are gone, the camera lift of 1.2.0 (Camera.DuckLift = 0.6) is back. New game names are now checked against the
+last version that compiled before every release.
+

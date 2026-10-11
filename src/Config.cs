@@ -98,7 +98,7 @@ namespace Oxide.Plugins
             [JsonProperty("First person: height of the eyes as a share of the animal's height")] public float EyeHeight = 0.98f;
             [JsonProperty("First person: how far forward the eyes sit (share of the distance from the middle of the body to the nose)")] public float EyeForward = 0.58f;
             [JsonProperty("Height of the camera pivot as a share of the animal's height (every species also has its own factor)")] public float PivotHeight = 0.95f;
-            [JsonProperty("Animal form: lift the hidden body by this much while Ctrl (the brake) is held, should the camera still sink in your game build (m, 0 = off)")] public float DuckLift = 0f;
+            [JsonProperty("Animal form: the game lowers the camera of a crouching player; Ctrl (the brake) lifts the hidden body by this much so the camera stays (m, 0 = off)")] public float DuckLift = 0.6f;
             [JsonProperty("Animal form: refresh the network subscriptions when the form begins and ends (makes the game load the surroundings again; switch on only if other players stay unseen in animal form)")] public bool RefreshSubscriptions = false;
             [JsonProperty("First person of the animal form (spectate = the human is completely invisible, seat = hidden seat, legs may show)")] public string FirstPersonMode = "spectate";
             [JsonProperty("Seat of the hidden body when the first person mode is seat")] public string FirstPersonSeat = "assets/bundled/prefabs/static/chair.invisible.static.prefab";

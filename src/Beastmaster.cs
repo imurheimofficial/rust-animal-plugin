@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Beastmaster", "Claude", "1.2.1")]
+    [Info("Beastmaster", "Claude", "1.2.2")]
     [Description("Ride, tame, command and become animals: horses, livestock, predators and small creatures.")]
     public partial class Beastmaster : RustPlugin
     {

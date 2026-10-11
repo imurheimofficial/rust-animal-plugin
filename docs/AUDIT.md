@@ -1,3 +1,15 @@
+# Změny verze 1.2.2 (2026-10-11)
+
+Verze 1.2.1 se na serveru nepřeložila: `The type or namespace name 'PlayerTick' does not exist in the namespace 'ProtoBuf'`.
+
+* **Příčina:** pro Ctrl jsem v 1.2.1 použil herní událost `OnPlayerTick` s typem `ProtoBuf.PlayerTick`. Tvoje verze hry takovou událost nemá (v seznamu událostí, který je v repu v `docs/_data`, není). Můj kontrolní překlad herní knihovny nemá, takže u neznámých herních názvů nic nehlásí a tohle nepoznal.
+* **Oprava:** událost jsem odstranil. Plugin teď porovnává každou verzi s předchozí, která se přeložila, a všechno nové z her ručně ověřím. Takhle jsem teď prošel nové názvy tříd, metod, vlastností i polí. Nové věci z her jsou jen `Physics.Linecast`, `Transform.TransformVector` a `StringPool.Get`, všechny tři v Rustu a Unity existují.
+* **Ctrl a kamera:** opravu z 1.2.1 nejde udělat (chybí událost, na které stála). Zůstává stejné řešení jako ve verzi 1.2.0: při držení Ctrl se skryté tělo zvedne o 0,6 m (Camera → DuckLift). Jestli to kameru drží, nevím. Ve 1.2.0 jsi psal, že klesá. Napiš mi prosím, jak to vypadá teď: klesne hned, nebo se trhne nahoru?
+
+Všechno ostatní z 1.2.1 (rychlosti koně, krev, ochočení koně, vyhledávání dveří, sedadlo, inventáře divokých zvířat) platí dál.
+
+---
+
 # Změny verze 1.2.1 (2026-10-11)
 
 Opravy z tvého testu verze 1.2.0. Ve hře jsem je nezkoušel. Kód jsem zkontroloval překladačem bez knihoven Rustu, jako minule.
@@ -9,7 +21,7 @@ Některé příčiny jsem ověřil v datech hry, která jsou v repu (`docs/_data
 | Zvíře jede sprintem jen s W. | Zvolený krok zůstával i po zastavení: po sprintu a zastavení jelo W hned zase sprintem. | Když zvíře zastaví, další W jde zase krokem. Rychlost přidává Shift. |
 | Útok na zvíře často netrefí a neteče krev. | Zásah se měřil přímou vzdáleností od čumáku (0,6 m), takže menší nebo níž stojící zvíře minul. Krev se nepouštěla, jen zvuk úderu. | Dosah je 1 m před čumákem a měří se vodorovně, s tolerancí na výšku. Při každém zásahu živého těla (útok, náraz, kůň) teče krev. Je to herní efekt zásahu do masa. |
 | Spawnutý kůň tě divně pronásleduje. | Agresivní kůň útočil pořád dokola, dokud jsi byl do 14 m, a utéct mu nešlo. | Agresivní kůň zaútočí jako beran: krátký rozběh (nejvýš 6 s), jeden náraz, proběhne a pak tě 25 s nechá být. |
-| Ctrl posouvá kameru dolů. | Hra vracela tvé přikrčení zpátky do kamery dřív, než ho plugin stihl zrušit. Navíc minulá úprava (zvednutí o 0,6 m) přidávala poskakování. | Přikrčení se ruší hned, jak tvůj tik přijde na server, dřív než ho hra použije. Zvedání je vypnuté (Camera → DuckLift = 0). |
+| Ctrl posouvá kameru dolů. | (V 1.2.1 jsem tu slíbil jiné řešení, které se nepřeložilo. Viz verze 1.2.2 výše: zůstává zvednutí těla o 0,6 m jako ve 1.2.0.) | Zvednutí o 0,6 m při držení Ctrl (Camera → DuckLift). Nepotvrzeno. |
 | Stamina lišta: pryč nápis, velikost jako herní lišty. | Lišta byla širší a měla nápis. | Jen žlutá výplň a číslo. Velikost je 192 × 24 px jako herní lišty a jde nastavit (Stamina → BarRight, BarBottom, BarWidth, BarHeight). |
 | Kůň píše „Occupied“. | Tohle píše sama hra na koni bez sedla (nemá volné místo). Plugin text hry změnit nemůže. | Pod nápisem teď vidíš, jak daleko je ochočení (viz další řádek). Jakmile má kůň sedlo, hra píše jízdu. |
 | Kůň se ochočí za 20 s, když stojíš u něj. | Bylo potřeba 300 s a pak stisknout E. | Stůj do 6 m od klidného divokého koně 20 s (Horse → BondSeconds) a je tvůj, bez klávesy. Na obrazovce běží „Taming the horse: 12 / 20 s“. Plachý kůň utíká, agresivního nejdřív uspi šipkou. |

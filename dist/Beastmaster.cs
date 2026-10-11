@@ -20,7 +20,7 @@ using UnityEngine;
 namespace Oxide.Plugins
 {
     // ======================================== Beastmaster.cs
-    [Info("Beastmaster", "Claude", "1.2.1")]
+    [Info("Beastmaster", "Claude", "1.2.2")]
     [Description("Ride, tame, command and become animals: horses, livestock, predators and small creatures.")]
     public partial class Beastmaster : RustPlugin
     {
@@ -3622,7 +3622,7 @@ namespace Oxide.Plugins
             [JsonProperty("First person: height of the eyes as a share of the animal's height")] public float EyeHeight = 0.98f;
             [JsonProperty("First person: how far forward the eyes sit (share of the distance from the middle of the body to the nose)")] public float EyeForward = 0.58f;
             [JsonProperty("Height of the camera pivot as a share of the animal's height (every species also has its own factor)")] public float PivotHeight = 0.95f;
-            [JsonProperty("Animal form: lift the hidden body by this much while Ctrl (the brake) is held, should the camera still sink in your game build (m, 0 = off)")] public float DuckLift = 0f;
+            [JsonProperty("Animal form: the game lowers the camera of a crouching player; Ctrl (the brake) lifts the hidden body by this much so the camera stays (m, 0 = off)")] public float DuckLift = 0.6f;
             [JsonProperty("Animal form: refresh the network subscriptions when the form begins and ends (makes the game load the surroundings again; switch on only if other players stay unseen in animal form)")] public bool RefreshSubscriptions = false;
             [JsonProperty("First person of the animal form (spectate = the human is completely invisible, seat = hidden seat, legs may show)")] public string FirstPersonMode = "spectate";
             [JsonProperty("Seat of the hidden body when the first person mode is seat")] public string FirstPersonSeat = "assets/bundled/prefabs/static/chair.invisible.static.prefab";
@@ -3990,23 +3990,6 @@ namespace Oxide.Plugins
                 {
                     return d;
                 }
-            }
-            return null;
-        }
-
-        // Ctrl is the brake of an animal form. The game takes the crouch of the player's own game from every tick it sends and shows it back to
-        // the player's camera (the camera of the animal form is the hidden body's eyes), so the camera sank with every press of Ctrl. The crouch
-        // is taken out of the tick before the game uses it.
-        private object OnPlayerTick(BasePlayer player, ProtoBuf.PlayerTick msg, bool wasPlayerStalled)
-        {
-            if (Drivers.Count == 0 || player == null || msg == null || msg.modelState == null || !msg.modelState.ducked)
-            {
-                return null;
-            }
-            Driver d;
-            if (Drivers.TryGetValue(player.userID, out d) && d != null && d.Kind == ControlKind.Form && d.Spectating)
-            {
-                msg.modelState.ducked = false;
             }
             return null;
         }
