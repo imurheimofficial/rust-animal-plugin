@@ -1,3 +1,16 @@
+# Změny verze 1.2.9 (2026-10-11)
+
+Tvůj test 1.2.8.
+
+* **Control:** zvíře pod kontrolou otevře příkazy tlačítkem E i zblízka (dřív jen z dálky, proto se zdálo, že nefunguje). Podržené E zblízka má pořád nabídku s Ride a s přepínačem Control. Výzva „E Control“ se ukazuje při pohledu na zvíře do 50 m.
+* **Proměna:** příkaz `bm.form` a tlačítko „Become it“ v menu fungují zase adminům. Ostatní hráči se mění jen přes rituál.
+* **Jezdec nebije zvíře pod sebou:** zbraň v ruce při jízdě netrefí zvíře ani vlastní sedadlo, takže na zádech nejsou krev ani jiskry.
+* **Reskin:** jen u zvířete (okno otevře R, výzva „R Skin“, jen vlastní nebo týmové zvíře a admin) nebo za zvíře (podržené R). Při jízdě už R jen přepíná pohled. Myš se při klikání nesune, okno si drží kurzor a překresluje se jen obsah.
+* **Barvy zvířete:** zpátky. Dvě řady tlačítek (Colour 1 a 2) po vzoru plemen koně, jen markery, které hra rozdává. Když jich hra rozdá méně než dva, nabídne se všech 16. Počet markerů se píše do logu.
+* **Divocí koně:** jsou jako v původní hře, se sedlem a rovnou k jízdě. Koně, kterým dřívější verze sedlo vzala, ho při startu serveru dostanou zpět.
+
+---
+
 # Změny verze 1.2.8 (2026-10-11)
 
 Tvůj test 1.2.7.

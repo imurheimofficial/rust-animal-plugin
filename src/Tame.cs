@@ -424,14 +424,15 @@ namespace Oxide.Plugins
             }
             bool crouch = player.serverInput.IsDown(BUTTON.DUCK);
             BaseNPC2 animal = AnimalInSight(player, Cfg.Riding.MountDistance, 20f);
+            BaseNPC2 controlledSeen = ControlledAnimalInSight(player);
+            if (controlledSeen != null && (animal == null || animal == controlledSeen))
+            {
+                // an animal under control: E opens its orders (near or far); held E near it still has the menu
+                usePresses[player.userID] = new UsePress { Target = controlledSeen, Start = Time.time, Crouch = crouch, Wheel = true };
+                return;
+            }
             if (animal == null)
             {
-                BaseNPC2 far = ControlledAnimalInSight(player);
-                if (far != null)
-                {
-                    usePresses[player.userID] = new UsePress { Target = far, Start = Time.time, Crouch = crouch, Wheel = true };
-                    return;
-                }
                 RidableHorse horse = HorseInSight(player, Cfg.Riding.MountDistance + 1f, 20f);
                 if (horse != null)
                 {
@@ -458,7 +459,7 @@ namespace Oxide.Plugins
             {
                 return;
             }
-            if (press.Wheel)
+            if (press.Wheel && Vector3.Distance(player.transform.position, press.Target.transform.position) > Cfg.Riding.MountDistance + 0.5f)
             {
                 ShowWheel(player, press.Target);
                 return;
@@ -997,6 +998,10 @@ namespace Oxide.Plugins
                 {
                     Bm.useDown.Remove(player.userID);
                     Bm.UseReleased(player);
+                }
+                if (input.WasJustPressed(BUTTON.RELOAD) && !input.IsDown(BUTTON.DUCK) && Bm.Active)
+                {
+                    Bm.SkinKey(player);                     // R at an animal whose look the player may change: the window of looks
                 }
                 if (!Bm.Cfg.Features.Commands)
                 {

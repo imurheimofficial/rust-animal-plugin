@@ -402,6 +402,10 @@ namespace Oxide.Plugins
                     if (horse != null && horse.skinID >= TagBase && (Bm.Data.Horses.ContainsKey(horse.skinID) || Bm.Data.Tamed.ContainsKey(horse.skinID)))
                     {
                         Register(horse);
+                        if (!Bm.Cfg.Horse.WildUnsaddled && Bm.Cfg.Features.Taming && !Bm.Data.Tamed.ContainsKey(horse.skinID) && Bm.BossOf(horse) == null && SeatsOf(horse) <= 0 && !HasSaddleItem(horse) && !horse.AnyMounted())
+                        {
+                            GiveSaddle(horse, 1);            // horses are as in the game: an earlier release took the saddle, it is given back
+                        }
                         if (Bm.Cfg.Horse.WildUnsaddled && Bm.Cfg.Features.Taming && !Bm.Data.Tamed.ContainsKey(horse.skinID) && Bm.BossOf(horse) == null && SeatsOf(horse) > 0 && !HasSaddleItem(horse) && !horse.AnyMounted())
                         {
                             SetSeats(horse, 0);          // a reload gave it the game's saddle back; it is wild again
@@ -1412,8 +1416,7 @@ namespace Oxide.Plugins
                 {
                     if (input.IsDown(BUTTON.RELOAD) && Time.time - since >= 0.45f)
                     {
-                        rDown.Remove(player.userID);
-                        Bm.OpenSkinMenu(player, horse);
+                        rDown.Remove(player.userID);            // held R does nothing on the horse (the skin: R at the animal, or as an animal)
                     }
                     else if (!input.IsDown(BUTTON.RELOAD))
                     {

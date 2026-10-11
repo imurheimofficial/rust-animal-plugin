@@ -33,6 +33,14 @@ namespace Oxide.Plugins
                     seen.Add(LivestockGenome.RollMarker());
                 }
                 markerPool = seen.OrderBy(x => x).ToArray();
+                if (markerPool.Length < 2)
+                {
+                    markerPool = Enumerable.Range(0, 16).ToArray();          // the game rolled too few to tell: all of its marker numbers
+                }
+                if (Instance != null)
+                {
+                    Instance.Log(2, "Skin window: " + markerPool.Length + " coat markers.");
+                }
             }
             return markerPool;
         }
@@ -88,27 +96,61 @@ namespace Oxide.Plugins
         private sealed class SkinState
         {
             public BaseEntity Target;
-            public int ColourA, ColourB, Pattern;
+            public int ColourA = -1, ColourB = -1, Pattern;
             public float Until;
+            public bool Drawn;
         }
 
         private readonly Dictionary<ulong, SkinState> skinMenus = new Dictionary<ulong, SkinState>();
 
-        // May this player change the look of that animal right now? (he is it, rides it, or rides the horse)
+        // May this player change the look of that animal right now? He plays it as an animal, or he stands at a tamed animal of his (or his team's).
         private bool MaySkin(BasePlayer player, BaseEntity animal)
         {
-            if (player == null || !Valid(animal))
+            if (player == null || !Valid(animal) || !(animal is RidableHorse || animal is LivestockAnimal))
             {
                 return false;
             }
             Driver d = DriverOf(player);
-            if (d != null && d.Body == animal)
+            if (d != null)
             {
-                return true;
+                return d.Kind == ControlKind.Form && d.Body == animal;
             }
-            BaseMountable seat = player.GetMounted();
-            RidableHorse horse = animal as RidableHorse;
-            return horse != null && seat != null && (seat == horse || seat.GetParentEntity() == horse) && horse.GetDriver() == player;
+            if (player.isMounted || player.IsDead() || player.IsSleeping())
+            {
+                return false;
+            }
+            TamedRecord rec = RecordOf(animal);
+            if (!(IsAdmin(player) || (rec != null && MayUse(player, rec.Owner, "team"))))
+            {
+                return false;
+            }
+            return Vector3.Distance(player.transform.position, animal.transform.position) <= Cfg.Riding.MountDistance + 5f;
+        }
+
+        // The animal the player stands at (looks at, close by) whose look he may change: R shows and opens the window.
+        internal BaseEntity SkinTargetInSight(BasePlayer player)
+        {
+            if (player == null || DriverOf(player) != null || player.isMounted)
+            {
+                return null;
+            }
+            Item held = player.GetActiveItem();
+            if (held != null && held.GetHeldEntity() is BaseProjectile)
+            {
+                return null;                                         // R reloads a weapon
+            }
+            float reach = Cfg.Riding.MountDistance + 2f;
+            BaseEntity target = AnimalInSight(player, reach, 25f) as BaseEntity ?? HorseInSight(player, reach, 25f);
+            return target != null && MaySkin(player, target) ? target : null;
+        }
+
+        internal void SkinKey(BasePlayer player)
+        {
+            BaseEntity target = SkinTargetInSight(player);
+            if (target != null)
+            {
+                OpenSkinMenu(player, target);
+            }
         }
 
         internal void OpenSkinMenu(BasePlayer player, BaseEntity animal)
@@ -127,21 +169,32 @@ namespace Oxide.Plugins
             SkinState st;
             if (!skinMenus.TryGetValue(player.userID, out st) || st.Target != animal)
             {
-                st = new SkinState { Target = animal, ColourA = 0, ColourB = 1, Pattern = livestock != null ? Mathf.Max(0, Array.IndexOf(SprayNames, livestock.AnimalName)) : 0 };
+                st = new SkinState { Target = animal, ColourA = -1, ColourB = -1, Pattern = livestock != null ? Mathf.Max(0, Array.IndexOf(SprayNames, livestock.AnimalName)) : 0 };
                 skinMenus[player.userID] = st;
             }
             st.Until = Time.time + 30f;
             DrawSkinMenu(player, st);
         }
 
+        // The window keeps its cursor panel: only its content is drawn again after a click, so that the mouse stays where it is.
         private void DrawSkinMenu(BasePlayer player, SkinState st)
         {
-            CuiHelper.DestroyUi(player, SkinUi);
             var c = new CuiElementContainer();
+            if (!st.Drawn)
+            {
+                CuiHelper.DestroyUi(player, SkinUi);
+                c.Add(new CuiPanel { Image = { Color = "0 0 0 0.75" }, RectTransform = { AnchorMin = "0.34 0.26", AnchorMax = "0.66 0.74" }, CursorEnabled = true }, "Overlay", SkinUi);
+                st.Drawn = true;
+            }
+            else
+            {
+                CuiHelper.DestroyUi(player, SkinUi + ".c");
+            }
+            string root = SkinUi + ".c";
+            c.Add(new CuiPanel { Image = { Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" } }, SkinUi, root);
             RidableHorse horse = st.Target as RidableHorse;
             SpeciesDef species = SpeciesOf(st.Target);
-            c.Add(new CuiPanel { Image = { Color = "0 0 0 0.75" }, RectTransform = { AnchorMin = "0.36 0.3", AnchorMax = "0.64 0.72" }, CursorEnabled = true }, "Overlay", SkinUi);
-            UiLabel(c, SkinUi, "<b>Look of the " + (species != null ? species.Display.ToLowerInvariant() : "animal") + "</b>", 15, 0.04f, 0.88f, 0.96f, 0.98f, TextAnchor.MiddleCenter);
+            UiLabel(c, root, "<b>Look of the " + (species != null ? species.Display.ToLowerInvariant() : "animal") + "</b>", 15, 0.04f, 0.90f, 0.96f, 0.98f, TextAnchor.MiddleCenter);
             if (horse != null)
             {
                 int current = horse.GetBreed() != null ? Array.IndexOf(horse.breeds, horse.GetBreed()) : -1;
@@ -149,28 +202,32 @@ namespace Oxide.Plugins
                 for (int i = 0; i < n; i++)
                 {
                     int col = i % 2, row = i / 2;
-                    float x0 = 0.05f + col * 0.46f, y1 = 0.85f - row * 0.13f;
+                    float x0 = 0.05f + col * 0.46f, y1 = 0.87f - row * 0.11f;
                     string name = horse.breeds[i] != null ? horse.breeds[i].name : "Breed " + (i + 1);
-                    UiButton(c, SkinUi, name, "bm.ui skin breed " + i, x0, y1 - 0.11f, x0 + 0.44f, y1, i == current ? ColOn : ColBtn, 12);
+                    UiButton(c, root, name, "bm.ui skin breed " + i, x0, y1 - 0.09f, x0 + 0.44f, y1, i == current ? ColOn : ColBtn, 12);
                 }
             }
             else
             {
-                Action<string, string, float> row = (label, cmd, y) =>
+                // the two colours of the coat, each as a row of buttons like the horse's breeds: only the markers that exist in the game
+                int[] pool = MarkerPool();
+                int count = pool.Length;
+                const int perRow = 8;
+                for (int section = 0; section < 2; section++)
                 {
-                    UiLabel(c, SkinUi, label, 13, 0.05f, y - 0.1f, 0.5f, y, TextAnchor.MiddleLeft);
-                    UiButton(c, SkinUi, "<", "bm.ui skin " + cmd + " -1", 0.55f, y - 0.1f, 0.7f, y, ColBtn, 14);
-                    UiButton(c, SkinUi, ">", "bm.ui skin " + cmd + " 1", 0.78f, y - 0.1f, 0.93f, y, ColBtn, 14);
-                };
-                int count = MarkerPool().Length;
-                if (count > 1)
-                {
-                    row("Colour 1:  " + (st.ColourA % count + 1) + " / " + count, "a", 0.82f);
-                    row("Colour 2:  " + (st.ColourB % count + 1) + " / " + count, "b", 0.66f);
+                    int chosen = section == 0 ? st.ColourA : st.ColourB;
+                    float top = section == 0 ? 0.86f : 0.54f;
+                    UiLabel(c, root, section == 0 ? "Colour 1" : "Colour 2", 13, 0.05f, top - 0.07f, 0.6f, top, TextAnchor.MiddleLeft);
+                    for (int i = 0; i < count; i++)
+                    {
+                        int col = i % perRow, row = i / perRow;
+                        float x0 = 0.04f + col * 0.12f, y1 = top - 0.09f - row * 0.095f;
+                        UiButton(c, root, (i + 1).ToString(), "bm.ui skin " + (section == 0 ? "a " : "b ") + i, x0, y1 - 0.08f, x0 + 0.105f, y1, i == chosen ? ColOn : ColBtn, 12);
+                    }
                 }
-                UiButton(c, SkinUi, "Random look", "bm.ui skin random", 0.20f, 0.30f, 0.80f, 0.43f, ColBtn, 12);
+                UiButton(c, root, "Random look", "bm.ui skin random", 0.05f, 0.13f, 0.47f, 0.24f, ColBtn, 12);
             }
-            UiButton(c, SkinUi, "Close", "bm.ui skin close", 0.35f, 0.04f, 0.65f, 0.14f, ColOff, 12);
+            UiButton(c, root, "Close", "bm.ui skin close", horse != null ? 0.35f : 0.53f, 0.13f, horse != null ? 0.65f : 0.95f, 0.24f, ColOff, 12);
             CuiHelper.AddUi(player, c);
         }
 
@@ -219,15 +276,17 @@ namespace Oxide.Plugins
                         {
                             int[] pool = MarkerPool();
                             int count = pool.Length;
+                            int pick = Mathf.Clamp(step, 0, count - 1);
                             if (what == "a")
                             {
-                                st.ColourA = (st.ColourA % count + (step < 0 ? count - 1 : 1)) % count;
+                                st.ColourA = pick;
                             }
                             else
                             {
-                                st.ColourB = (st.ColourB % count + (step < 0 ? count - 1 : 1)) % count;
+                                st.ColourB = pick;
                             }
-                            livestock.Genes = LivestockGenome.WithMarkers(livestock.Genes, pool[st.ColourA % count], pool[st.ColourB % count]);
+                            int a = st.ColourA >= 0 ? st.ColourA : 0, b = st.ColourB >= 0 ? st.ColourB : Mathf.Min(1, count - 1);
+                            livestock.Genes = LivestockGenome.WithMarkers(livestock.Genes, pool[a], pool[b]);
                             break;
                         }
                     case "random":

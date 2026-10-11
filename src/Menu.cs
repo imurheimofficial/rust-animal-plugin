@@ -918,6 +918,7 @@ namespace Oxide.Plugins
             string[][] tools =
             {
                 new[] { "Ride it", "ride", "Mount it as a rider (admins ride any animal)" },
+                new[] { "Become it", "form", "Take its body as an animal form (admins; X to return)" },
                 new[] { "Tame it to me", "tame", "Make it yours" },
                 new[] { "Release it", "release", "Free an animal of yours" },
                 new[] { "Kill it", "kill", "Kills it at once" },

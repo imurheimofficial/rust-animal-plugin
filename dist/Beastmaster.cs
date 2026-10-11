@@ -20,7 +20,7 @@ using UnityEngine;
 namespace Oxide.Plugins
 {
     // ======================================== Beastmaster.cs
-    [Info("Beastmaster", "Claude", "1.2.8")]
+    [Info("Beastmaster", "Claude", "1.2.9")]
     [Description("Ride, tame, command and become animals: horses, livestock, predators and small creatures.")]
     public partial class Beastmaster : RustPlugin
     {
@@ -4192,10 +4192,10 @@ namespace Oxide.Plugins
 
         internal bool StartControl(BasePlayer player, BaseCombatEntity animal, ControlKind kind, bool silent = false, bool ritual = false)
         {
-            if (kind == ControlKind.Form && !ritual)
+            if (kind == ControlKind.Form && !ritual && !IsAdmin(player))
             {
-                // fixed rule: a player becomes an animal only through the ritual (a killed animal, the torch, the fire), or by going back into
-                // the animal he has left; no command, no menu button and no permission gives it
+                // fixed rule: a player becomes an animal through the transformation ritual (a killed animal, the torch, the fire) or by going back
+                // into the animal he has left; only an admin has the commands (bm.form, the menu button) that skip the ritual
                 if (!silent)
                 {
                     TellRaw(player, "You can become an animal only through the transformation ritual: kill the animal first, then perform the ritual at its body.");
@@ -5238,10 +5238,10 @@ namespace Oxide.Plugins
                     rDownSince = Time.time;
                     rHoldDone = false;
                 }
-                if (rDownSince > 0f && IsSet(now, BUTTON.RELOAD) && !rHoldDone && Time.time - rDownSince >= 0.45f)
+                if (Kind == ControlKind.Form && rDownSince > 0f && IsSet(now, BUTTON.RELOAD) && !rHoldDone && Time.time - rDownSince >= 0.45f)
                 {
                     rHoldDone = true;
-                    bm.OpenSkinMenu(Player, Body);
+                    bm.OpenSkinMenu(Player, Body);          // as an animal: held R opens the window of looks (standing at an animal: R)
                 }
                 if (rDownSince > 0f && !IsSet(now, BUTTON.RELOAD))
                 {
@@ -10345,6 +10345,10 @@ namespace Oxide.Plugins
                     if (horse != null && horse.skinID >= TagBase && (Bm.Data.Horses.ContainsKey(horse.skinID) || Bm.Data.Tamed.ContainsKey(horse.skinID)))
                     {
                         Register(horse);
+                        if (!Bm.Cfg.Horse.WildUnsaddled && Bm.Cfg.Features.Taming && !Bm.Data.Tamed.ContainsKey(horse.skinID) && Bm.BossOf(horse) == null && SeatsOf(horse) <= 0 && !HasSaddleItem(horse) && !horse.AnyMounted())
+                        {
+                            GiveSaddle(horse, 1);            // horses are as in the game: an earlier release took the saddle, it is given back
+                        }
                         if (Bm.Cfg.Horse.WildUnsaddled && Bm.Cfg.Features.Taming && !Bm.Data.Tamed.ContainsKey(horse.skinID) && Bm.BossOf(horse) == null && SeatsOf(horse) > 0 && !HasSaddleItem(horse) && !horse.AnyMounted())
                         {
                             SetSeats(horse, 0);          // a reload gave it the game's saddle back; it is wild again
@@ -11355,8 +11359,7 @@ namespace Oxide.Plugins
                 {
                     if (input.IsDown(BUTTON.RELOAD) && Time.time - since >= 0.45f)
                     {
-                        rDown.Remove(player.userID);
-                        Bm.OpenSkinMenu(player, horse);
+                        rDown.Remove(player.userID);            // held R does nothing on the horse (the skin: R at the animal, or as an animal)
                     }
                     else if (!input.IsDown(BUTTON.RELOAD))
                     {
@@ -12723,6 +12726,18 @@ namespace Oxide.Plugins
                         }
                     }
                 }
+                // a player who stands at an animal whose look he may change: R opens the window of looks
+                if (Bm.Cfg.Life.Prompts)
+                {
+                    foreach (BasePlayer p in BasePlayer.activePlayerList)
+                    {
+                        if (p != null && !shown.Contains(p.userID) && p.IsConnected && !p.IsDead() && Bm.SkinTargetInSight(p) != null)
+                        {
+                            Draw(p, "Skin", true, "R");
+                            shown.Add(p.userID);
+                        }
+                    }
+                }
                 // a player standing near a wild horse sees how far the taming is (the game itself only writes "Occupied" on a horse without a saddle)
                 if (Bm.Stable != null && Bm.Cfg.Features.Taming)
                 {
@@ -12785,7 +12800,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            private void Draw(BasePlayer p, string text, bool key)
+            private void Draw(BasePlayer p, string text, bool key, string keyName = "E")
             {
                 string old;
                 if (prompts.TryGetValue(p.userID, out old) && old == text)
@@ -12807,7 +12822,7 @@ namespace Oxide.Plugins
                 }, "Overlay", PromptUi);
                 c.Add(new CuiLabel
                 {
-                    Text = { Text = (key ? "<color=#e8c35a><b>E</b></color>   " : string.Empty) + text, FontSize = 15, Align = TextAnchor.MiddleCenter, Color = "1 1 1 0.95" },
+                    Text = { Text = (key ? "<color=#e8c35a><b>" + keyName + "</b></color>   " : string.Empty) + text, FontSize = 15, Align = TextAnchor.MiddleCenter, Color = "1 1 1 0.95" },
                     RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }
                 }, PromptUi);
                 CuiHelper.AddUi(p, c);
@@ -14092,6 +14107,7 @@ namespace Oxide.Plugins
             string[][] tools =
             {
                 new[] { "Ride it", "ride", "Mount it as a rider (admins ride any animal)" },
+                new[] { "Become it", "form", "Take its body as an animal form (admins; X to return)" },
                 new[] { "Tame it to me", "tame", "Make it yours" },
                 new[] { "Release it", "release", "Free an animal of yours" },
                 new[] { "Kill it", "kill", "Kills it at once" },
@@ -15051,8 +15067,7 @@ namespace Oxide.Plugins
         // The prompt "E Control" for a player who looks at an animal he controls from afar (near it, E rides it and hold E has the menu).
         internal bool ControlPromptFor(BasePlayer player)
         {
-            BaseNPC2 a = ControlledAnimalInSight(player);
-            return a != null && Vector3.Distance(player.transform.position, a.transform.position) > Cfg.Riding.MountDistance + 0.5f;
+            return ControlledAnimalInSight(player) != null;
         }
 
         internal void ShowWheel(BasePlayer player, BaseNPC2 animal)
@@ -15463,6 +15478,29 @@ namespace Oxide.Plugins
             public override int Order => 63;
             private float nextCheck;
 
+            public override void Init(Beastmaster bm)
+            {
+                base.Init(bm);
+                bm.Subscribe("OnPlayerAttack");
+            }
+
+            // Whoever sits on an animal never hits it (no blood, no sparks, no damage on his own seat): a weapon in his hands hit the mount.
+            public override object OnPlayerAttack(BasePlayer attacker, HitInfo info)
+            {
+                if (attacker == null || info == null || !attacker.isMounted)
+                {
+                    return null;
+                }
+                BaseMountable seat = attacker.GetMounted();
+                BaseEntity hit = info.HitEntity;
+                if (seat == null || hit == null)
+                {
+                    return null;
+                }
+                BaseEntity mount = seat.GetParentEntity();
+                return hit == seat || (mount != null && (hit == mount || hit.GetParentEntity() == mount)) ? (object)true : null;
+            }
+
             public override void Tick(float now)
             {
                 if (Bm.wheels.Count == 0 || now < nextCheck)
@@ -15515,6 +15553,14 @@ namespace Oxide.Plugins
                     return null;
                 }
                 BasePlayer attacker = info.InitiatorPlayer;
+                if (attacker != null && attacker.isMounted && entity is BaseNPC2)
+                {
+                    BaseMountable sitting = attacker.GetMounted();
+                    if (sitting != null && sitting.GetParentEntity() == entity)
+                    {
+                        return true;                       // a rider cannot hurt the animal he sits on
+                    }
+                }
                 TamedRecord rec = Bm.RecordOf(entity);
                 if (rec != null && attacker != null && attacker.userID == rec.Owner && Bm.DriverOfAnimal(entity) == null)
                 {
@@ -17317,6 +17363,14 @@ namespace Oxide.Plugins
                     seen.Add(LivestockGenome.RollMarker());
                 }
                 markerPool = seen.OrderBy(x => x).ToArray();
+                if (markerPool.Length < 2)
+                {
+                    markerPool = Enumerable.Range(0, 16).ToArray();          // the game rolled too few to tell: all of its marker numbers
+                }
+                if (Instance != null)
+                {
+                    Instance.Log(2, "Skin window: " + markerPool.Length + " coat markers.");
+                }
             }
             return markerPool;
         }
@@ -17372,27 +17426,61 @@ namespace Oxide.Plugins
         private sealed class SkinState
         {
             public BaseEntity Target;
-            public int ColourA, ColourB, Pattern;
+            public int ColourA = -1, ColourB = -1, Pattern;
             public float Until;
+            public bool Drawn;
         }
 
         private readonly Dictionary<ulong, SkinState> skinMenus = new Dictionary<ulong, SkinState>();
 
-        // May this player change the look of that animal right now? (he is it, rides it, or rides the horse)
+        // May this player change the look of that animal right now? He plays it as an animal, or he stands at a tamed animal of his (or his team's).
         private bool MaySkin(BasePlayer player, BaseEntity animal)
         {
-            if (player == null || !Valid(animal))
+            if (player == null || !Valid(animal) || !(animal is RidableHorse || animal is LivestockAnimal))
             {
                 return false;
             }
             Driver d = DriverOf(player);
-            if (d != null && d.Body == animal)
+            if (d != null)
             {
-                return true;
+                return d.Kind == ControlKind.Form && d.Body == animal;
             }
-            BaseMountable seat = player.GetMounted();
-            RidableHorse horse = animal as RidableHorse;
-            return horse != null && seat != null && (seat == horse || seat.GetParentEntity() == horse) && horse.GetDriver() == player;
+            if (player.isMounted || player.IsDead() || player.IsSleeping())
+            {
+                return false;
+            }
+            TamedRecord rec = RecordOf(animal);
+            if (!(IsAdmin(player) || (rec != null && MayUse(player, rec.Owner, "team"))))
+            {
+                return false;
+            }
+            return Vector3.Distance(player.transform.position, animal.transform.position) <= Cfg.Riding.MountDistance + 5f;
+        }
+
+        // The animal the player stands at (looks at, close by) whose look he may change: R shows and opens the window.
+        internal BaseEntity SkinTargetInSight(BasePlayer player)
+        {
+            if (player == null || DriverOf(player) != null || player.isMounted)
+            {
+                return null;
+            }
+            Item held = player.GetActiveItem();
+            if (held != null && held.GetHeldEntity() is BaseProjectile)
+            {
+                return null;                                         // R reloads a weapon
+            }
+            float reach = Cfg.Riding.MountDistance + 2f;
+            BaseEntity target = AnimalInSight(player, reach, 25f) as BaseEntity ?? HorseInSight(player, reach, 25f);
+            return target != null && MaySkin(player, target) ? target : null;
+        }
+
+        internal void SkinKey(BasePlayer player)
+        {
+            BaseEntity target = SkinTargetInSight(player);
+            if (target != null)
+            {
+                OpenSkinMenu(player, target);
+            }
         }
 
         internal void OpenSkinMenu(BasePlayer player, BaseEntity animal)
@@ -17411,21 +17499,32 @@ namespace Oxide.Plugins
             SkinState st;
             if (!skinMenus.TryGetValue(player.userID, out st) || st.Target != animal)
             {
-                st = new SkinState { Target = animal, ColourA = 0, ColourB = 1, Pattern = livestock != null ? Mathf.Max(0, Array.IndexOf(SprayNames, livestock.AnimalName)) : 0 };
+                st = new SkinState { Target = animal, ColourA = -1, ColourB = -1, Pattern = livestock != null ? Mathf.Max(0, Array.IndexOf(SprayNames, livestock.AnimalName)) : 0 };
                 skinMenus[player.userID] = st;
             }
             st.Until = Time.time + 30f;
             DrawSkinMenu(player, st);
         }
 
+        // The window keeps its cursor panel: only its content is drawn again after a click, so that the mouse stays where it is.
         private void DrawSkinMenu(BasePlayer player, SkinState st)
         {
-            CuiHelper.DestroyUi(player, SkinUi);
             var c = new CuiElementContainer();
+            if (!st.Drawn)
+            {
+                CuiHelper.DestroyUi(player, SkinUi);
+                c.Add(new CuiPanel { Image = { Color = "0 0 0 0.75" }, RectTransform = { AnchorMin = "0.34 0.26", AnchorMax = "0.66 0.74" }, CursorEnabled = true }, "Overlay", SkinUi);
+                st.Drawn = true;
+            }
+            else
+            {
+                CuiHelper.DestroyUi(player, SkinUi + ".c");
+            }
+            string root = SkinUi + ".c";
+            c.Add(new CuiPanel { Image = { Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" } }, SkinUi, root);
             RidableHorse horse = st.Target as RidableHorse;
             SpeciesDef species = SpeciesOf(st.Target);
-            c.Add(new CuiPanel { Image = { Color = "0 0 0 0.75" }, RectTransform = { AnchorMin = "0.36 0.3", AnchorMax = "0.64 0.72" }, CursorEnabled = true }, "Overlay", SkinUi);
-            UiLabel(c, SkinUi, "<b>Look of the " + (species != null ? species.Display.ToLowerInvariant() : "animal") + "</b>", 15, 0.04f, 0.88f, 0.96f, 0.98f, TextAnchor.MiddleCenter);
+            UiLabel(c, root, "<b>Look of the " + (species != null ? species.Display.ToLowerInvariant() : "animal") + "</b>", 15, 0.04f, 0.90f, 0.96f, 0.98f, TextAnchor.MiddleCenter);
             if (horse != null)
             {
                 int current = horse.GetBreed() != null ? Array.IndexOf(horse.breeds, horse.GetBreed()) : -1;
@@ -17433,28 +17532,32 @@ namespace Oxide.Plugins
                 for (int i = 0; i < n; i++)
                 {
                     int col = i % 2, row = i / 2;
-                    float x0 = 0.05f + col * 0.46f, y1 = 0.85f - row * 0.13f;
+                    float x0 = 0.05f + col * 0.46f, y1 = 0.87f - row * 0.11f;
                     string name = horse.breeds[i] != null ? horse.breeds[i].name : "Breed " + (i + 1);
-                    UiButton(c, SkinUi, name, "bm.ui skin breed " + i, x0, y1 - 0.11f, x0 + 0.44f, y1, i == current ? ColOn : ColBtn, 12);
+                    UiButton(c, root, name, "bm.ui skin breed " + i, x0, y1 - 0.09f, x0 + 0.44f, y1, i == current ? ColOn : ColBtn, 12);
                 }
             }
             else
             {
-                Action<string, string, float> row = (label, cmd, y) =>
+                // the two colours of the coat, each as a row of buttons like the horse's breeds: only the markers that exist in the game
+                int[] pool = MarkerPool();
+                int count = pool.Length;
+                const int perRow = 8;
+                for (int section = 0; section < 2; section++)
                 {
-                    UiLabel(c, SkinUi, label, 13, 0.05f, y - 0.1f, 0.5f, y, TextAnchor.MiddleLeft);
-                    UiButton(c, SkinUi, "<", "bm.ui skin " + cmd + " -1", 0.55f, y - 0.1f, 0.7f, y, ColBtn, 14);
-                    UiButton(c, SkinUi, ">", "bm.ui skin " + cmd + " 1", 0.78f, y - 0.1f, 0.93f, y, ColBtn, 14);
-                };
-                int count = MarkerPool().Length;
-                if (count > 1)
-                {
-                    row("Colour 1:  " + (st.ColourA % count + 1) + " / " + count, "a", 0.82f);
-                    row("Colour 2:  " + (st.ColourB % count + 1) + " / " + count, "b", 0.66f);
+                    int chosen = section == 0 ? st.ColourA : st.ColourB;
+                    float top = section == 0 ? 0.86f : 0.54f;
+                    UiLabel(c, root, section == 0 ? "Colour 1" : "Colour 2", 13, 0.05f, top - 0.07f, 0.6f, top, TextAnchor.MiddleLeft);
+                    for (int i = 0; i < count; i++)
+                    {
+                        int col = i % perRow, row = i / perRow;
+                        float x0 = 0.04f + col * 0.12f, y1 = top - 0.09f - row * 0.095f;
+                        UiButton(c, root, (i + 1).ToString(), "bm.ui skin " + (section == 0 ? "a " : "b ") + i, x0, y1 - 0.08f, x0 + 0.105f, y1, i == chosen ? ColOn : ColBtn, 12);
+                    }
                 }
-                UiButton(c, SkinUi, "Random look", "bm.ui skin random", 0.20f, 0.30f, 0.80f, 0.43f, ColBtn, 12);
+                UiButton(c, root, "Random look", "bm.ui skin random", 0.05f, 0.13f, 0.47f, 0.24f, ColBtn, 12);
             }
-            UiButton(c, SkinUi, "Close", "bm.ui skin close", 0.35f, 0.04f, 0.65f, 0.14f, ColOff, 12);
+            UiButton(c, root, "Close", "bm.ui skin close", horse != null ? 0.35f : 0.53f, 0.13f, horse != null ? 0.65f : 0.95f, 0.24f, ColOff, 12);
             CuiHelper.AddUi(player, c);
         }
 
@@ -17503,15 +17606,17 @@ namespace Oxide.Plugins
                         {
                             int[] pool = MarkerPool();
                             int count = pool.Length;
+                            int pick = Mathf.Clamp(step, 0, count - 1);
                             if (what == "a")
                             {
-                                st.ColourA = (st.ColourA % count + (step < 0 ? count - 1 : 1)) % count;
+                                st.ColourA = pick;
                             }
                             else
                             {
-                                st.ColourB = (st.ColourB % count + (step < 0 ? count - 1 : 1)) % count;
+                                st.ColourB = pick;
                             }
-                            livestock.Genes = LivestockGenome.WithMarkers(livestock.Genes, pool[st.ColourA % count], pool[st.ColourB % count]);
+                            int a = st.ColourA >= 0 ? st.ColourA : 0, b = st.ColourB >= 0 ? st.ColourB : Mathf.Min(1, count - 1);
+                            livestock.Genes = LivestockGenome.WithMarkers(livestock.Genes, pool[a], pool[b]);
                             break;
                         }
                     case "random":
@@ -19031,14 +19136,15 @@ namespace Oxide.Plugins
             }
             bool crouch = player.serverInput.IsDown(BUTTON.DUCK);
             BaseNPC2 animal = AnimalInSight(player, Cfg.Riding.MountDistance, 20f);
+            BaseNPC2 controlledSeen = ControlledAnimalInSight(player);
+            if (controlledSeen != null && (animal == null || animal == controlledSeen))
+            {
+                // an animal under control: E opens its orders (near or far); held E near it still has the menu
+                usePresses[player.userID] = new UsePress { Target = controlledSeen, Start = Time.time, Crouch = crouch, Wheel = true };
+                return;
+            }
             if (animal == null)
             {
-                BaseNPC2 far = ControlledAnimalInSight(player);
-                if (far != null)
-                {
-                    usePresses[player.userID] = new UsePress { Target = far, Start = Time.time, Crouch = crouch, Wheel = true };
-                    return;
-                }
                 RidableHorse horse = HorseInSight(player, Cfg.Riding.MountDistance + 1f, 20f);
                 if (horse != null)
                 {
@@ -19065,7 +19171,7 @@ namespace Oxide.Plugins
             {
                 return;
             }
-            if (press.Wheel)
+            if (press.Wheel && Vector3.Distance(player.transform.position, press.Target.transform.position) > Cfg.Riding.MountDistance + 0.5f)
             {
                 ShowWheel(player, press.Target);
                 return;
@@ -19604,6 +19710,10 @@ namespace Oxide.Plugins
                 {
                     Bm.useDown.Remove(player.userID);
                     Bm.UseReleased(player);
+                }
+                if (input.WasJustPressed(BUTTON.RELOAD) && !input.IsDown(BUTTON.DUCK) && Bm.Active)
+                {
+                    Bm.SkinKey(player);                     // R at an animal whose look the player may change: the window of looks
                 }
                 if (!Bm.Cfg.Features.Commands)
                 {

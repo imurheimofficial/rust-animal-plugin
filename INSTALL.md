@@ -1,6 +1,6 @@
 # Beastmaster - installation
 
-One file: `dist/Beastmaster.cs` (generated from `src/*.cs`; ~19 000 lines, version 1.2.8). Copy it, nothing else is needed.
+One file: `dist/Beastmaster.cs` (generated from `src/*.cs`; ~19 000 lines, version 1.2.9). Copy it, nothing else is needed.
 
 ## Requirements
 
@@ -16,7 +16,7 @@ One file: `dist/Beastmaster.cs` (generated from `src/*.cs`; ~19 000 lines, versi
 2. Upload `Beastmaster.cs` to
    * Oxide: `<server>/oxide/plugins/`
    * Carbon: `<server>/carbon/plugins/`
-3. Watch the console: `Beastmaster 1.2.8 ready: 20 species, ... modules, ON`. If it is not there, `oxide.reload Beastmaster` (Carbon: `c.reload Beastmaster`) prints the reason.
+3. Watch the console: `Beastmaster 1.2.9 ready: 20 species, ... modules, ON`. If it is not there, `oxide.reload Beastmaster` (Carbon: `c.reload Beastmaster`) prints the reason.
 4. Run `bm.selftest` in the server console (or RCON). It lists every species prefab, item, effect and seat the plugin needs and tells what is missing in your build.
 5. The first start writes
    * `oxide/config/Beastmaster.json` - every number of the specification (carbon: `carbon/configs/`),

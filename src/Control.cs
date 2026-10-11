@@ -146,10 +146,10 @@ namespace Oxide.Plugins
 
         internal bool StartControl(BasePlayer player, BaseCombatEntity animal, ControlKind kind, bool silent = false, bool ritual = false)
         {
-            if (kind == ControlKind.Form && !ritual)
+            if (kind == ControlKind.Form && !ritual && !IsAdmin(player))
             {
-                // fixed rule: a player becomes an animal only through the ritual (a killed animal, the torch, the fire), or by going back into
-                // the animal he has left; no command, no menu button and no permission gives it
+                // fixed rule: a player becomes an animal through the transformation ritual (a killed animal, the torch, the fire) or by going back
+                // into the animal he has left; only an admin has the commands (bm.form, the menu button) that skip the ritual
                 if (!silent)
                 {
                     TellRaw(player, "You can become an animal only through the transformation ritual: kill the animal first, then perform the ritual at its body.");
@@ -1192,10 +1192,10 @@ namespace Oxide.Plugins
                     rDownSince = Time.time;
                     rHoldDone = false;
                 }
-                if (rDownSince > 0f && IsSet(now, BUTTON.RELOAD) && !rHoldDone && Time.time - rDownSince >= 0.45f)
+                if (Kind == ControlKind.Form && rDownSince > 0f && IsSet(now, BUTTON.RELOAD) && !rHoldDone && Time.time - rDownSince >= 0.45f)
                 {
                     rHoldDone = true;
-                    bm.OpenSkinMenu(Player, Body);
+                    bm.OpenSkinMenu(Player, Body);          // as an animal: held R opens the window of looks (standing at an animal: R)
                 }
                 if (rDownSince > 0f && !IsSet(now, BUTTON.RELOAD))
                 {

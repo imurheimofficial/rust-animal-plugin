@@ -160,6 +160,18 @@ namespace Oxide.Plugins
                         }
                     }
                 }
+                // a player who stands at an animal whose look he may change: R opens the window of looks
+                if (Bm.Cfg.Life.Prompts)
+                {
+                    foreach (BasePlayer p in BasePlayer.activePlayerList)
+                    {
+                        if (p != null && !shown.Contains(p.userID) && p.IsConnected && !p.IsDead() && Bm.SkinTargetInSight(p) != null)
+                        {
+                            Draw(p, "Skin", true, "R");
+                            shown.Add(p.userID);
+                        }
+                    }
+                }
                 // a player standing near a wild horse sees how far the taming is (the game itself only writes "Occupied" on a horse without a saddle)
                 if (Bm.Stable != null && Bm.Cfg.Features.Taming)
                 {
@@ -222,7 +234,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            private void Draw(BasePlayer p, string text, bool key)
+            private void Draw(BasePlayer p, string text, bool key, string keyName = "E")
             {
                 string old;
                 if (prompts.TryGetValue(p.userID, out old) && old == text)
@@ -244,7 +256,7 @@ namespace Oxide.Plugins
                 }, "Overlay", PromptUi);
                 c.Add(new CuiLabel
                 {
-                    Text = { Text = (key ? "<color=#e8c35a><b>E</b></color>   " : string.Empty) + text, FontSize = 15, Align = TextAnchor.MiddleCenter, Color = "1 1 1 0.95" },
+                    Text = { Text = (key ? "<color=#e8c35a><b>" + keyName + "</b></color>   " : string.Empty) + text, FontSize = 15, Align = TextAnchor.MiddleCenter, Color = "1 1 1 0.95" },
                     RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }
                 }, PromptUi);
                 CuiHelper.AddUi(p, c);

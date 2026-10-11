@@ -101,8 +101,7 @@ namespace Oxide.Plugins
         // The prompt "E Control" for a player who looks at an animal he controls from afar (near it, E rides it and hold E has the menu).
         internal bool ControlPromptFor(BasePlayer player)
         {
-            BaseNPC2 a = ControlledAnimalInSight(player);
-            return a != null && Vector3.Distance(player.transform.position, a.transform.position) > Cfg.Riding.MountDistance + 0.5f;
+            return ControlledAnimalInSight(player) != null;
         }
 
         internal void ShowWheel(BasePlayer player, BaseNPC2 animal)
@@ -513,6 +512,29 @@ namespace Oxide.Plugins
             public override int Order => 63;
             private float nextCheck;
 
+            public override void Init(Beastmaster bm)
+            {
+                base.Init(bm);
+                bm.Subscribe("OnPlayerAttack");
+            }
+
+            // Whoever sits on an animal never hits it (no blood, no sparks, no damage on his own seat): a weapon in his hands hit the mount.
+            public override object OnPlayerAttack(BasePlayer attacker, HitInfo info)
+            {
+                if (attacker == null || info == null || !attacker.isMounted)
+                {
+                    return null;
+                }
+                BaseMountable seat = attacker.GetMounted();
+                BaseEntity hit = info.HitEntity;
+                if (seat == null || hit == null)
+                {
+                    return null;
+                }
+                BaseEntity mount = seat.GetParentEntity();
+                return hit == seat || (mount != null && (hit == mount || hit.GetParentEntity() == mount)) ? (object)true : null;
+            }
+
             public override void Tick(float now)
             {
                 if (Bm.wheels.Count == 0 || now < nextCheck)
@@ -565,6 +587,14 @@ namespace Oxide.Plugins
                     return null;
                 }
                 BasePlayer attacker = info.InitiatorPlayer;
+                if (attacker != null && attacker.isMounted && entity is BaseNPC2)
+                {
+                    BaseMountable sitting = attacker.GetMounted();
+                    if (sitting != null && sitting.GetParentEntity() == entity)
+                    {
+                        return true;                       // a rider cannot hurt the animal he sits on
+                    }
+                }
                 TamedRecord rec = Bm.RecordOf(entity);
                 if (rec != null && attacker != null && attacker.userID == rec.Owner && Bm.DriverOfAnimal(entity) == null)
                 {
