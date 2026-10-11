@@ -480,8 +480,13 @@ namespace Oxide.Plugins
                 return;
             }
             usePresses.Remove(player.userID);
-            if (press.Done || press.Wheel || !Valid(press.Target) || press.Target.IsDead())
+            if (press.Done || !Valid(press.Target) || press.Target.IsDead())
             {
+                return;
+            }
+            if (press.Wheel)
+            {
+                ShowWheel(player, press.Target);               // E at an animal under control seen from afar: its orders
                 return;
             }
             UseTap(player, press.Target, press.Crouch);
@@ -748,10 +753,10 @@ namespace Oxide.Plugins
         // The control of a tamed animal (or the animal a player has left): the wheel of orders, also from a distance.
         private void AddHandLead(List<string[]> list, BasePlayer player, BaseNPC2 animal)
         {
-            if (Cfg.Features.Taming && DriverOfAnimal(animal) == null && !player.isMounted && (RecordOf(animal) != null || LeftUsableBy(animal, player)))
+            if (Cfg.Features.Taming && DriverOfAnimal(animal) == null && !player.isMounted && RecordOf(animal) != null)
             {
                 TamedRecord rec = RecordOf(animal);
-                if (rec == null || MayUse(player, rec.Owner, "team"))
+                if (MayUse(player, rec.Owner, "team"))
                 {
                     list.Add(new[] { "control", "Control" });
                 }
@@ -796,7 +801,7 @@ namespace Oxide.Plugins
                 float top = -(pad + titleHeight + i * (buttonHeight + gap));
                 c.Add(new CuiButton
                 {
-                    Button = { Command = close ? "bm.ui beast 0 close" : "bm.ui beast " + id + " " + choices[i][0], Color = close ? ColOff : choices[i][0] == "ride" || choices[i][0] == "behind" ? ColOn : ColBtn },
+                    Button = { Command = close ? "bm.ui beast 0 close" : "bm.ui beast " + id + " " + choices[i][0], Color = close ? ColOff : choices[i][0] == "control" && IsControlled(player, animal) ? "0.78 0.62 0.12 1" : choices[i][0] == "ride" || choices[i][0] == "behind" ? ColOn : ColBtn },
                     RectTransform = { AnchorMin = "0 1", AnchorMax = "1 1", OffsetMin = Pt(pad, top - buttonHeight), OffsetMax = Pt(-pad, top) },
                     Text = { Text = close ? "Close" : choices[i][1], FontSize = 13, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" }
                 }, BeastUi);
@@ -866,8 +871,7 @@ namespace Oxide.Plugins
                     TryFormHandle(player, host, true);
                     break;
                 case "control":
-                    controlled[player.userID] = animal.net.ID.Value;
-                    ShowWheel(player, animal);
+                    ToggleControl(player, animal);
                     break;
                 case "follow":
                 case "wait":

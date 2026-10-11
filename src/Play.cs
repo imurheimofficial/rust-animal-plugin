@@ -219,7 +219,7 @@ namespace Oxide.Plugins
             c.Add(new CuiPanel
             {
                 Image = { Color = "0 0 0 0.35" },
-                RectTransform = { AnchorMin = "0.5 0", AnchorMax = "0.5 0", OffsetMin = Pt(-panelW * 0.5f, 100f), OffsetMax = Pt(panelW * 0.5f, 100f + panelH) }
+                RectTransform = { AnchorMin = "0.5 0", AnchorMax = "0.5 0", OffsetMin = Pt(-panelW * 0.5f, 92f), OffsetMax = Pt(panelW * 0.5f, 92f + panelH) }
             }, "Overlay", KeysUi);
             float cx = gap;
             for (int i = 0; i < cells.Length; i++)

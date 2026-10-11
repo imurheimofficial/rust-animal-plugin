@@ -568,15 +568,22 @@ namespace Oxide.Plugins
             bone = nearest.Key;
             if (SeatBoneStepValue > 0)
             {
-                // the seat hangs on a bone nearer the hips: the spine bends less there, so the rider's camera is shaken less; the seat itself
-                // stays at the same place on the back
+                // the seat hangs on a bone nearer the hips or the root of the skeleton: the spine bends and swings less there, so the rider's
+                // camera is shaken less; the seat itself stays at the same place on the back
                 List<KeyValuePair<Transform, Vector3>> byZ = spine.OrderBy(p => p.Value.z).ToList();
-                int at = byZ.FindIndex(p => p.Key == nearest.Key);
+                var chain = new List<Transform>();
+                var bones = new HashSet<Transform>(animal.model.boneTransforms.Where(t => t != null));
+                for (Transform up = byZ[0].Key.parent; up != null && bones.Contains(up); up = up.parent)
+                {
+                    chain.Insert(0, up);                     // the root of the skeleton first
+                }
+                chain.AddRange(byZ.Select(p => p.Key));
+                int at = chain.IndexOf(nearest.Key);
                 for (int i = Mathf.Max(0, at - SeatBoneStepValue); i < at; i++)
                 {
-                    if (StringPool.Get(byZ[i].Key.name) != 0u)
+                    if (StringPool.Get(chain[i].name) != 0u)
                     {
-                        bone = byZ[i].Key;                  // the nearest one to the hips that the players' games know by name
+                        bone = chain[i];                    // the first one toward the root that the players' games know by name
                         break;
                     }
                 }

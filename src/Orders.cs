@@ -11,8 +11,8 @@ namespace Oxide.Plugins
     public partial class Beastmaster
     {
         // ---------------------------------------------------------------- orders to a tamed animal
-        // Control (hold E at the animal) opens the wheel of orders: Follow, Wait, Defend, Loot. The animal stays under the player's control,
-        // so that holding E while looking at it within 50 m shows the wheel again.
+        // Control (hold E at the animal, the button turns yellow) puts the animal under the player's control: whenever he looks at it from up to
+        // 50 m, the prompt "E Control" shows, and E opens the wheel of orders: Follow, Wait, Defend, Loot. The button toggles it off again.
         //   Follow  - it follows the player.
         //   Wait    - it stops where it is.
         //   Defend  - it runs at whoever hits the player, and at whoever the player hits.
@@ -31,7 +31,33 @@ namespace Oxide.Plugins
         }
 
         private readonly Dictionary<ulong, WheelState> wheels = new Dictionary<ulong, WheelState>();
-        private readonly Dictionary<ulong, ulong> controlled = new Dictionary<ulong, ulong>();      // player -> net id of the animal he controls
+        private readonly Dictionary<ulong, HashSet<ulong>> controlled = new Dictionary<ulong, HashSet<ulong>>();      // player -> net ids of the animals he controls
+
+        internal bool IsControlled(BasePlayer player, BaseEntity animal)
+        {
+            HashSet<ulong> set;
+            return player != null && animal != null && animal.net != null && controlled.TryGetValue(player.userID, out set) && set.Contains(animal.net.ID.Value);
+        }
+
+        internal void ToggleControl(BasePlayer player, BaseNPC2 animal)
+        {
+            HashSet<ulong> set;
+            if (!controlled.TryGetValue(player.userID, out set))
+            {
+                set = new HashSet<ulong>();
+                controlled[player.userID] = set;
+            }
+            SpeciesDef sp = SpeciesOf(animal);
+            string who = sp != null ? sp.Display.ToLowerInvariant() : "animal";
+            ulong id = animal.net.ID.Value;
+            if (!set.Add(id))
+            {
+                set.Remove(id);
+                TellRaw(player, "You no longer control the " + who + ".");
+                return;
+            }
+            TellRaw(player, "You control the " + who + ": look at it from up to " + (int)OrderRange + " m and press E for its orders.");
+        }
 
         private static bool LookingAt(BasePlayer player, BaseEntity animal, float maxAngle)
         {
@@ -46,23 +72,37 @@ namespace Oxide.Plugins
         // The animal this player controls, when it is within 50 m and he looks at it.
         internal BaseNPC2 ControlledAnimalInSight(BasePlayer player)
         {
-            ulong id;
-            if (controlled.Count == 0 || !controlled.TryGetValue(player.userID, out id))
+            HashSet<ulong> set;
+            if (controlled.Count == 0 || !controlled.TryGetValue(player.userID, out set) || set.Count == 0)
             {
                 return null;
             }
-            BaseNPC2 animal = BaseNetworkable.serverEntities.Find(new NetworkableId(id)) as BaseNPC2;
-            TamedRecord rec = Valid(animal) && !animal.IsDead() ? RecordOf(animal) : null;
-            if (rec == null || !MayUse(player, rec.Owner, "team") || DriverOfAnimal(animal) != null)
+            BaseNPC2 best = null;
+            float bestDist = float.MaxValue;
+            foreach (ulong id in set.ToList())
             {
-                controlled.Remove(player.userID);
-                return null;
+                BaseNPC2 animal = BaseNetworkable.serverEntities.Find(new NetworkableId(id)) as BaseNPC2;
+                TamedRecord rec = Valid(animal) && !animal.IsDead() ? RecordOf(animal) : null;
+                if (rec == null || !MayUse(player, rec.Owner, "team"))
+                {
+                    set.Remove(id);                          // gone, dead or not tame any more
+                    continue;
+                }
+                float dist = Vector3.Distance(player.transform.position, animal.transform.position);
+                if (DriverOfAnimal(animal) == null && dist <= OrderRange && dist < bestDist && LookingAt(player, animal, 8f))
+                {
+                    bestDist = dist;
+                    best = animal;
+                }
             }
-            if (Vector3.Distance(player.transform.position, animal.transform.position) > OrderRange || !LookingAt(player, animal, 8f))
-            {
-                return null;
-            }
-            return animal;
+            return best;
+        }
+
+        // The prompt "E Control" for a player who looks at an animal he controls from afar (near it, E rides it and hold E has the menu).
+        internal bool ControlPromptFor(BasePlayer player)
+        {
+            BaseNPC2 a = ControlledAnimalInSight(player);
+            return a != null && Vector3.Distance(player.transform.position, a.transform.position) > Cfg.Riding.MountDistance + 0.5f;
         }
 
         internal void ShowWheel(BasePlayer player, BaseNPC2 animal)

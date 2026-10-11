@@ -147,6 +147,19 @@ namespace Oxide.Plugins
                         shown.Add(d.Player.userID);
                     }
                 }
+                // a player who looks at an animal he controls from afar: E opens its orders
+                if (Bm.Cfg.Life.Prompts && Bm.controlled.Count > 0)
+                {
+                    foreach (ulong id in Bm.controlled.Keys.ToList())
+                    {
+                        BasePlayer p = BasePlayer.FindByID(id);
+                        if (p != null && p.IsConnected && !shown.Contains(id) && Bm.DriverOf(p) == null && !p.isMounted && Bm.ControlPromptFor(p))
+                        {
+                            Draw(p, "Control", true);
+                            shown.Add(id);
+                        }
+                    }
+                }
                 // a player standing near a wild horse sees how far the taming is (the game itself only writes "Occupied" on a horse without a saddle)
                 if (Bm.Stable != null && Bm.Cfg.Features.Taming)
                 {

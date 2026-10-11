@@ -19,6 +19,24 @@ namespace Oxide.Plugins
             "Barley", "Copper", "Dusty", "Ember", "Flint", "Moss", "Sable", "Storm", "Thistle", "Tansy", "Bramble", "Cinder"
         };
 
+        // The coat markers that exist: the ones the game itself rolls for a calf or a lamb (sampled once), so that the window offers no look
+        // that is not in the game.
+        private static int[] markerPool;
+
+        internal static int[] MarkerPool()
+        {
+            if (markerPool == null)
+            {
+                var seen = new HashSet<int>();
+                for (int i = 0; i < 600; i++)
+                {
+                    seen.Add(LivestockGenome.RollMarker());
+                }
+                markerPool = seen.OrderBy(x => x).ToArray();
+            }
+            return markerPool;
+        }
+
         internal bool RerollLook(BaseEntity animal)
         {
             RidableHorse horse = animal as RidableHorse;
@@ -48,11 +66,12 @@ namespace Oxide.Plugins
                 }
                 while (name == livestock.AnimalName);
                 livestock.AnimalName = name;
-                int a = LivestockGenome.RollMarker();
-                int b = LivestockGenome.RollMarker();
-                if (b == a)
+                int[] pool = MarkerPool();
+                int a = pool[UnityEngine.Random.Range(0, pool.Length)];
+                int b = pool[UnityEngine.Random.Range(0, pool.Length)];
+                if (b == a && pool.Length > 1)
                 {
-                    b = (a + 1 + UnityEngine.Random.Range(0, 15)) % 16;
+                    b = pool[(Array.IndexOf(pool, a) + 1) % pool.Length];
                 }
                 livestock.Genes = LivestockGenome.WithMarkers(livestock.Genes, a, b);
                 return true;
@@ -143,11 +162,13 @@ namespace Oxide.Plugins
                     UiButton(c, SkinUi, "<", "bm.ui skin " + cmd + " -1", 0.55f, y - 0.1f, 0.7f, y, ColBtn, 14);
                     UiButton(c, SkinUi, ">", "bm.ui skin " + cmd + " 1", 0.78f, y - 0.1f, 0.93f, y, ColBtn, 14);
                 };
-                row("Colour 1:  " + (st.ColourA + 1) + " / 16", "a", 0.84f);
-                row("Colour 2:  " + (st.ColourB + 1) + " / 16", "b", 0.71f);
-                row("Pattern:  " + SprayNames[Mathf.Clamp(st.Pattern, 0, SprayNames.Length - 1)], "pattern", 0.58f);
-                UiButton(c, SkinUi, "Other patches", "bm.ui skin patches", 0.05f, 0.33f, 0.47f, 0.44f, ColBtn, 12);
-                UiButton(c, SkinUi, "Random look", "bm.ui skin random", 0.53f, 0.33f, 0.95f, 0.44f, ColBtn, 12);
+                int count = MarkerPool().Length;
+                if (count > 1)
+                {
+                    row("Colour 1:  " + (st.ColourA % count + 1) + " / " + count, "a", 0.82f);
+                    row("Colour 2:  " + (st.ColourB % count + 1) + " / " + count, "b", 0.66f);
+                }
+                UiButton(c, SkinUi, "Random look", "bm.ui skin random", 0.20f, 0.30f, 0.80f, 0.43f, ColBtn, 12);
             }
             UiButton(c, SkinUi, "Close", "bm.ui skin close", 0.35f, 0.04f, 0.65f, 0.14f, ColOff, 12);
             CuiHelper.AddUi(player, c);
@@ -194,30 +215,23 @@ namespace Oxide.Plugins
                 switch (what)
                 {
                     case "a":
-                        st.ColourA = (st.ColourA + (step < 0 ? 15 : 1)) % 16;
-                        livestock.Genes = LivestockGenome.WithMarkers(livestock.Genes, st.ColourA, st.ColourB);
-                        break;
                     case "b":
-                        st.ColourB = (st.ColourB + (step < 0 ? 15 : 1)) % 16;
-                        livestock.Genes = LivestockGenome.WithMarkers(livestock.Genes, st.ColourA, st.ColourB);
-                        break;
-                    case "pattern":
-                        st.Pattern = (st.Pattern + (step < 0 ? SprayNames.Length - 1 : 1)) % SprayNames.Length;
-                        livestock.AnimalName = SprayNames[st.Pattern];
-                        break;
-                    case "patches":
                         {
-                            int genes = livestock.Genes;
-                            foreach (LivestockGene gene in new[] { LivestockGene.Dung, LivestockGene.Yield, LivestockGene.Longevity, LivestockGene.Fertility, LivestockGene.Hardiness })
+                            int[] pool = MarkerPool();
+                            int count = pool.Length;
+                            if (what == "a")
                             {
-                                genes = LivestockGenome.WithPair(genes, gene, (LivestockAllele)UnityEngine.Random.Range(0, 3), (LivestockAllele)UnityEngine.Random.Range(0, 3));
+                                st.ColourA = (st.ColourA % count + (step < 0 ? count - 1 : 1)) % count;
                             }
-                            livestock.Genes = genes;
+                            else
+                            {
+                                st.ColourB = (st.ColourB % count + (step < 0 ? count - 1 : 1)) % count;
+                            }
+                            livestock.Genes = LivestockGenome.WithMarkers(livestock.Genes, pool[st.ColourA % count], pool[st.ColourB % count]);
                             break;
                         }
                     case "random":
                         RerollLook(livestock);
-                        st.Pattern = Mathf.Max(0, Array.IndexOf(SprayNames, livestock.AnimalName));
                         break;
                 }
                 livestock.SendNetworkUpdateImmediate();

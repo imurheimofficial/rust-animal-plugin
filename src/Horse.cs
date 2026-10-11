@@ -730,6 +730,11 @@ namespace Oxide.Plugins
                             {
                                 s.Bond.Clear();
                                 string fitted = Bm.FitCarriedSaddle(p, s.Horse);
+                                if (fitted == null && !Bm.Cfg.Horse.WildUnsaddled && SeatsOf(s.Horse) <= 0)
+                                {
+                                    GiveSaddle(s.Horse, 1);            // horses are as in the game: a horse that is yours has its saddle
+                                    fitted = SeatsOf(s.Horse) > 0 ? "saddle" : null;
+                                }
                                 Bm.TellRaw(p, fitted != null
                                     ? "The horse trusts you now - it is yours. Your " + fitted + " is on it: press E to ride."
                                     : "The horse trusts you now - it is yours. It has no saddle yet: Ctrl + E (or hold E > Inventory) and put a saddle into its saddle slot, then E rides it.");
@@ -1256,9 +1261,9 @@ namespace Oxide.Plugins
                     Bm.Tell(player, "HorseNoRide");
                     return false;
                 }
-                if (rec == null && Bm.Cfg.Riding.RequireTame)
+                if (rec == null && Bm.Cfg.Riding.RequireTame && (Bm.Cfg.Horse.WildUnsaddled || SeatsOf(horse) <= 0))
                 {
-                    Bm.Tell(player, "HorseWild");
+                    Bm.Tell(player, "HorseWild");          // a horse that carries a saddle is ridden as in the game; one without needs taming and a saddle
                     return false;
                 }
                 if (rec != null && !Bm.MayUse(player, rec.Owner, Bm.Cfg.Riding.Ownership))

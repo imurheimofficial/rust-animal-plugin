@@ -82,7 +82,7 @@ namespace Oxide.Plugins
             [JsonProperty("Seat used for riders on non-horse animals (the horse's saddle seat: the rider sits the way he sits on a horse)")] public string SeatPrefab = "assets/prefabs/vehicle/seats/horsesaddle.prefab";
             [JsonProperty("Seat of the second rider (double saddle)")] public string RearSeatPrefab = "assets/prefabs/vehicle/seats/horsesaddlerear.prefab";
             [JsonProperty("The rider's seat is fixed to the animal's spine, so the rider stays on its back like on the horse (false: fixed to the body, the camera shakes less but the rider slides on the back)")] public bool SeatOnSpine = true;
-            [JsonProperty("The seat hangs on the spine bone this many steps nearer the hips than the middle of the back (0 = the middle; more = a calmer camera)")] public int SeatBoneStep = 1;
+            [JsonProperty("The seat hangs on the spine bone this many steps nearer the hips than the middle of the back (0 = the middle; more = a calmer camera)")] public int SeatBoneStep = 3;
             [JsonProperty("A rider can turn his head this far to each side (degrees; the horse's saddle seat itself allows 120; 0 = no limit)")] public float ViewClamp = 85f;
             [JsonProperty("Maximum distance to mount (m)")] public float MountDistance = 3.5f;
             [JsonProperty("Block riding in safe zones")] public bool BlockInSafeZone = false;
@@ -205,7 +205,7 @@ namespace Oxide.Plugins
             [JsonProperty("Stamina needed to run again after being out of breath")] public float RecoverTo = 25f;
             [JsonProperty("Show the stamina bar (and the animal's health while riding) above the game's own bars")] public bool ShowBar = true;
             [JsonProperty("The animal's bars stand beside the game's own bars (those are 19 from the right edge and 188 wide): distance of the animals' right edge from the screen's right edge, from the bottom, width, height, and the distance between two rows (units of the game's own bars)")] public float BarRight = 215f;
-            public float BarBottom = 12f;
+            public float BarBottom = 18f;
             public float BarWidth = 150f;
             public float BarHeight = 20f;
             public float BarPitch = 28f;
@@ -296,7 +296,7 @@ namespace Oxide.Plugins
             [JsonProperty("A shy horse calms down this many seconds after the last scare")] public float ShyCalmSeconds = 15f;
             [JsonProperty("Seconds an incapacitate dart keeps a horse asleep")] public float SleepSeconds = 60f;
             [JsonProperty("Aggression radius (m)")] public float AggressionRadius = 14f;
-            [JsonProperty("New wild horses are born without a saddle and must be tamed first")] public bool WildUnsaddled = true;
+            [JsonProperty("New wild horses are born without a saddle and must be tamed first (false: horses are as in the game, a saddled horse is rideable)")] public bool WildUnsaddled = false;
             [JsonProperty("Wild horses wander a little around where they stand")] public bool Wander = true;
             [JsonProperty("A shy horse flees from players closer than this (m)")] public float ShyRange = 10f;
             [JsonProperty("Speed of a fleeing or charging horse (m/s)")] public float FleeSpeed = 9f;

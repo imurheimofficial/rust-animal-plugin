@@ -1,3 +1,24 @@
+# Změny verze 1.2.8 (2026-10-11)
+
+Tvůj test 1.2.7.
+
+* **Staty zvířete:** řádky mají šedé průhledné pozadí jako tvoje, ikony jsou šedé, blesk a kbelík jsou nakreslené věrněji. Celý sloupec je o kousek výš (BarBottom 18).
+* **Control:**
+  * V nabídce na podržení E je to přepínač. Po kliknutí zežloutne, znovu kliknutí ho vypne.
+  * Dokud je zapnutý a díváš se na zvíře z dálky (do 50 m), ukáže se výzva „E Control“. E otevře kolečko Follow, Wait, Defend, Loot.
+  * Control mají jen ochočená zvířata, ne zvíře, které jsi opustil.
+* **Proměna ve zvíře:** je pevně jen přes rituál (zabité zvíře, pochodeň, oheň) a návrat do zvířete, které jsi opustil. Příkaz `bm.form` a tlačítko „Become it“ už nic nedělají.
+* **Rituál:**
+  * Po 10 kolech s hořící pochodní se tělo zapálí: je na něm vidět oheň a zpráva „The body catches fire“. Pak E vedle ohně.
+  * Do logu serveru se píše, co se s rituálem děje (zvíře zabito, tělo připraveno, zapáleno, chybějící oprávnění beastmaster.transform). Pokud to u koně nepůjde, pošli mi ty řádky.
+* **Kůň jako ve hře:** koně už neztrácejí sedlo. Kůň se sedlem je k jízdě i bez ochočení. Ochočený kůň bez sedla dostane sedlo, které neseš, nebo jedno jednoduché.
+* **Reskin:** nabízí jen barvy, které hra opravdu rozdává (zjišťuje se z hry), a „Random look“. Pattern (jména) a „Other patches“ jsem odebral, nejsou to žádné vzhledy. Kůň nabízí svá plemena.
+* **Kamera na zvířeti:** sedadlo visí na kosti blíž ke kořeni kostry (SeatBoneStep 3). Jezdec sedí na stejném místě.
+* **Chůze a běh při jízdě:** při pohybu se zvířeti vždy smažou vlajky pasení, pití a odpočinku, aby se hned přehrála animace.
+* **Lišta kláves** je o kousek níž.
+
+---
+
 # Změny verze 1.2.7 (2026-10-11)
 
 Tvůj test 1.2.6.

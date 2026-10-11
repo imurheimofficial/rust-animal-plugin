@@ -206,7 +206,7 @@ namespace Oxide.Plugins
                     FormGears[player.userID] = rec.Gear;       // the inventory it carried
                 }
                 Driver d;
-                if (StartControl(player, animal, ControlKind.Form, true))
+                if (StartControl(player, animal, ControlKind.Form, true, true))
                 {
                     d = DriverOf(player);
                     if (d != null)
@@ -492,7 +492,7 @@ namespace Oxide.Plugins
                 Bm.FormGears[p.userID] = gearBack;            // it carries its inventory again
                 Bm.NextTick(() =>
                 {
-                    if (Bm.StartControl(p, animal, ControlKind.Form, true))
+                    if (Bm.StartControl(p, animal, ControlKind.Form, true, true))
                     {
                         Driver d = Bm.DriverOf(p);
                         if (d != null)

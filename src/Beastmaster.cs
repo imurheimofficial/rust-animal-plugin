@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Beastmaster", "Claude", "1.2.7")]
+    [Info("Beastmaster", "Claude", "1.2.8")]
     [Description("Ride, tame, command and become animals: horses, livestock, predators and small creatures.")]
     public partial class Beastmaster : RustPlugin
     {
@@ -247,6 +247,12 @@ namespace Oxide.Plugins
                 Cfg.Stamina.BarPitch = fresh.Stamina.BarPitch;
                 Cfg.Riding.SeatOnSpine = fresh.Riding.SeatOnSpine;
                 PrintWarning("Config from " + (string.IsNullOrEmpty(Cfg.WrittenBy) ? "an older version" : Cfg.WrittenBy) + ": the 1.2.6 defaults for the animal bars and the rider seat on the spine were applied.");
+            }
+            if (VersionBefore(Cfg.WrittenBy, 1, 2, 8))
+            {
+                Cfg.Stamina.BarBottom = fresh.Stamina.BarBottom;
+                Cfg.Horse.WildUnsaddled = fresh.Horse.WildUnsaddled;
+                Cfg.Riding.SeatBoneStep = fresh.Riding.SeatBoneStep;
             }
             Cfg.WrittenBy = Version.ToString();
         }

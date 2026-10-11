@@ -510,6 +510,7 @@ namespace Oxide.Plugins
             };
 
             private const float IconWidth = 22f;
+            private const string IconGrey = "0.68 0.70 0.71 1";
 
             // True = the bars of this player are up.
             private bool DrawBars(Driver d, float now)
@@ -611,31 +612,39 @@ namespace Oxide.Plugins
                 switch (kind)
                 {
                     case 0:                 // fork and knife
-                        r(0, "0.95 0.85 0.6 1", 4f, 12f, 5.2f, 17f);
-                        r(1, "0.95 0.85 0.6 1", 6.4f, 12f, 7.6f, 17f);
-                        r(2, "0.95 0.85 0.6 1", 8.8f, 12f, 10f, 17f);
-                        r(3, "0.95 0.85 0.6 1", 4f, 10f, 10f, 12f);
-                        r(4, "0.95 0.85 0.6 1", 6.4f, 3f, 7.6f, 10f);
-                        r(5, "0.95 0.85 0.6 1", 13f, 9f, 15f, 17f);
-                        r(6, "0.95 0.85 0.6 1", 13.4f, 3f, 14.6f, 9f);
+                        r(0, IconGrey, 4f, 12f, 5.2f, 17f);
+                        r(1, IconGrey, 6.4f, 12f, 7.6f, 17f);
+                        r(2, IconGrey, 8.8f, 12f, 10f, 17f);
+                        r(3, IconGrey, 4f, 10f, 10f, 12f);
+                        r(4, IconGrey, 6.4f, 3f, 7.6f, 10f);
+                        r(5, IconGrey, 13f, 9f, 15f, 17f);
+                        r(6, IconGrey, 13.4f, 3f, 14.6f, 9f);
                         break;
-                    case 1:                 // bucket
-                        r(0, "0.7 0.82 1 1", 5f, 3f, 15f, 12f);
-                        r(1, "0.85 0.92 1 1", 4f, 12f, 16f, 14f);
-                        r(2, "0.85 0.92 1 1", 6f, 14f, 7.2f, 17f);
-                        r(3, "0.85 0.92 1 1", 12.8f, 14f, 14f, 17f);
-                        r(4, "0.85 0.92 1 1", 6f, 16f, 14f, 17.2f);
+                    case 1:                 // bucket: a body that widens upwards, a lip, a handle
+                        r(0, IconGrey, 6f, 2f, 14f, 4f);
+                        r(1, IconGrey, 5.5f, 4f, 14.5f, 6f);
+                        r(2, IconGrey, 5f, 6f, 15f, 8f);
+                        r(3, IconGrey, 4.5f, 8f, 15.5f, 10f);
+                        r(4, IconGrey, 4f, 10f, 16f, 12f);
+                        r(5, IconGrey, 3.2f, 12f, 16.8f, 13.6f);
+                        r(6, IconGrey, 4.4f, 13.6f, 5.6f, 16.2f);
+                        r(7, IconGrey, 14.4f, 13.6f, 15.6f, 16.2f);
+                        r(8, IconGrey, 5.6f, 15.8f, 14.4f, 17.2f);
                         break;
                     case 2:                 // plus
-                        r(0, "1 0.9 0.88 1", 8f, 4f, 12f, 16f);
-                        r(1, "1 0.9 0.88 1", 4f, 8f, 16f, 12f);
+                        r(0, IconGrey, 8f, 4f, 12f, 16f);
+                        r(1, IconGrey, 4f, 8f, 16f, 12f);
                         break;
-                    default:                // bolt
-                        r(0, "1 0.95 0.5 1", 10f, 14f, 13.5f, 17.5f);
-                        r(1, "1 0.95 0.5 1", 8.5f, 11f, 12f, 14f);
-                        r(2, "1 0.95 0.5 1", 6f, 9f, 12.5f, 11f);
-                        r(3, "1 0.95 0.5 1", 7.5f, 6f, 11f, 9f);
-                        r(4, "1 0.95 0.5 1", 6f, 2.5f, 9.5f, 6f);
+                    default:                // bolt: slanting down to the left, a wide step, slanting on to a point
+                        r(0, IconGrey, 10f, 17f, 15f, 19.5f);
+                        r(1, IconGrey, 9f, 15f, 14f, 17f);
+                        r(2, IconGrey, 8f, 13f, 13f, 15f);
+                        r(3, IconGrey, 6.5f, 11f, 15.5f, 13f);
+                        r(4, IconGrey, 9f, 9f, 14f, 11f);
+                        r(5, IconGrey, 8f, 7f, 13f, 9f);
+                        r(6, IconGrey, 7f, 5f, 12f, 7f);
+                        r(7, IconGrey, 6f, 3f, 10f, 5f);
+                        r(8, IconGrey, 5f, 0.8f, 8f, 3f);
                         break;
                 }
             }
@@ -648,14 +657,14 @@ namespace Oxide.Plugins
                 {
                     Name = name,
                     Parent = Hud,
-                    Components = { new CuiImageComponent { Color = "0.09 0.10 0.08 0.55" }, new CuiRectTransformComponent { AnchorMin = Pt(0f, y0), AnchorMax = Pt(1f, y1) } }
+                    Components = { new CuiImageComponent { Color = "0.24 0.26 0.27 0.6" }, new CuiRectTransformComponent { AnchorMin = Pt(0f, y0), AnchorMax = Pt(1f, y1) } }
                 });
                 AddIcon(c, name, row, w, h);
                 c.Add(new CuiElement
                 {
                     Name = name + ".b",
                     Parent = name,
-                    Components = { new CuiImageComponent { Color = "0 0 0 0.35" }, new CuiRectTransformComponent { AnchorMin = Pt(split, 0.1f), AnchorMax = Pt(1f, 0.9f) } }
+                    Components = { new CuiImageComponent { Color = "0.18 0.19 0.20 0.6" }, new CuiRectTransformComponent { AnchorMin = Pt(split, 0.1f), AnchorMax = Pt(1f, 0.9f) } }
                 });
                 c.Add(new CuiElement
                 {

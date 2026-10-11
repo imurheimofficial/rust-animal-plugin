@@ -144,8 +144,18 @@ namespace Oxide.Plugins
             return false;
         }
 
-        internal bool StartControl(BasePlayer player, BaseCombatEntity animal, ControlKind kind, bool silent = false)
+        internal bool StartControl(BasePlayer player, BaseCombatEntity animal, ControlKind kind, bool silent = false, bool ritual = false)
         {
+            if (kind == ControlKind.Form && !ritual)
+            {
+                // fixed rule: a player becomes an animal only through the ritual (a killed animal, the torch, the fire), or by going back into
+                // the animal he has left; no command, no menu button and no permission gives it
+                if (!silent)
+                {
+                    TellRaw(player, "You can become an animal only through the transformation ritual: kill the animal first, then perform the ritual at its body.");
+                }
+                return false;
+            }
             object[] args;
             string problem = ControlProblem(player, animal, kind, out args);
             if (problem != null)
@@ -1090,6 +1100,7 @@ namespace Oxide.Plugins
             // Ctrl is the brake: the game's client still lowers the camera of a crouching player, so while Ctrl is held the hidden body is
             // lifted by the same height and the camera stays where it was.
             private bool duckHeld;
+            private float nextPoseReset;
 
             public void ReadInput(InputState input)
             {
@@ -1116,6 +1127,12 @@ namespace Oxide.Plugins
                 {
                     InterruptClip();                       // walking or running takes over from the idle animation
                     bm.EndFeedPose(this);
+                    if (Animal != null && Time.time >= nextPoseReset)
+                    {
+                        // a grazing, drinking or resting flag the animal still had from before keeps its walk and run from being played
+                        nextPoseReset = Time.time + 0.4f;
+                        ClearLivestockPose(Animal);
+                    }
                 }
                 if (PoseName != null && (fwd || back || left || right || pressed(BUTTON.JUMP) || pressed(BUTTON.FIRE_THIRD)))
                 {

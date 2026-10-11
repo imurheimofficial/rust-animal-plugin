@@ -186,8 +186,10 @@ namespace Oxide.Plugins
                 bool allowed = species.TransformRestricted ? Bm.Has(killer, PermTransformRestricted) : Bm.Has(killer, PermTransform);
                 if (!allowed)
                 {
+                    Bm.Log(2, "Ritual: " + killer.displayName + " killed a " + species.Id + " but has no permission to transform (beastmaster.transform).");
                     return;
                 }
+                Bm.Log(2, "Ritual: " + killer.displayName + " killed a " + species.Id + ": its body is tracked.");
                 var rc = new RitualCorpse { Species = species, Killer = killer.userID, Animal = entity, Position = entity.transform.position, Rotation = entity.transform.rotation, Died = Time.time };
                 if (boss != null)
                 {
@@ -239,6 +241,7 @@ namespace Oxide.Plugins
                         rc.Linked = true;
                         rc.Position = corpse.transform.position;
                         corpse.ResetRemovalTime(Bm.Cfg.Ritual.CorpseKeepSeconds);
+                        Bm.Log(2, "Ritual: the body of the " + rc.Species.Id + " is ready for the ritual (" + Bm.Cfg.Ritual.Circles + " circles with a lit torch).");
                         return;
                     }
                 }
@@ -444,6 +447,9 @@ namespace Oxide.Plugins
                 rc.Performer = p.userID;
                 rc.Circles.Clear();
                 SpawnFlames(rc);
+                Bm.RunEffect("assets/bundled/prefabs/fx/fire/fire_v3.prefab", rc.Position + Vector3.up * 0.3f);      // the body itself burns
+                Bm.TellRaw(p, "The body catches fire. Press E next to it before the fire dies.");
+                Bm.Log(2, "Ritual: " + p.displayName + " lit the body of the " + rc.Species.Id);
             }
 
             // A low, thin ring of small flames round the body (real fire: it burns whoever stands in it).
@@ -466,6 +472,10 @@ namespace Oxide.Plugins
                     float a = i * Mathf.PI * 2f / count;
                     Vector3 pos = rc.Position + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * cfg.FireRadius;
                     pos.y = Mathf.Max(TerrainMeta.HeightMap.GetHeight(pos), rc.Position.y - 0.4f) + 0.04f;
+                    if (i == 0)
+                    {
+                        SpawnBodyFlame(rc, path);          // one flame on the body itself
+                    }
                     FireBall flame = GameManager.server.CreateEntity(path, pos, Quaternion.identity) as FireBall;
                     if (flame == null)
                     {
@@ -487,6 +497,32 @@ namespace Oxide.Plugins
                     Bm.ScaleModel(flame, cfg.FireScale);
                     rc.Flames.Add(flame);
                 }
+            }
+
+            // A bigger flame right on the body, so that the body itself is seen burning (it does no harm: nobody stands in it).
+            private void SpawnBodyFlame(RitualCorpse rc, string path)
+            {
+                RitualCfg cfg = Bm.Cfg.Ritual;
+                FireBall flame = GameManager.server.CreateEntity(path, rc.Position + Vector3.up * 0.25f, Quaternion.identity) as FireBall;
+                if (flame == null)
+                {
+                    return;
+                }
+                flame.enableSaving = false;
+                flame.lifeTimeMin = flame.lifeTimeMax = cfg.BurnSeconds + 0.5f;
+                flame.tickRate = 0.5f;
+                flame.damagePerSecond = 0f;
+                flame.radius = 0.3f;
+                flame.Spawn();
+                flame.CancelInvoke(flame.TryToSpread);
+                Rigidbody body = flame.GetComponent<Rigidbody>();
+                if (body != null)
+                {
+                    body.isKinematic = true;
+                    body.useGravity = false;
+                }
+                Bm.ScaleModel(flame, cfg.FireScale * 2.4f);
+                rc.Flames.Add(flame);
             }
 
             // E next to the burning body: the blood sacrifice and the transformation.
@@ -609,7 +645,7 @@ namespace Oxide.Plugins
                     if (Valid(animal)) animal.Kill();
                     return;
                 }
-                if (StartControl(player, animal, ControlKind.Form, true))
+                if (StartControl(player, animal, ControlKind.Form, true, true))
                 {
                     Driver d = DriverOf(player);
                     if (d != null)
