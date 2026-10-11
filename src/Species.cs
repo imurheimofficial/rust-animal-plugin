@@ -193,10 +193,27 @@ namespace Oxide.Plugins
             return PivotFactors.TryGetValue(s.Id, out factor) ? factor : 1.25f;
         }
 
+        // The rider's seat height of each species as found by riding them (a /bm seat up|down stored for a species wins).
+        private static readonly Dictionary<string, float> SeatLifts = new Dictionary<string, float>
+        {
+            { "sheep", -0.30f }, { "ram", -0.30f }, { "cow", -0.20f }, { "bull", -0.20f }, { "bear", -0.25f }, { "polarbear", -0.25f },
+            { "wolf", -0.40f }, { "stag", -0.35f }, { "tiger", -0.35f }, { "panther", -0.35f }, { "crocodile", -0.15f }, { "boar", -0.25f },
+            { "calf", -0.35f }, { "lamb", -0.40f }
+        };
+
         internal float SeatLiftOf(SpeciesDef s)
         {
+            if (s == null)
+            {
+                return 0f;
+            }
             SpeciesOverride o;
-            return s != null && Cfg.Species.TryGetValue(s.Id, out o) && o.SeatLift.HasValue ? o.SeatLift.Value : 0f;
+            if (Cfg.Species.TryGetValue(s.Id, out o) && o.SeatLift.HasValue)
+            {
+                return o.SeatLift.Value;
+            }
+            float lift;
+            return SeatLifts.TryGetValue(s.Id, out lift) ? lift : 0f;
         }
 
         internal float SeatForwardOf(SpeciesDef s)

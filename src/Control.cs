@@ -73,9 +73,9 @@ namespace Oxide.Plugins
                 {
                     return "RideHorseVanilla";
                 }
-                if (LeftOwnedBy(animal, player))
+                if (LeftUsableBy(animal, player))
                 {
-                    // the animal the player has just left carries him, once it has a saddle (like the horse)
+                    // the animal a player has left carries him (and whom the riding rule allows), once it has a saddle (like the horse)
                     return !Cfg.Riding.RequireSaddle || SaddleOf(animal) > 0 || !species.Gear || (Cfg.Riding.AdminBypass && IsAdmin(player)) ? null : "NeedSaddle";
                 }
                 if (!Cfg.Features.Riding)
@@ -303,7 +303,7 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            // G places a map marker with the vanilla bind: while controlling, it changes the view instead.
+            // G places a map marker with the vanilla bind: while controlling, it is the jump instead.
             public override object OnMapMarkerAdd(BasePlayer player, ProtoBuf.MapNote note)
             {
                 Driver d = Bm.DriverOf(player);
@@ -311,12 +311,7 @@ namespace Oxide.Plugins
                 {
                     return null;
                 }
-                if (d.Kind == ControlKind.Form || player.serverInput.IsDown(BUTTON.DUCK))
-                {
-                    Bm.ToggleNightVision(player);          // G is the night vision of an animal form
-                    return true;
-                }
-                d.CycleView();
+                d.Jump();                                  // G jumps (Space gets off / back to human); night vision comes by itself
                 return true;
             }
 
@@ -475,6 +470,8 @@ namespace Oxide.Plugins
             public bool Spectating;
             public float FeedPoseUntil;     // the grazing or drinking pose of E at food or water, until then (0 = none)
             private float stoppedSince;
+            private float rDownSince;
+            private bool rHoldDone;
             private bool shiftSinceStop;
             public bool OwnsAnimal;         // the animal was made for this form and vanishes in smoke when the form ends
             public int Gait = 1;
@@ -983,13 +980,14 @@ namespace Oxide.Plugins
             private static readonly MethodInfo RpcTargetPlayer = typeof(BaseEntity).Assembly.GetType("RpcTarget")?.GetMethod("Player", new[] { typeof(string), typeof(BasePlayer) });
             private static readonly MethodInfo ClientRpcNetId = FindClientRpc(typeof(NetworkableId));
             private static readonly MethodInfo ClientRpcVector3 = FindClientRpc(typeof(Vector3));
+            internal static readonly MethodInfo ClientRpcString = FindClientRpc(typeof(string));
 
             private static MethodInfo FindClientRpc(Type argType)
             {
                 return typeof(BaseEntity).GetMethods().FirstOrDefault(m => m.Name == "ClientRPC" && m.GetParameters().Length == 2 && m.GetParameters()[1].ParameterType == argType);
             }
 
-            private static void SendPlayerRpc(BasePlayer player, MethodInfo rpc, string name, object arg)
+            internal static void SendPlayerRpc(BasePlayer player, MethodInfo rpc, string name, object arg)
             {
                 if (RpcTargetPlayer == null || rpc == null || player == null || !player.IsConnected)
                 {
@@ -1141,35 +1139,64 @@ namespace Oxide.Plugins
                     }
                     SetGait(Mathf.Max(Gait, 1) + 1);
                 }
-                if (pressed(BUTTON.DUCK))
+                if (pressed(BUTTON.DUCK) && Kind == ControlKind.Ride)
                 {
-                    Brake();
+                    Brake();                               // a rider sits: Ctrl does not touch his camera
                 }
-                if (pressed(BUTTON.BACKWARD) && currentSpeed > GaitSpeed(3) * 0.9f)
+                if (pressed(BUTTON.BACKWARD) && currentSpeed > 0.6f)
                 {
-                    TurnAbout();
+                    // S while going forward: the brake (as an animal Ctrl would lower the game's camera); S with A or D at a run: the turn
+                    if ((left || right) && currentSpeed > GaitSpeed(3) * 0.9f)
+                    {
+                        TurnAbout();
+                    }
+                    else
+                    {
+                        Brake();
+                    }
                 }
                 if (pressed(BUTTON.JUMP))
                 {
-                    Jump();
+                    // Space: off the animal (riding) or back to human (animal form); G jumps
+                    BasePlayer self = Player;
+                    if (Kind == ControlKind.Ride || bm.SwapAllowed(self))
+                    {
+                        bm.NextTick(() => bm.StopControl(self, Kind == ControlKind.Ride ? "key Space" : "key Space"));
+                    }
+                    return;
                 }
                 if (pressed(BUTTON.FIRE_THIRD))
                 {
                     Attack();
                 }
+                // R: a tap changes the skin (animal form) or the view (riding); held a moment it opens the window of all the looks
                 if (pressed(BUTTON.RELOAD) && !duck)
                 {
-                    if (Kind == ControlKind.Form)
+                    rDownSince = Time.time;
+                    rHoldDone = false;
+                }
+                if (rDownSince > 0f && IsSet(now, BUTTON.RELOAD) && !rHoldDone && Time.time - rDownSince >= 0.45f)
+                {
+                    rHoldDone = true;
+                    bm.OpenSkinMenu(Player, Body);
+                }
+                if (rDownSince > 0f && !IsSet(now, BUTTON.RELOAD))
+                {
+                    if (!rHoldDone)
                     {
-                        if (HasSkins)
+                        if (Kind == ControlKind.Form)
                         {
-                            bm.ReskinForm(this);            // R: another skin of the animal (only animals that have skins)
+                            if (HasSkins)
+                            {
+                                bm.ReskinForm(this);
+                            }
+                        }
+                        else
+                        {
+                            CycleView();
                         }
                     }
-                    else
-                    {
-                        CycleView();
-                    }
+                    rDownSince = 0f;
                 }
                 if (Kind == ControlKind.Form && Spectating && pressed(BUTTON.USE))
                 {
@@ -2316,6 +2343,26 @@ namespace Oxide.Plugins
                 nextWallCrash = Mathf.Max(nextWallCrash, Time.time + seconds);
             }
 
+            // Another animal (or a horse) close by: the navigation mesh around it does not let the agent come near, so the plugin moves the body.
+            private float nearBodyAt;
+            private bool nearBodyWas;
+            private Vector3 nearBodyPos;
+
+            private bool NearOtherBody(Vector3 at)
+            {
+                if (Time.time < nearBodyAt && (at - nearBodyPos).sqrMagnitude < 0.25f)
+                {
+                    return nearBodyWas;
+                }
+                nearBodyAt = Time.time + 0.25f;
+                nearBodyPos = at;
+                var found = new List<BaseCombatEntity>();
+                Vis.Entities(at, 3f, found);
+                nearBodyWas = found.Any(e => e != null && e != Body && !e.IsDestroyed && !e.IsDead() && (e is BaseNPC2 || e is RidableHorse || e is BaseAnimalNPC)
+                    && Vector3.Distance(e.ClosestPoint(at), at) < 1.8f);
+                return nearBodyWas;
+            }
+
             // Is there an object surface (a floor, a step, a crate) right under the animal that is higher than the navigation mesh found nearby?
             private bool StandsAbove(Vector3 here, float navY)
             {
@@ -2479,7 +2526,7 @@ namespace Oxide.Plugins
                     // back onto the navigation mesh only where the animal really stands on that ground: next to a low platform the mesh of the
                     // ground beside it is close too, and stepping onto it there pulled the animal down through the platform
                     if (Animal.TrySampleNavmesh(here, 0.8f, out onNav) && new Vector2(onNav.x - here.x, onNav.z - here.z).magnitude < 0.5f && Mathf.Abs(onNav.y - here.y) < 0.7f
-                        && !StandsAbove(here, onNav.y))
+                        && !StandsAbove(here, onNav.y) && !NearOtherBody(here))
                     {
                         agent.updatePosition = true;
                         if (agent.WarpToWorldPosition(onNav))
@@ -2581,9 +2628,11 @@ namespace Oxide.Plugins
                     }
                     Vector3 next = pos + step;
                     next = bm.LeashClamp(this, next);
-                    if (!offMesh && StepOntoObject(pos, next))
+                    if (!offMesh && (StepOntoObject(pos, next) || NearOtherBody(next)))
                     {
-                        offMesh = true;                           // the way leads up onto something without a navigation mesh: the plugin walks the animal there
+                        // the way leads up onto something without a navigation mesh, or close to another animal (the navigation mesh has a hole
+                        // around it that kept small animals away): the plugin walks the animal there
+                        offMesh = true;
                         agent.IsJumping = true;
                         agent.updatePosition = false;
                     }

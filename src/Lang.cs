@@ -22,7 +22,7 @@ namespace Oxide.Plugins
                 ["NotYours"] = "This animal belongs to someone else.",
                 ["AlreadyControlling"] = "You are already riding or in animal form. Press X first.",
                 ["Riding"] = "Riding the {0}. W/A/S/D move, Shift faster, Ctrl brake, Space jump, F attack, G view, X get off.",
-                ["Form"] = "You are now a {0}. W/A/S/D move, Shift faster, Ctrl brake, Space jump, F attack, E eat / use, R skin, G night vision, X back to human.",
+                ["Form"] = "You are now a {0}. W/A/S/D move, Shift faster, S brake, G jump, F attack, E eat / use, R skin (hold R: skin window), Space or X back to human.",
                 ["Released"] = "You are free again.",
                 ["ViewThird"] = "View: third person. Move the mouse to look around; G or R changes the view.",
                 ["ViewFirst"] = "View: first person. G or R changes the view.",

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Oxide.Game.Rust.Cui;
 using Rust.Ai.Gen2;
 using UnityEngine;
 
@@ -57,6 +58,194 @@ namespace Oxide.Plugins
                 return true;
             }
             return false;
+        }
+
+        // ---------------------------------------------------------------- the window of looks (R held)
+        // The horse: its breeds. Cow, bull, sheep, ram: the two colours (16 each), the pattern (it follows the animal's name) and the size of the
+        // patches. Each button applies at once; the window closes itself after a while or when the player is no longer on or in that animal.
+
+        private const string SkinUi = "BeastmasterSkins";
+
+        private sealed class SkinState
+        {
+            public BaseEntity Target;
+            public int ColourA, ColourB, Pattern;
+            public float Until;
+        }
+
+        private readonly Dictionary<ulong, SkinState> skinMenus = new Dictionary<ulong, SkinState>();
+
+        // May this player change the look of that animal right now? (he is it, rides it, or rides the horse)
+        private bool MaySkin(BasePlayer player, BaseEntity animal)
+        {
+            if (player == null || !Valid(animal))
+            {
+                return false;
+            }
+            Driver d = DriverOf(player);
+            if (d != null && d.Body == animal)
+            {
+                return true;
+            }
+            BaseMountable seat = player.GetMounted();
+            RidableHorse horse = animal as RidableHorse;
+            return horse != null && seat != null && (seat == horse || seat.GetParentEntity() == horse) && horse.GetDriver() == player;
+        }
+
+        internal void OpenSkinMenu(BasePlayer player, BaseEntity animal)
+        {
+            if (!MaySkin(player, animal))
+            {
+                return;
+            }
+            RidableHorse horse = animal as RidableHorse;
+            LivestockAnimal livestock = animal as LivestockAnimal;
+            if ((horse == null || horse.breeds == null || horse.breeds.Length < 2) && livestock == null)
+            {
+                TellRaw(player, "This animal has no other looks.");
+                return;
+            }
+            SkinState st;
+            if (!skinMenus.TryGetValue(player.userID, out st) || st.Target != animal)
+            {
+                st = new SkinState { Target = animal, ColourA = 0, ColourB = 1, Pattern = livestock != null ? Mathf.Max(0, Array.IndexOf(SprayNames, livestock.AnimalName)) : 0 };
+                skinMenus[player.userID] = st;
+            }
+            st.Until = Time.time + 30f;
+            DrawSkinMenu(player, st);
+        }
+
+        private void DrawSkinMenu(BasePlayer player, SkinState st)
+        {
+            CuiHelper.DestroyUi(player, SkinUi);
+            var c = new CuiElementContainer();
+            RidableHorse horse = st.Target as RidableHorse;
+            SpeciesDef species = SpeciesOf(st.Target);
+            c.Add(new CuiPanel { Image = { Color = "0 0 0 0.75" }, RectTransform = { AnchorMin = "0.36 0.3", AnchorMax = "0.64 0.72" }, CursorEnabled = true }, "Overlay", SkinUi);
+            UiLabel(c, SkinUi, "<b>Look of the " + (species != null ? species.Display.ToLowerInvariant() : "animal") + "</b>", 15, 0.04f, 0.88f, 0.96f, 0.98f, TextAnchor.MiddleCenter);
+            if (horse != null)
+            {
+                int current = horse.GetBreed() != null ? Array.IndexOf(horse.breeds, horse.GetBreed()) : -1;
+                int n = horse.breeds.Length;
+                for (int i = 0; i < n; i++)
+                {
+                    int col = i % 2, row = i / 2;
+                    float x0 = 0.05f + col * 0.46f, y1 = 0.85f - row * 0.13f;
+                    string name = horse.breeds[i] != null ? horse.breeds[i].name : "Breed " + (i + 1);
+                    UiButton(c, SkinUi, name, "bm.ui skin breed " + i, x0, y1 - 0.11f, x0 + 0.44f, y1, i == current ? ColOn : ColBtn, 12);
+                }
+            }
+            else
+            {
+                Action<string, string, float> row = (label, cmd, y) =>
+                {
+                    UiLabel(c, SkinUi, label, 13, 0.05f, y - 0.1f, 0.5f, y, TextAnchor.MiddleLeft);
+                    UiButton(c, SkinUi, "<", "bm.ui skin " + cmd + " -1", 0.55f, y - 0.1f, 0.7f, y, ColBtn, 14);
+                    UiButton(c, SkinUi, ">", "bm.ui skin " + cmd + " 1", 0.78f, y - 0.1f, 0.93f, y, ColBtn, 14);
+                };
+                row("Colour 1:  " + (st.ColourA + 1) + " / 16", "a", 0.84f);
+                row("Colour 2:  " + (st.ColourB + 1) + " / 16", "b", 0.71f);
+                row("Pattern:  " + SprayNames[Mathf.Clamp(st.Pattern, 0, SprayNames.Length - 1)], "pattern", 0.58f);
+                UiButton(c, SkinUi, "Other patches", "bm.ui skin patches", 0.05f, 0.33f, 0.47f, 0.44f, ColBtn, 12);
+                UiButton(c, SkinUi, "Random look", "bm.ui skin random", 0.53f, 0.33f, 0.95f, 0.44f, ColBtn, 12);
+            }
+            UiButton(c, SkinUi, "Close", "bm.ui skin close", 0.35f, 0.04f, 0.65f, 0.14f, ColOff, 12);
+            CuiHelper.AddUi(player, c);
+        }
+
+        internal void CloseSkinMenu(BasePlayer player)
+        {
+            if (player != null && skinMenus.Remove(player.userID) && player.IsConnected)
+            {
+                CuiHelper.DestroyUi(player, SkinUi);
+            }
+        }
+
+        // bm.ui skin <what> [value]
+        internal void SkinButton(BasePlayer player, string[] args)
+        {
+            SkinState st;
+            if (player == null || !skinMenus.TryGetValue(player.userID, out st))
+            {
+                CuiHelper.DestroyUi(player, SkinUi);
+                return;
+            }
+            string what = args.Length > 1 ? args[1].ToLowerInvariant() : "close";
+            if (what == "close" || !Active || !MaySkin(player, st.Target))
+            {
+                CloseSkinMenu(player);
+                return;
+            }
+            int step = 0;
+            if (args.Length > 2)
+            {
+                int.TryParse(args[2], out step);
+            }
+            st.Until = Time.time + 30f;
+            RidableHorse horse = st.Target as RidableHorse;
+            LivestockAnimal livestock = st.Target as LivestockAnimal;
+            if (horse != null && what == "breed" && step >= 0 && horse.breeds != null && step < horse.breeds.Length)
+            {
+                horse.SetBreed(step);
+                horse.SendNetworkUpdateImmediate();
+            }
+            else if (livestock != null)
+            {
+                switch (what)
+                {
+                    case "a":
+                        st.ColourA = (st.ColourA + (step < 0 ? 15 : 1)) % 16;
+                        livestock.Genes = LivestockGenome.WithMarkers(livestock.Genes, st.ColourA, st.ColourB);
+                        break;
+                    case "b":
+                        st.ColourB = (st.ColourB + (step < 0 ? 15 : 1)) % 16;
+                        livestock.Genes = LivestockGenome.WithMarkers(livestock.Genes, st.ColourA, st.ColourB);
+                        break;
+                    case "pattern":
+                        st.Pattern = (st.Pattern + (step < 0 ? SprayNames.Length - 1 : 1)) % SprayNames.Length;
+                        livestock.AnimalName = SprayNames[st.Pattern];
+                        break;
+                    case "patches":
+                        {
+                            int genes = livestock.Genes;
+                            foreach (LivestockGene gene in new[] { LivestockGene.Dung, LivestockGene.Yield, LivestockGene.Longevity, LivestockGene.Fertility, LivestockGene.Hardiness })
+                            {
+                                genes = LivestockGenome.WithPair(genes, gene, (LivestockAllele)UnityEngine.Random.Range(0, 3), (LivestockAllele)UnityEngine.Random.Range(0, 3));
+                            }
+                            livestock.Genes = genes;
+                            break;
+                        }
+                    case "random":
+                        RerollLook(livestock);
+                        st.Pattern = Mathf.Max(0, Array.IndexOf(SprayNames, livestock.AnimalName));
+                        break;
+                }
+                livestock.SendNetworkUpdateImmediate();
+            }
+            DrawSkinMenu(player, st);
+        }
+
+        internal void SkinMenuTick()
+        {
+            if (skinMenus.Count == 0)
+            {
+                return;
+            }
+            foreach (KeyValuePair<ulong, SkinState> pair in skinMenus.ToList())
+            {
+                BasePlayer p = BasePlayer.FindByID(pair.Key);
+                if (p == null || !p.IsConnected || Time.time > pair.Value.Until || !MaySkin(p, pair.Value.Target))
+                {
+                    if (p != null)
+                    {
+                        CloseSkinMenu(p);
+                    }
+                    else
+                    {
+                        skinMenus.Remove(pair.Key);
+                    }
+                }
+            }
         }
 
         // Headless test: the look of a cow and of a horse is rolled again; the gameplay genes stay.

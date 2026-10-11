@@ -483,6 +483,26 @@ namespace Oxide.Plugins
                 }
                 return;
             }
+            TamedRecord rec = RecordOf(horse);
+            if (rec != null && SeatsOf(horse) == 0 && MayUse(player, rec.Owner, "team"))
+            {
+                // the game says "all seats are occupied" for a horse without a saddle: a saddle the player carries goes on, else its inventory opens
+                string fitted = crouch ? null : FitCarriedSaddle(player, horse);
+                if (fitted != null)
+                {
+                    TellRaw(player, "Your " + fitted + " is on the horse now: press E to ride.");
+                    return;
+                }
+                if (!OpenEntityLoot(player, horse))
+                {
+                    TellRaw(player, "The horse has no saddle: hold E at it, choose its inventory and put a saddle into the saddle slot.");
+                }
+                else if (!crouch)
+                {
+                    TellRaw(player, "The horse has no saddle: put one into its saddle slot, then E rides it.");
+                }
+                return;
+            }
             HorseUse(player, horse);
         }
 
@@ -524,6 +544,20 @@ namespace Oxide.Plugins
                 if (species.Ride != RideTier.None && !species.Critter)
                 {
                     StartControl(player, animal, ControlKind.Ride);        // E at the animal one has left: riding it, like the horse
+                }
+                return;
+            }
+            if (LeftUsableBy(animal, player))
+            {
+                // another player's left animal: ridden with a saddle (it stays for good afterwards)
+                if (species.Gear && Cfg.Features.Gear && SaddleOf(animal) <= 0 && !RideBypass(player))
+                {
+                    TellRaw(player, "It has no saddle: its player has to fit one first.");
+                    return;
+                }
+                if (species.Ride != RideTier.None && !species.Critter)
+                {
+                    StartControl(player, animal, ControlKind.Ride);
                 }
                 return;
             }
@@ -664,7 +698,8 @@ namespace Oxide.Plugins
                     {
                         list.Add(new[] { "inventory", "Inventory" });
                     }
-                    if (FormHandledBy(host, player))
+                    // nobody leads the animal he sits on
+                    if (FormHandledBy(host, player) && (host.Leader == player || !player.isMounted))
                     {
                         list.Add(new[] { "lead", host.Leader == player ? "Let go" : "Lead" });
                     }
@@ -691,6 +726,16 @@ namespace Oxide.Plugins
                 {
                     list.Add(new[] { "inventory", "Inventory" });
                 }
+                AddHandLead(list, player, animal);
+                return list;
+            }
+            if (LeftUsableBy(animal, player))
+            {
+                if (rideable)
+                {
+                    list.Add(new[] { "ride", "Ride" });
+                }
+                AddHandLead(list, player, animal);
                 return list;
             }
             TamedRecord rec = RecordOf(animal);
@@ -704,6 +749,7 @@ namespace Oxide.Plugins
                 {
                     list.Add(new[] { "inventory", "Inventory" });
                 }
+                AddHandLead(list, player, animal);
                 if (Cfg.Features.Taming)
                 {
                     list.Add(new[] { "follow", rec.State == "follow" ? "Follow (now)" : "Follow" });
@@ -719,6 +765,18 @@ namespace Oxide.Plugins
                 list.Add(new[] { "inventory", "Inventory" });
             }
             return list;
+        }
+
+        private void AddHandLead(List<string[]> list, BasePlayer player, BaseNPC2 animal)
+        {
+            if (HandLedBy(animal, player))
+            {
+                list.Add(new[] { "handlead", "Let go" });
+            }
+            else if (MayHandLead(player, animal))
+            {
+                list.Add(new[] { "handlead", "Lead" });
+            }
         }
 
         private void ShowBeastMenu(BasePlayer player, BaseNPC2 animal, List<string[]> choices)
@@ -813,6 +871,9 @@ namespace Oxide.Plugins
                     break;
                 case "lead":
                     TryFormHandle(player, host, true);
+                    break;
+                case "handlead":
+                    ToggleHandLead(player, animal);
                     break;
                 case "follow":
                 case "wait":

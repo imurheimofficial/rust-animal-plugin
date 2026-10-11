@@ -77,6 +77,9 @@ namespace Oxide.Plugins
                 {
                     nextPrompt = now + 0.3f;
                     Prompts();
+                    Bm.SkinMenuTick();
+                    Bm.AutoNightVision();
+                    Bm.HandLeadTick();
                 }
                 if (now >= nextRope)
                 {
@@ -166,6 +169,34 @@ namespace Oxide.Plugins
                             shown.Add(id);
                         }
                     }
+                    // near a wild horse that standing close does not tame: why not
+                    if (Bm.Stable.States.Count > 0)
+                    {
+                        foreach (BasePlayer p in BasePlayer.activePlayerList)
+                        {
+                            if (p == null || shown.Contains(p.userID) || p.IsDead() || p.IsSleeping() || p.isMounted || Bm.DriverOf(p) != null)
+                            {
+                                continue;
+                            }
+                            HorseState nearest = null;
+                            float best = 8f;
+                            foreach (HorseState s in Bm.Stable.States.Values)
+                            {
+                                float dist = Valid(s.Horse) ? Vector3.Distance(p.transform.position, s.Horse.transform.position) : 99f;
+                                if (dist < best)
+                                {
+                                    best = dist;
+                                    nearest = s;
+                                }
+                            }
+                            string why = nearest != null ? Bm.HorseTameBlock(nearest.Horse, p) : null;
+                            if (why != null)
+                            {
+                                Draw(p, why, false);
+                                shown.Add(p.userID);
+                            }
+                        }
+                    }
                 }
                 foreach (ulong id in prompts.Keys.Where(k => !shown.Contains(k)).ToList())
                 {
@@ -192,10 +223,11 @@ namespace Oxide.Plugins
                     return;
                 }
                 var c = new CuiElementContainer();
+                int half = Mathf.RoundToInt(Mathf.Clamp(text.Length * 4.3f + 30f, 150f, 340f));
                 c.Add(new CuiPanel
                 {
-                    Image = { Color = "0.06 0.07 0.05 0.55" },
-                    RectTransform = { AnchorMin = "0.5 0.38", AnchorMax = "0.5 0.38", OffsetMin = "-150 -15", OffsetMax = "150 15" }
+                    Image = { Color = "0 0 0 0.45" },
+                    RectTransform = { AnchorMin = "0.5 0.38", AnchorMax = "0.5 0.38", OffsetMin = "-" + half + " -15", OffsetMax = half + " 15" }
                 }, "Overlay", PromptUi);
                 c.Add(new CuiLabel
                 {

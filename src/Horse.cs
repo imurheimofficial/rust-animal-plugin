@@ -301,8 +301,13 @@ namespace Oxide.Plugins
                 HorseInfo info;
                 if (!Bm.Data.Horses.TryGetValue(tag, out info))
                 {
-                    info = new HorseInfo { Temperament = temperament ?? RollTemperament() };
+                    info = new HorseInfo { Temperament = temperament ?? RollTemperament(), Rolled = 123 };
                     Bm.Data.Horses[tag] = info;
+                }
+                else if (info.Rolled < 123 && temperament == null && !info.Calmed && Bm.RecordOf(horse) == null && Bm.BossOf(horse) == null)
+                {
+                    info.Temperament = RollTemperament();             // a wild horse from before 1.2.3: rolled again (most horses are calm now)
+                    info.Rolled = 123;
                 }
                 horse.skinID = tag;
                 s = new HorseState { Horse = horse, Info = info, Tag = tag, NetId = horse.net.ID.Value, Home = horse.transform.position, NextWander = Time.time + UnityEngine.Random.Range(8f, 30f) };
@@ -724,7 +729,10 @@ namespace Oxide.Plugins
                             if (Bm.TameAnimal(s.Horse, p) != null)
                             {
                                 s.Bond.Clear();
-                                Bm.TellRaw(p, "The horse trusts you now - it is yours. Put a saddle into its inventory (hold E at it) to ride it.");
+                                string fitted = Bm.FitCarriedSaddle(p, s.Horse);
+                                Bm.TellRaw(p, fitted != null
+                                    ? "The horse trusts you now - it is yours. Your " + fitted + " is on it: press E to ride."
+                                    : "The horse trusts you now - it is yours. It has no saddle yet: Ctrl + E (or hold E > Inventory) and put a saddle into its saddle slot, then E rides it.");
                                 return;
                             }
                             s.Bond.Remove(p.userID);              // it could not be his: start over, no message every tick
@@ -1223,9 +1231,9 @@ namespace Oxide.Plugins
                 {
                     return null;
                 }
-                if (Bm.LeftOwnedBy(horse, player))
+                if (Bm.LeftUsableBy(horse, player))
                 {
-                    return null;                                     // the horse the player has just left can be mounted by him
+                    return null;                                     // the horse a player has left: him and whom the riding rule allows
                 }
                 Driver formHost = Bm.DriverOfAnimal(horse);
                 if (formHost != null && formHost.Kind == ControlKind.Form)
@@ -1367,12 +1375,112 @@ namespace Oxide.Plugins
                 {
                     return null;
                 }
-                if (Bm.Cfg.Horse.Jump && input.WasJustPressed(BUTTON.JUMP) && Time.time >= nextJump)
+                // the keys of riding, as on the other animals: Space gets off, G jumps (OnMapMarkerAdd), F or the middle mouse button attacks,
+                // R changes the view (third person), R held opens the window of the horse's looks
+                if (input.WasJustPressed(BUTTON.JUMP))
+                {
+                    BaseMountable seat = player.GetMounted();
+                    BasePlayer rider = player;
+                    Bm.NextTick(() =>
+                    {
+                        if (seat != null && rider != null && rider.GetMounted() == seat)
+                        {
+                            seat.DismountPlayer(rider);
+                        }
+                    });
+                    return null;
+                }
+                if (Bm.DriverOfAnimal(horse) != null)
+                {
+                    return null;                           // a player is this horse: his rider only gets off, the horse is his
+                }
+                if (input.WasJustPressed(BUTTON.FIRE_THIRD))
+                {
+                    RiderAttack(player, horse, s);
+                }
+                float since;
+                if (input.WasJustPressed(BUTTON.RELOAD) && !input.IsDown(BUTTON.DUCK))
+                {
+                    rDown[player.userID] = Time.time;
+                }
+                else if (rDown.TryGetValue(player.userID, out since))
+                {
+                    if (input.IsDown(BUTTON.RELOAD) && Time.time - since >= 0.45f)
+                    {
+                        rDown.Remove(player.userID);
+                        Bm.OpenSkinMenu(player, horse);
+                    }
+                    else if (!input.IsDown(BUTTON.RELOAD))
+                    {
+                        rDown.Remove(player.userID);
+                        SetThirdPersonFlag(player, !player.HasPlayerFlag(BasePlayer.PlayerFlags.ThirdPersonViewmode));
+                    }
+                }
+                return null;
+            }
+
+            private readonly Dictionary<ulong, float> rDown = new Dictionary<ulong, float>();
+
+            // G while riding a managed horse: the jump.
+            public override object OnMapMarkerAdd(BasePlayer player, ProtoBuf.MapNote note)
+            {
+                if (States.Count == 0 || player == null || !player.isMounted || Bm.DriverOf(player) != null)
+                {
+                    return null;
+                }
+                RidableHorse horse = player.GetMounted() != null ? HorseOfSeat(player.GetMounted()) : null;
+                if (horse == null || horse.GetDriver() != player || StateOf(horse) == null || Bm.DriverOfAnimal(horse) != null)
+                {
+                    return null;
+                }
+                if (Bm.Cfg.Horse.Jump && Time.time >= nextJump)
                 {
                     nextJump = Time.time + Bm.Cfg.Movement.JumpCooldown;
                     Jump(horse);
                 }
-                return null;
+                return true;
+            }
+
+            // Getting off a horse: the third person view of the ride ends with it.
+            public override void OnEntityDismounted(BaseMountable mountable, BasePlayer player)
+            {
+                if (player == null || mountable == null || States.Count == 0 || Bm.DriverOf(player) != null)
+                {
+                    return;
+                }
+                RidableHorse horse = HorseOfSeat(mountable);
+                if (horse != null && StateOf(horse) != null && player.HasPlayerFlag(BasePlayer.PlayerFlags.ThirdPersonViewmode))
+                {
+                    SetThirdPersonFlag(player, false);
+                }
+                rDown.Remove(player.userID);
+            }
+
+            // An attack from the saddle: the camera to the front = rear up and strike, the camera behind = a kick behind. The damage is the bull's.
+            private void RiderAttack(BasePlayer player, RidableHorse horse, HorseState s)
+            {
+                float now = Time.time;
+                if (now < s.NextAttack || !Bm.Cfg.Features.Combat)
+                {
+                    return;
+                }
+                s.NextAttack = now + Bm.Cfg.Horse.AttackCooldown;
+                Vector3 look = player.eyes.HeadForward();
+                look.y = 0f;
+                Vector3 ahead = horse.transform.forward;
+                ahead.y = 0f;
+                bool rear = look.sqrMagnitude > 0.01f && Vector3.Angle(ahead, look) > 100f;
+                if (!rear && Bm.Cfg.Horse.RearUpAttack)
+                {
+                    RpcGroup(horse, "CLIENT_Stand");
+                }
+                Bm.timer.Once(rear ? 0.15f : Bm.Cfg.Horse.RearUpAttack ? 0.8f : 0.15f, () =>
+                {
+                    if (Valid(horse) && !horse.IsDead())
+                    {
+                        HitZone(horse, Bm.Cfg.Horse.AttackDamage, null, true, rear);
+                    }
+                });
             }
 
             private static void Jump(RidableHorse horse)
@@ -1392,33 +1500,20 @@ namespace Oxide.Plugins
                 body.AddForce(Vector3.up * up, ForceMode.VelocityChange);
             }
 
-            // F while riding a managed horse: rear up and strike forward (A14); the damage is the horse attack of the config.
+            // F while riding a managed horse: the attack from the saddle (front or behind, by the camera).
             public override object OnServerCommand(BasePlayer player, ConsoleSystem.Arg arg)
             {
-                if (States.Count == 0 || !player.isMounted || !Bm.Cfg.Features.Combat || arg.cmd.FullName != "inventory.lighttoggle")
+                if (States.Count == 0 || !player.isMounted || arg.cmd.FullName != "inventory.lighttoggle" || Bm.DriverOf(player) != null)
                 {
                     return null;
                 }
                 RidableHorse horse = player.GetMounted() != null ? HorseOfSeat(player.GetMounted()) : null;
                 HorseState s = horse != null ? StateOf(horse) : null;
-                if (s == null || horse.GetDriver() != player || !Bm.Cfg.Horse.RearUpAttack)
+                if (s == null || horse.GetDriver() != player || Bm.DriverOfAnimal(horse) != null)
                 {
                     return null;
                 }
-                float now = Time.time;
-                if (now < s.NextAttack)
-                {
-                    return true;
-                }
-                s.NextAttack = now + Bm.Cfg.Horse.AttackCooldown;
-                RpcGroup(horse, "CLIENT_Stand");
-                Bm.timer.Once(0.8f, () =>
-                {
-                    if (Valid(horse) && !horse.IsDead())
-                    {
-                        HitZone(horse, Bm.Cfg.Horse.AttackDamage, null, true, false);
-                    }
-                });
+                RiderAttack(player, horse, s);
                 return true;
             }
 
@@ -1448,6 +1543,37 @@ namespace Oxide.Plugins
         // ---------------------------------------------------------------- glue for the other modules
 
         // E on a horse: a wild managed horse can be claimed once it knows the player.
+        // A saddle the player carries goes onto his horse (a double one first), so that E rides it at once. Returns its name, null = none.
+        internal string FitCarriedSaddle(BasePlayer player, RidableHorse horse)
+        {
+            if (player == null || !Valid(horse) || horse.equipmentInventory == null || SeatsOf(horse) > 0)
+            {
+                return null;
+            }
+            foreach (string name in new[] { "horse.saddle.double", "horse.saddle.single" })
+            {
+                Item saddle = PlayerItems(player).FirstOrDefault(i => i.info.shortname == name);
+                if (saddle == null)
+                {
+                    continue;
+                }
+                Item one = saddle.amount > 1 ? saddle.SplitItem(1) : saddle;
+                if (one == null)
+                {
+                    continue;
+                }
+                if (one.MoveToContainer(horse.equipmentInventory))
+                {
+                    return name == "horse.saddle.double" ? "double saddle" : "saddle";
+                }
+                if (one != saddle)
+                {
+                    player.GiveItem(one);
+                }
+            }
+            return null;
+        }
+
         internal bool HorseUse(BasePlayer player, RidableHorse horse)
         {
             HorseState s = Stable != null ? Stable.StateOf(horse) : null;
@@ -1466,6 +1592,38 @@ namespace Oxide.Plugins
             return s != null && Cfg.Features.Taming && Valid(horse) && RecordOf(horse) == null && BossOf(horse) == null
                 && !(horse.net != null && LeftForms.ContainsKey(horse.net.ID.Value)) && DriverOfAnimal(horse) == null
                 && !(s.Info.Temperament == "aggressive" && !s.Info.Calmed);
+        }
+
+        // Why standing next to this wild horse does not tame it (for the prompt), null = it does (or it is not a wild horse).
+        internal string HorseTameBlock(RidableHorse horse, BasePlayer player)
+        {
+            HorseState s = Stable != null ? Stable.StateOf(horse) : null;
+            if (s == null || !Cfg.Features.Taming || !Valid(horse) || RecordOf(horse) != null || BossOf(horse) != null || DriverOfAnimal(horse) != null
+                || (horse.net != null && LeftForms.ContainsKey(horse.net.ID.Value)))
+            {
+                return null;
+            }
+            if (!Has(player, PermTame))
+            {
+                return "You may not tame horses here (permission beastmaster.tame).";
+            }
+            if (OwnedCount(player.userID) >= Cfg.Taming.MaxOwned)
+            {
+                return "You own " + Cfg.Taming.MaxOwned + " animals (the limit): release one to tame this horse.";
+            }
+            if (s.Info.Calmed)
+            {
+                return s.Asleep(Time.time) ? "The horse sleeps: stay close, it wakes up calm." : null;
+            }
+            if (s.Info.Temperament == "aggressive")
+            {
+                return "An aggressive horse: a tranquilizer dart puts it to sleep, it wakes up calm and tameable.";
+            }
+            if (s.Info.Temperament == "shy")
+            {
+                return "A shy horse runs from you: a tranquilizer dart puts it to sleep, it wakes up calm and tameable.";
+            }
+            return null;
         }
 
         internal bool MayTameHorse(BasePlayer player)

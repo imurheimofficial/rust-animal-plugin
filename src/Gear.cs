@@ -71,16 +71,30 @@ namespace Oxide.Plugins
                 }
             }
             vb.Filling = false;
+            // The panel is opened the way storage plugins open a virtual container: the box is hidden from every game, the player's loot gets
+            // the box's container, and the resizable panel is asked for (the wooden box's own panel has 18 slots: a bigger container did not
+            // show at all and only the player's own inventory came up).
+            try
+            {
+                box.limitNetworking = true;
+            }
+            catch
+            {
+            }
             bool opened;
             using (new VanillaScope(player))             // an animal form (a spectator) may open it too
             {
-                opened = box.PlayerOpenLoot(player, box.panelName, false);
+                opened = player.inventory.loot.StartLootingEntity(box, false);
             }
             if (!opened)
             {
                 FinishBox(vb, false);
                 return null;
             }
+            box.SetFlag(BaseEntity.Flags.Open, true);
+            player.inventory.loot.AddContainer(box.inventory);
+            player.inventory.loot.SendImmediate();
+            Driver.SendPlayerRpc(player, Driver.ClientRpcString, "RPC_OpenLootPanel", "generic_resizable");
             return vb;
         }
 
@@ -156,7 +170,7 @@ namespace Oxide.Plugins
 
         private int MaxStorage => Mathf.Max(0, Cfg.Gear.BagSlots) + Mathf.Max(0, Cfg.Gear.WoodArmorSlots);
 
-        // The double saddle fits the big hoofed animals.
+        // The double saddle fits the horse, the bull and the cow; every other animal carries one rider.
         internal static bool DoubleSaddleSpecies(SpeciesDef s)
         {
             if (s == null)
@@ -165,7 +179,7 @@ namespace Oxide.Plugins
             }
             switch (s.Id)
             {
-                case "horse": case "bull": case "cow": case "ram": case "sheep": case "stag": case "doe": return true;
+                case "horse": case "bull": case "cow": return true;
                 default: return false;
             }
         }

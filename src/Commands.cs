@@ -432,11 +432,12 @@ namespace Oxide.Plugins
 
         private string KeysText()
         {
-            return "As an animal: W/A/S/D move, Shift faster, Ctrl brake, S while running = 180 turn, Space jump (onto raised surfaces too), "
-                + "F attack (camera behind the animal = rear kick), E eat / drink / pick up / open, Ctrl + E your animal's inventory, R another skin (cow, bull, sheep, ram, horse), G or Ctrl + G night vision (goggles in the inventory), "
-                + "B gestures (or /bm lie, sit, roar, look, stand), X back to human (X at the animal you left = become it again, E at it = ride it with a saddle, Ctrl + E at it = its inventory). "
-                + "At an animal: E ride (with a saddle) or its inventory, Ctrl + E its inventory or a player's leash, hold E for all choices. "
-                + "Riding: the same keys, G or R switch first / third person, X get off. Running uses stamina (the yellow bar). "
+            return "As an animal: W/A/S/D move, Shift faster, S brake (S while running = 180 turn), G jump (onto raised surfaces too), Space back to human, "
+                + "F attack (camera behind the animal = rear kick), E eat / drink / pick up / open (also what the crosshair points at), Ctrl + E your animal's inventory, R another skin, hold R the skin window, "
+                + "B gestures (or /bm lie, sit, roar, look, stand), X form: back to human, or at the animal you left become it again (E at it = ride it with a saddle, Ctrl + E at it = its inventory). "
+                + "Night vision comes by itself at night when you carry night vision goggles. "
+                + "At an animal: E ride (with a saddle) or its inventory, Ctrl + E its inventory or a player's leash, hold E for all choices (Ride, Inventory, Lead). "
+                + "Riding (the horse too): G jump, Space get off, F attack, R first / third person, hold R the skin window. Running uses stamina (the yellow bar). "
                 + "Ctrl + R opens the menu (empty hands, riding or as an animal), also /bm. F5 and H work after a one-time bind f5 bm.menu and bind h bm.nv in the F1 console.";
         }
 

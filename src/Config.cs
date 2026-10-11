@@ -10,6 +10,7 @@ namespace Oxide.Plugins
         // on first load; keys missing after an update are added with their defaults.
         internal partial class ConfigData
         {
+            [JsonProperty("Written by plugin version (new defaults of a release are applied once)")] public string WrittenBy = string.Empty;
             [JsonProperty("General")] public GeneralCfg General = new GeneralCfg();
             [JsonProperty("Access")] public AccessCfg Access = new AccessCfg();
             [JsonProperty("Features (switch whole parts on or off)")] public FeatureCfg Features = new FeatureCfg();
@@ -80,8 +81,8 @@ namespace Oxide.Plugins
             [JsonProperty("Who may ride an owned animal (owner, team, friends, clan, anyone)")] public string Ownership = "team";
             [JsonProperty("Seat used for riders on non-horse animals (the horse's saddle seat: the rider sits the way he sits on a horse)")] public string SeatPrefab = "assets/prefabs/vehicle/seats/horsesaddle.prefab";
             [JsonProperty("Seat of the second rider (double saddle)")] public string RearSeatPrefab = "assets/prefabs/vehicle/seats/horsesaddlerear.prefab";
-            [JsonProperty("The rider's seat is fixed to the animal's spine, so the rider moves with its back like on the horse")] public bool SeatOnSpine = true;
-            [JsonProperty("A rider can turn his head this far to each side (degrees; the horse's saddle seat itself allows 120; 0 = no limit)")] public float ViewClamp = 120f;
+            [JsonProperty("The rider's seat is fixed to the animal's spine (moves with the back, but the camera shakes)")] public bool SeatOnSpine = false;
+            [JsonProperty("A rider can turn his head this far to each side (degrees; the horse's saddle seat itself allows 120; 0 = no limit)")] public float ViewClamp = 85f;
             [JsonProperty("Maximum distance to mount (m)")] public float MountDistance = 3.5f;
             [JsonProperty("Block riding in safe zones")] public bool BlockInSafeZone = false;
             [JsonProperty("Maximum riders on the whole server (0 = unlimited)")] public int MaxRiders = 0;
@@ -152,7 +153,7 @@ namespace Oxide.Plugins
             [JsonProperty("Never hit anything in a safe zone")] public bool SparesSafeZone = true;
             [JsonProperty("Damage of running into a player or an animal at a full sprint (bull, ram, cow, sheep, stag, boar, horse)")] public float ChargeDamage = 22f;
             [JsonProperty("A charge counts when the nose is this close to the other body (m)")] public float ChargeContact = 0.35f;
-            [JsonProperty("An attack reaches this far beyond the nose (or the tail, for a kick) (m)")] public float HitReach = 1.0f;
+            [JsonProperty("An attack reaches this far beyond the nose (or the tail, for a kick) (m)")] public float HitReach = 1.2f;
             [JsonProperty("Stag: effect prefab of its call when it attacks (empty = search the game for a stag sound)")] public string StagAttackSound = string.Empty;
             [JsonProperty("Stag: effect prefab of its call when it is hurt (empty = search the game for a stag sound, else the thud of the hit)")] public string StagHurtSound = string.Empty;
         }
@@ -160,6 +161,7 @@ namespace Oxide.Plugins
         internal partial class FormCfg
         {
             [JsonProperty("Hide the human completely (spectator trick for third person, hidden seat for first person)")] public bool HideHuman = true;
+            [JsonProperty("An animal body left behind (Space) vanishes when its player is this far away (m); never once another player has ridden it")] public float LeftDespawnDistance = 25f;
             [JsonProperty("The human cannot be hurt, the animal can")] public bool Invulnerable = true;
             [JsonProperty("The animal's health is the player's health, animal dies = player dies")] public bool LinkHealth = true;
             [JsonProperty("Turrets, NPCs and animals ignore the hidden human")] public bool Untargetable = true;
@@ -201,10 +203,11 @@ namespace Oxide.Plugins
             [JsonProperty("Out of breath below this stamina (a trot at most, no jumps)")] public float ExhaustedBelow = 5f;
             [JsonProperty("Stamina needed to run again after being out of breath")] public float RecoverTo = 25f;
             [JsonProperty("Show the stamina bar (and the animal's health while riding) above the game's own bars")] public bool ShowBar = true;
-            [JsonProperty("The bar: distance from the right edge, from the bottom, width and height (pixels at 1080p)")] public float BarRight = 29f;
-            public float BarBottom = 150f;
-            public float BarWidth = 192f;
-            public float BarHeight = 24f;
+            [JsonProperty("The bar: distance from the right edge, from the bottom, width and height (the units of the game's own bars)")] public float BarRight = 19f;
+            public float BarBottom = 96f;
+            public float BarWidth = 188f;
+            public float BarHeight = 20f;
+            [JsonProperty("The bar goes this much higher inside building privilege, where the game shows two more rows")] public float BarRaiseInBase = 56f;
         }
 
         internal partial class LifeCfg
@@ -286,9 +289,9 @@ namespace Oxide.Plugins
 
         internal partial class HorseCfg
         {
-            [JsonProperty("Share of wild horses that are calm, shy, aggressive (should add up to 1)")] public float CalmShare = 0.40f;
-            public float ShyShare = 0.35f;
-            public float AggressiveShare = 0.25f;
+            [JsonProperty("Share of wild horses that are calm, shy, aggressive (should add up to 1)")] public float CalmShare = 0.80f;
+            public float ShyShare = 0.17f;
+            public float AggressiveShare = 0.03f;
             [JsonProperty("A shy horse calms down this many seconds after the last scare")] public float ShyCalmSeconds = 15f;
             [JsonProperty("Seconds an incapacitate dart keeps a horse asleep")] public float SleepSeconds = 60f;
             [JsonProperty("Aggression radius (m)")] public float AggressionRadius = 14f;
@@ -296,7 +299,7 @@ namespace Oxide.Plugins
             [JsonProperty("Wild horses wander a little around where they stand")] public bool Wander = true;
             [JsonProperty("A shy horse flees from players closer than this (m)")] public float ShyRange = 10f;
             [JsonProperty("Speed of a fleeing or charging horse (m/s)")] public float FleeSpeed = 9f;
-            [JsonProperty("Horse attack: damage")] public float AttackDamage = 30f;
+            [JsonProperty("Horse attack: damage (the bull's)")] public float AttackDamage = 35f;
             [JsonProperty("Horse attack: seconds between attacks")] public float AttackCooldown = 3f;
             [JsonProperty("Horse attack: rear up and strike forward (also with F while riding)")] public bool RearUpAttack = true;
             [JsonProperty("Riding: Space makes the horse jump")] public bool Jump = true;

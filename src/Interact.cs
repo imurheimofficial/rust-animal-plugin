@@ -90,20 +90,20 @@ namespace Oxide.Plugins
             Vector3 head = d.HeadPosition();
             Vector3 flatDir = Quaternion.Euler(0f, d.Heading, 0f) * Vector3.forward;
             float headHeight = Mathf.Max(0.3f, head.y - d.Body.transform.position.y);
+            int blockers = LayerMask.GetMask("Construction", "Deployed", "World", "Terrain", "Default", "Tree");
+            BaseEntity aimed = AimedTarget(d, head, headHeight, blockers);
+            if (aimed != null)
+            {
+                return aimed;                                  // what the crosshair points at next to the animal, whichever way the animal faces
+            }
             const float reach = 1.5f;
             var found = new List<BaseEntity>();
             Vis.Entities(head + flatDir * (reach * 0.5f), reach + 0.5f, found);
             BaseEntity best = null;
             float bestScore = float.MaxValue;
-            int blockers = LayerMask.GetMask("Construction", "Deployed", "World", "Terrain", "Default", "Tree");
             foreach (BaseEntity e in found)
             {
-                if (!Valid(e) || e == d.Body || e == d.Player)
-                {
-                    continue;
-                }
-                bool wanted = (Cfg.Form.Doors && e is Door) || (Cfg.Form.Looting && (e is StorageContainer || e is LootableCorpse || e is DroppedItemContainer || e is CollectibleEntity || e is WorldItem));
-                if (!wanted || IsSaddleModel(e))
+                if (!Valid(e) || e == d.Body || e == d.Player || !InteractWanted(e))
                 {
                     continue;
                 }
@@ -121,15 +121,9 @@ namespace Oxide.Plugins
                     continue;                                  // beside or behind the head
                 }
                 // nothing solid between the head and the thing: a wall, a window frame, a floor
-                Vector3 from = head - flatDir * 0.25f;
-                RaycastHit hit;
-                if (Physics.Linecast(from, point, out hit, blockers, QueryTriggerInteraction.Ignore))
+                if (InteractBlocked(d, head - flatDir * 0.25f, point, e, blockers))
                 {
-                    BaseEntity blocker = hit.GetEntity();
-                    if (blocker != e && (blocker == null || (blocker.GetParentEntity() != e && blocker != d.Body)) && Vector3.Distance(hit.point, point) > 0.15f)
-                    {
-                        continue;
-                    }
+                    continue;
                 }
                 float score = angle * 0.03f + flat;
                 if (score < bestScore)
@@ -137,6 +131,61 @@ namespace Oxide.Plugins
                     bestScore = score;
                     best = e;
                 }
+            }
+            return best;
+        }
+
+        private bool InteractWanted(BaseEntity e)
+        {
+            bool wanted = (Cfg.Form.Doors && e is Door) || (Cfg.Form.Looting && (e is StorageContainer || e is LootableCorpse || e is DroppedItemContainer || e is CollectibleEntity || e is WorldItem));
+            return wanted && !IsSaddleModel(e);
+        }
+
+        private static bool InteractBlocked(Driver d, Vector3 from, Vector3 point, BaseEntity e, int blockers)
+        {
+            RaycastHit hit;
+            if (!Physics.Linecast(from, point, out hit, blockers, QueryTriggerInteraction.Ignore))
+            {
+                return false;
+            }
+            BaseEntity blocker = hit.GetEntity();
+            return blocker != e && (blocker == null || (blocker.GetParentEntity() != e && blocker != d.Body)) && Vector3.Distance(hit.point, point) > 0.15f;
+        }
+
+        // The thing the camera points at, close to the animal on any side (a door behind it, a box beside it), in sight of its head.
+        private BaseEntity AimedTarget(Driver d, Vector3 head, float headHeight, int blockers)
+        {
+            Vector3 dir = d.CameraForward();
+            if (dir.sqrMagnitude < 0.01f)
+            {
+                return null;
+            }
+            dir.Normalize();
+            Vector3 center = d.Body.transform.position + Vector3.up * Mathf.Max(0.3f, headHeight * 0.7f);
+            Vector3 cam = center - dir * 2.5f + Vector3.up * 0.4f;            // about where the camera hangs behind and above the animal
+            var found = new List<BaseEntity>();
+            Vis.Entities(center, 3f, found);
+            BaseEntity best = null;
+            float bestAngle = 12f;
+            foreach (BaseEntity e in found)
+            {
+                if (!Valid(e) || e == d.Body || e == d.Player || !InteractWanted(e))
+                {
+                    continue;
+                }
+                float along = Mathf.Max(0.5f, Vector3.Dot(e.transform.position - cam, dir));
+                Vector3 point = e.ClosestPoint(cam + dir * along);
+                if (Vector3.Distance(d.Body.ClosestPoint(point), point) > 1.4f || point.y > head.y + 1.2f || point.y < d.Body.transform.position.y - 0.6f)
+                {
+                    continue;                                  // not next to the animal
+                }
+                float angle = Vector3.Angle(dir, point - cam);
+                if (angle >= bestAngle || InteractBlocked(d, head, point, e, blockers))
+                {
+                    continue;
+                }
+                bestAngle = angle;
+                best = e;
             }
             return best;
         }

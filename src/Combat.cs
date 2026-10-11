@@ -22,7 +22,8 @@ namespace Oxide.Plugins
             Vector3 center;
             // the hit lands right at the nose (or, for a kick, right behind the tail) - never a metre in front of the animal
             Vector3 origin = AttackTip(animal, heading, rear, out center);
-            float reach = (p.Range > 0f && p.Range < Cfg.Combat.HitReach ? p.Range : Cfg.Combat.HitReach) * k;
+            // the game's own attack range is measured from the animal's middle, not from its nose: the reach beyond the nose is the config's
+            float reach = Mathf.Max(0.6f, Cfg.Combat.HitReach) * k;
             float tall = Mathf.Max(0.8f, animal.bounds.size.y * k);       // a lower or taller target in front is still in reach
             var found = new List<BaseEntity>();
             Vis.Entities(origin, reach + 2f * k, found);

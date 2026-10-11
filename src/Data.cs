@@ -37,6 +37,7 @@ namespace Oxide.Plugins
         {
             public string Temperament = "calm";          // calm, shy, aggressive
             public bool Calmed;                          // woke from a dart sleep: calm for good
+            public int Rolled;                           // the release whose temperament shares rolled it (123 = 1.2.3: mostly calm)
         }
 
         internal partial class PlayerSettings

@@ -329,6 +329,7 @@ namespace Oxide.Plugins
             public BaseCombatEntity Animal;
             public ulong Owner;
             public GearRecord Gear = new GearRecord();       // its inventory (saddle, shoes, bag, armour, storage)
+            public bool Kept;                                // another player has ridden it: it never vanishes
         }
 
         internal readonly Dictionary<ulong, LeftForm> LeftForms = new Dictionary<ulong, LeftForm>();
@@ -337,6 +338,36 @@ namespace Oxide.Plugins
         {
             LeftForm lf;
             return animal != null && animal.net != null && player != null && LeftForms.TryGetValue(animal.net.ID.Value, out lf) && lf.Owner == player.userID;
+        }
+
+        // The animal a player has left is ridden by him and by whom the riding rule lets ride his animals (with a saddle).
+        internal bool LeftUsableBy(BaseNetworkable animal, BasePlayer player)
+        {
+            LeftForm lf;
+            return animal != null && animal.net != null && player != null && LeftForms.TryGetValue(animal.net.ID.Value, out lf)
+                && (lf.Owner == player.userID || MayUse(player, lf.Owner, Cfg.Riding.Ownership));
+        }
+
+        private static bool RiddenByOther(LeftForm lf, Driver d)
+        {
+            if (d != null && d.Player != null && d.Player.userID != lf.Owner)
+            {
+                return true;
+            }
+            BaseVehicle vehicle = lf.Animal as BaseVehicle;
+            if (vehicle == null || vehicle.mountPoints == null)
+            {
+                return false;
+            }
+            foreach (BaseVehicle.MountPointInfo mp in vehicle.mountPoints)
+            {
+                BasePlayer rider = mp.mountable != null ? mp.mountable.GetMounted() : null;
+                if (rider != null && rider.userID != lf.Owner)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         internal void LeaveAnimalBehind(Driver d)
@@ -401,12 +432,17 @@ namespace Oxide.Plugins
                         Bm.LeftForms.Remove(lf.Animal != null && lf.Animal.net != null ? lf.Animal.net.ID.Value : 0UL);
                         continue;
                     }
-                    if (Bm.DriverOfAnimal(lf.Animal) != null)
+                    Driver rider = Bm.DriverOfAnimal(lf.Animal);
+                    if (!lf.Kept && RiddenByOther(lf, rider))
                     {
-                        continue;                                      // the owner is in it or on it
+                        lf.Kept = true;                                // somebody else has ridden it: it stays for good
+                    }
+                    if (rider != null || lf.Kept)
+                    {
+                        continue;                                      // somebody is in it or on it, or it is kept
                     }
                     BasePlayer owner = BasePlayer.FindByID(lf.Owner);
-                    if (owner == null || !owner.IsConnected || owner.IsDead() || Vector3.Distance(owner.transform.position, lf.Animal.transform.position) > 50f)
+                    if (owner == null || !owner.IsConnected || owner.IsDead() || Vector3.Distance(owner.transform.position, lf.Animal.transform.position) > Mathf.Max(5f, Bm.Cfg.Form.LeftDespawnDistance))
                     {
                         Bm.DespawnLeft(lf, true);
                     }

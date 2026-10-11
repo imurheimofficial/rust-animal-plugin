@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Beastmaster", "Claude", "1.2.2")]
+    [Info("Beastmaster", "Claude", "1.2.3")]
     [Description("Ride, tame, command and become animals: horses, livestock, predators and small creatures.")]
     public partial class Beastmaster : RustPlugin
     {
@@ -157,7 +157,7 @@ namespace Oxide.Plugins
 
         protected override void LoadDefaultConfig()
         {
-            Cfg = new ConfigData();
+            Cfg = new ConfigData { WrittenBy = Version.ToString() };
         }
 
         protected override void LoadConfig()
@@ -202,6 +202,7 @@ namespace Oxide.Plugins
             Cfg.Wild.MayDefend = (Cfg.Wild.MayDefend ?? new List<string>()).Select(s => (s ?? string.Empty).ToLowerInvariant()).Distinct().ToList();
             Cfg.Relations.Rules = (Cfg.Relations.Rules ?? new List<RelationRule>()).Where(r => r != null && !string.IsNullOrEmpty(r.Observer) && !string.IsNullOrEmpty(r.Subject))
                 .GroupBy(r => r.Observer.ToLowerInvariant() + ">" + r.Subject.ToLowerInvariant()).Select(g => g.First()).ToList();
+            UpgradeConfig();
             float sum = Cfg.Horse.CalmShare + Cfg.Horse.ShyShare + Cfg.Horse.AggressiveShare;
             if (sum <= 0f)
             {
@@ -209,6 +210,44 @@ namespace Oxide.Plugins
                 Cfg.Horse.ShyShare = 0.35f;
                 Cfg.Horse.AggressiveShare = 0.25f;
             }
+        }
+
+        // A config file written by an older release gets the values that release changed (once): the file keeps everything else as it was.
+        private void UpgradeConfig()
+        {
+            if (Cfg.WrittenBy == Version.ToString())
+            {
+                return;
+            }
+            var fresh = new ConfigData();
+            if (VersionBefore(Cfg.WrittenBy, 1, 2, 3))
+            {
+                Cfg.Horse.CalmShare = fresh.Horse.CalmShare;
+                Cfg.Horse.ShyShare = fresh.Horse.ShyShare;
+                Cfg.Horse.AggressiveShare = fresh.Horse.AggressiveShare;
+                Cfg.Horse.AttackDamage = fresh.Horse.AttackDamage;
+                Cfg.Stamina.BarRight = fresh.Stamina.BarRight;
+                Cfg.Stamina.BarBottom = fresh.Stamina.BarBottom;
+                Cfg.Stamina.BarWidth = fresh.Stamina.BarWidth;
+                Cfg.Stamina.BarHeight = fresh.Stamina.BarHeight;
+                Cfg.Riding.SeatOnSpine = fresh.Riding.SeatOnSpine;
+                Cfg.Riding.ViewClamp = fresh.Riding.ViewClamp;
+                Cfg.Combat.HitReach = fresh.Combat.HitReach;
+                Cfg.Form.LeftDespawnDistance = fresh.Form.LeftDespawnDistance;
+                Cfg.Camera.DuckLift = fresh.Camera.DuckLift;                  // 1.2.1 wrote 0 into the file: Ctrl lowered the camera again
+                PrintWarning("Config from " + (string.IsNullOrEmpty(Cfg.WrittenBy) ? "an older version" : Cfg.WrittenBy) + ": the 1.2.3 defaults for horse temperaments, horse damage, stamina bar, rider seat, view clamp, hit reach, left animals and the Ctrl camera lift were applied.");
+            }
+            Cfg.WrittenBy = Version.ToString();
+        }
+
+        private static bool VersionBefore(string written, int major, int minor, int patch)
+        {
+            if (string.IsNullOrEmpty(written))
+            {
+                return true;
+            }
+            int[] parts = written.Split('.').Select(x => { int n; return int.TryParse(x, out n) ? n : 0; }).Concat(new[] { 0, 0, 0 }).Take(3).ToArray();
+            return parts[0] != major ? parts[0] < major : parts[1] != minor ? parts[1] < minor : parts[2] < patch;
         }
 
         // ---------------------------------------------------------------- on / off

@@ -434,6 +434,8 @@ namespace Oxide.Plugins
                 public int Health = -1;
                 public bool Rider;
                 public float At;
+                public bool InBase;
+                public float BaseCheckAt;
             }
 
             private readonly Dictionary<ulong, BarState> bars = new Dictionary<ulong, BarState>();
@@ -453,7 +455,18 @@ namespace Oxide.Plugins
                 int stamina = Mathf.RoundToInt(Mathf.Clamp(StaminaOf(d), 0f, 100f));
                 int health = rider ? Mathf.RoundToInt(Mathf.Clamp01(d.Body.health / Mathf.Max(1f, d.Body.MaxHealth())) * 100f) : 0;
                 BarState st;
-                bool fresh = !bars.TryGetValue(p.userID, out st) || st.Rider != rider || now - st.At >= 30f;
+                bool had = bars.TryGetValue(p.userID, out st);
+                bool inBase = had && st.InBase;
+                if (!had || now >= st.BaseCheckAt)
+                {
+                    // inside building privilege the game shows two more rows (privilege, upkeep) above its bars: the bar moves up past them
+                    inBase = p.GetBuildingPrivilege() != null;
+                }
+                bool fresh = !had || st.Rider != rider || st.InBase != inBase || now - st.At >= 30f;
+                if (had && now >= st.BaseCheckAt)
+                {
+                    st.BaseCheckAt = now + 1.5f;
+                }
                 if (!fresh && st.Stamina == stamina && st.Health == health)
                 {
                     return true;
@@ -461,12 +474,12 @@ namespace Oxide.Plugins
                 var c = new CuiElementContainer();
                 if (fresh)
                 {
-                    st = new BarState { Rider = rider, At = now };
+                    st = new BarState { Rider = rider, At = now, InBase = inBase, BaseCheckAt = now + 1.5f };
                     bars[p.userID] = st;
-                    // the size of one of the game's own bars; a rider gets the animal's health as a second bar above it
+                    // the size and the row spacing of the game's own bars, right above them; a rider gets the animal's health as a second bar above it
                     StaminaCfg sc = Bm.Cfg.Stamina;
-                    float w = Mathf.Max(60f, sc.BarWidth), h = Mathf.Max(10f, sc.BarHeight), gap = 4f;
-                    float right = -Mathf.Max(0f, sc.BarRight), bottom = Mathf.Max(0f, sc.BarBottom);
+                    float w = Mathf.Max(60f, sc.BarWidth), h = Mathf.Max(10f, sc.BarHeight), gap = 8f;
+                    float right = -Mathf.Max(0f, sc.BarRight), bottom = Mathf.Max(0f, sc.BarBottom) + (inBase ? Mathf.Max(0f, sc.BarRaiseInBase) : 0f);
                     float top = bottom + (rider ? h * 2f + gap : h);
                     c.Add(new CuiPanel
                     {
@@ -515,7 +528,7 @@ namespace Oxide.Plugins
                 {
                     Name = name + ".num",
                     Parent = name,
-                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 14, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.04 0", AnchorMax = "0.6 1" } }
+                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 13, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.04 0", AnchorMax = "0.6 1" } }
                 });
             }
 
@@ -532,7 +545,7 @@ namespace Oxide.Plugins
                 {
                     Name = name + ".num",
                     Update = true,
-                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 14, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.04 0", AnchorMax = "0.6 1" } }
+                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 13, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.04 0", AnchorMax = "0.6 1" } }
                 });
             }
 

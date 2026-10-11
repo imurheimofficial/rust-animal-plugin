@@ -16,6 +16,114 @@ namespace Oxide.Plugins
 
         private float savedLeadBreak = -1f;
 
+        // ---------------------------------------------------------------- leading by hand (hold E at an animal: Lead / Let go)
+        // A tamed animal of the player or his team, or the animal a player has left, walks behind the player on an invisible rope until he
+        // lets go, gets on an animal, goes too far or is gone. Nobody leads an animal that somebody sits on or plays.
+        private readonly Dictionary<ulong, ulong> handLeads = new Dictionary<ulong, ulong>();      // animal -> leader
+
+        internal bool HandLedBy(BaseNetworkable animal, BasePlayer player)
+        {
+            ulong leader;
+            return animal != null && animal.net != null && player != null && handLeads.TryGetValue(animal.net.ID.Value, out leader) && leader == player.userID;
+        }
+
+        internal bool MayHandLead(BasePlayer player, BaseNPC2 animal)
+        {
+            if (player == null || !Valid(animal) || animal.IsDead() || player.isMounted || DriverOf(player) != null || DriverOfAnimal(animal) != null
+                || BossOf(animal) != null)
+            {
+                return false;
+            }
+            if (LeftUsableBy(animal, player))
+            {
+                return true;
+            }
+            TamedRecord rec = RecordOf(animal);
+            return rec != null && Cfg.Features.Taming && MayUse(player, rec.Owner, "team");
+        }
+
+        internal void ToggleHandLead(BasePlayer player, BaseNPC2 animal)
+        {
+            SpeciesDef species = SpeciesOf(animal);
+            string name = species != null ? species.Display.ToLowerInvariant() : "animal";
+            if (HandLedBy(animal, player))
+            {
+                EndHandLead(animal);
+                TellRaw(player, "You let go of the " + name + ".");
+                return;
+            }
+            if (!MayHandLead(player, animal))
+            {
+                return;
+            }
+            ulong leader = player.userID;
+            Follower f = StartFollower(animal, "lead", () =>
+            {
+                BasePlayer p = BasePlayer.FindByID(leader);
+                return p != null && p.IsConnected && !p.IsDead() ? (Vector3?)p.transform.position : null;
+            });
+            if (f == null)
+            {
+                return;
+            }
+            f.StopDistance = 2.5f;
+            f.RunDistance = 7f;
+            f.TeleportDistance = 0f;
+            handLeads[animal.net.ID.Value] = leader;
+            TellRaw(player, "You lead the " + name + ". Hold E at it and choose Let go to let it go.");
+        }
+
+        private void EndHandLead(BaseNPC2 animal)
+        {
+            if (animal == null || animal.net == null)
+            {
+                return;
+            }
+            handLeads.Remove(animal.net.ID.Value);
+            Follower f = FollowerOf(animal);
+            if (f != null && f.Reason == "lead")
+            {
+                StopFollower(animal);
+            }
+            TamedRecord rec = Valid(animal) && !animal.IsDead() && DriverOfAnimal(animal) == null ? RecordOf(animal) : null;
+            if (rec != null)
+            {
+                ApplyState(animal, rec);                   // back to follow / wait / guard
+            }
+        }
+
+        private float nextHandLeadCheck;
+
+        internal void HandLeadTick()
+        {
+            if (handLeads.Count == 0 || Time.time < nextHandLeadCheck)
+            {
+                return;
+            }
+            nextHandLeadCheck = Time.time + 0.5f;
+            foreach (KeyValuePair<ulong, ulong> kv in handLeads.ToList())
+            {
+                BaseNPC2 animal = BaseNetworkable.serverEntities.Find(new NetworkableId(kv.Key)) as BaseNPC2;
+                if (!Valid(animal) || animal.IsDead())
+                {
+                    handLeads.Remove(kv.Key);
+                    continue;
+                }
+                BasePlayer leader = BasePlayer.FindByID(kv.Value);
+                Follower f = FollowerOf(animal);
+                if (leader == null || !leader.IsConnected || leader.IsDead() || leader.isMounted || DriverOf(leader) != null || DriverOfAnimal(animal) != null
+                    || f == null || f.Reason != "lead" || Vector3.Distance(leader.transform.position, animal.transform.position) > Cfg.Lead.BreakDistance)
+                {
+                    EndHandLead(animal);
+                    if (leader != null && leader.IsConnected)
+                    {
+                        SpeciesDef species = SpeciesOf(animal);
+                        TellRaw(leader, "The " + (species != null ? species.Display.ToLowerInvariant() : "animal") + " is no longer led.");
+                    }
+                }
+            }
+        }
+
         internal void LeadInit()
         {
             if (!Cfg.Features.Lead)

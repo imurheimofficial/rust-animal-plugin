@@ -316,7 +316,7 @@ namespace Oxide.Plugins
             add("combat", "Combat and rear attacks", HelpCombat);
             add("ritual", "Transformation ritual", HelpRitual);
             add("camera", "Third person", HelpCamera);
-            add("nightvision", "Night vision", p => "<b>Night vision</b>\n\nThe game's own Night Vision Goggles give the vision. Carry a pair in your inventory: as an animal G (or Ctrl + G) puts them on your hidden human head and takes them off again; the Night button on the Controls page does the same, and H after a one-time bind h bm.nv in the F1 console.\n\nWithout goggles in the inventory nothing happens and you get a short message. The goggles need the head slot: take your helmet or hat off first.");
+            add("nightvision", "Night vision", p => "<b>Night vision</b>\n\nThe game's own Night Vision Goggles give the vision. Carry a pair in your inventory: as an animal they go onto your hidden human head by themselves at night and back into the inventory by day. The Night button on the Controls page (and H after a one-time bind h bm.nv in the F1 console) switches them by hand.\n\nWithout goggles in the inventory nothing happens. The goggles need the head slot: take your helmet or hat off first.");
             add("spray", "Spray can", HelpSpray);
             add("relations", "Animal relations", HelpRelations);
             add("species", "Species cards", p =>
@@ -337,7 +337,7 @@ namespace Oxide.Plugins
                 + "<b>Quick start</b>\n"
                 + "1. Tame an animal (Help - Taming).\n"
                 + "2. Press E on it: without a saddle its inventory opens. Put a saddle into slot 1 and close the panel.\n"
-                + "3. Press E again to mount (hold E for all choices). W/A/S/D move, Shift faster, F attack, G or R switch first / third person, X gets you off.\n"
+                + "3. Press E again to mount (hold E for all choices). W/A/S/D move, Shift faster, F attack, R switches first / third person, G jumps, Space gets you off.\n"
                 + "4. Command it: /bm cmd follow | wait | guard | attack | release.\n\n"
                 + "<b>Switched on here</b>\n" + FeatureLine() + "\n\n"
                 + "Open this menu any time with /bm.";
@@ -348,17 +348,17 @@ namespace Oxide.Plugins
             return "<b>Keys as an animal (third person) and while riding</b>\n"
                 + "W/A/S/D  move\n"
                 + "Shift  go faster - each press climbs one gait: walk, jog, run, sprint, full sprint. W alone walks; after a stop it walks again (the horse: walk, trot, canter, gallop, full gallop)\n"
-                + "Ctrl  brake (with A or D at a run: the stop-and-turn)\n"
-                + "S while running  turn around 180 degrees (a slide for bulls and rams)\n"
-                + "Space  jump - over fences and onto raised surfaces: floors, roofs, crates, rocks (cooldown " + Cfg.Movement.JumpCooldown + " s)\n"
+                + "S  brake; S with A or D while running: turn around 180 degrees (a slide for bulls and rams)\n"
+                + "G  jump - over fences and onto raised surfaces: floors, roofs, crates, rocks (cooldown " + Cfg.Movement.JumpCooldown + " s)\n"
+                + "Space  as an animal: back to human (the animal stays) - while riding: get off\n"
                 + "F  attack - camera to the front: the attack to the front; camera behind the animal: the rear kick (cow, bull, sheep, ram, stag, horse)\n"
                 + "E  as an animal: eat food on the ground, drink fresh water, graze, pick things up into the saddle bag, open doors and containers, lead your tamed animals (the prompt on the screen says what E does)\n"
                 + "Ctrl + E  as an animal: your animal's inventory (saddle, horseshoes, saddle bag, horse armour)\n"
                 + "E at an animal (as a human): ride it when it has a saddle, its inventory when it has none. Ctrl + E: its inventory (a player's animal: the leash). Hold E: all choices\n"
-                + "R  as an animal: another skin (cow, bull, sheep, ram, horse) - while riding: first / third person\n"
-                + "G  as an animal: night vision (goggles from your inventory) - while riding: first / third person\n"
+                + "R  as an animal: another skin - while riding: first / third person. Hold R: the skin window (colours, spots, breeds)\n"
+                + "Night vision  comes by itself at night when you carry night vision goggles (they need the head slot)\n"
                 + "B  gesture wheel: lie down, sit, roar, look around - /bm lie, sit, roar, look, stand do the same\n"
-                + "X  back to human / get off. X at the animal you have left: become it again. E at it: ride it (with a saddle). Ctrl + E at it: its inventory\n"
+                + "X  form: back to human. X at the animal you have left: become it again. E at it: ride it (with a saddle). Ctrl + E at it: its inventory\n"
                 + "Stamina  running tires the animal like a horse (the yellow bar above the game's bars); out of breath it only trots and cannot jump until it has rested\n"
                 + "Ctrl + R  this menu (empty hands, riding or as an animal), also /bm\n\n"
                 + "<color=#9aa58f>F5 and H need a one-time bind in the F1 console: bind f5 bm.menu and bind h bm.nv (the game keeps them).</color>";
@@ -369,7 +369,7 @@ namespace Oxide.Plugins
             return "<b>Riding</b> " + OnOff(Cfg.Features.Riding) + "\n\n"
                 + "Who: " + (Cfg.Riding.RequireTame ? "tamed animals" : "any animal") + (Cfg.Riding.RequireSaddle ? " with a saddle" : string.Empty) + ". Owner may ride; " + OwnershipText() + ".\n"
                 + "How: look at the animal within " + Cfg.Riding.MountDistance + " m and press E. A saddle in slot 1 of its inventory is needed first (E opens the inventory while it has none, Ctrl + E always).\n"
-                + "A double saddle (horse, bull, cow, ram, sheep, stag) carries a second rider behind you. You sit on its back like on a horse and look to the sides at most.\n"
+                + "A double saddle (horse, bull, cow) carries a second rider behind you; every other animal carries one rider. You sit on its back like on a horse and look to the sides at most.\n"
                 + "A player who is an animal can be ridden only when his animal has a saddle in its inventory (single: one rider, double: two).\n"
                 + "Stamina: like the horse, a sprint lasts a short while; walking and standing give the breath back. A crash into a wall or a fall throws the rider off.\n"
                 + "Chicken, crocodile, snake, rabbit, squirrel and frog are restricted species (permission beastmaster.ride.restricted).\n\n"
@@ -791,7 +791,7 @@ namespace Oxide.Plugins
             if (d != null)
             {
                 UiButton(c, parent, d.Kind == ControlKind.Ride ? "Get off" : "Back to human", "bm.ui revert", 0.03f, 0.03f, 0.27f, 0.10f, ColWarn);
-                string[][] actions = { new[] { "Lie", "lie" }, new[] { "Sit", "sit" }, new[] { "Roar", "roar" }, new[] { "Look", "look" }, new[] { "Stand", "stand" }, new[] { "Night (G)", "nv" }, new[] { "Breed", "breed" } };
+                string[][] actions = { new[] { "Lie", "lie" }, new[] { "Sit", "sit" }, new[] { "Roar", "roar" }, new[] { "Look", "look" }, new[] { "Stand", "stand" }, new[] { "Night", "nv" }, new[] { "Breed", "breed" } };
                 for (int a = 0; a < actions.Length; a++)
                 {
                     string command = actions[a][1] == "nv" || actions[a][1] == "breed" ? "bm.ui " + actions[a][1] : "bm.ui gesture " + actions[a][1];
@@ -983,7 +983,7 @@ namespace Oxide.Plugins
             MenuState st = MenuOf(player);
             bool control = HasMenuAccess(player);
             string act = args[0].ToLowerInvariant();
-            if (!Active && act != "close" && act != "plugin" && act != "noop" && act != "beast")
+            if (!Active && act != "close" && act != "plugin" && act != "noop" && act != "beast" && act != "skin")
             {
                 return;
             }
@@ -1101,6 +1101,9 @@ namespace Oxide.Plugins
                     }
                 case "beast":
                     BeastButton(player, args);
+                    return;
+                case "skin":
+                    SkinButton(player, args);
                     return;
                 case "seat":
                     if (arg1 == "up" || arg1 == "down" || arg1 == "forward" || arg1 == "back")
@@ -1299,7 +1302,7 @@ namespace Oxide.Plugins
         {
             "close", "noop", "page", "topic", "species", "tpage", "list", "search", "clearsearch", "lookhelp", "animal", "all", "view", "preset", "setting",
             "revert", "plugin", "feature", "species_toggle", "spawnspecies", "spawncount", "spawnmode", "spawnsaddle", "spawn", "spawnclear", "grant", "revoke",
-            "bossmini", "spawnboss", "aim", "gesture", "cam", "nv", "breed", "rename", "renameset", "seat", "beast"
+            "bossmini", "spawnboss", "aim", "gesture", "cam", "nv", "breed", "rename", "renameset", "seat", "beast", "skin"
         };
 
         // Builds every page and every Help topic for a stand-in player, checks the JSON and that every button names a known action.

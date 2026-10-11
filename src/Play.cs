@@ -184,18 +184,34 @@ namespace Oxide.Plugins
                 return;
             }
             bool hasSkin = form && d.HasSkins;
-            string[][] cells = form
-                ? (hasSkin
-                    ? new[] { new[] { "F", "Attack" }, new[] { "Ctrl", "Brake" }, new[] { "E", "Feed" }, new[] { "R", "Skin" }, new[] { "Shift", "Sprint" }, new[] { "Space", "Jump" }, new[] { "G", "Night" }, new[] { "X", "Human" } }
-                    : new[] { new[] { "F", "Attack" }, new[] { "Ctrl", "Brake" }, new[] { "E", "Feed" }, new[] { "Shift", "Sprint" }, new[] { "Space", "Jump" }, new[] { "G", "Night" }, new[] { "X", "Human" } })
-                : new[] { new[] { "F", "Attack" }, new[] { "Ctrl", "Brake" }, new[] { "G", "View" }, new[] { "Shift", "Sprint" }, new[] { "Space", "Jump" }, new[] { "X", "Get off" } };
+            var list = new List<string[]> { new[] { "F", "Attack" }, new[] { "S", "Brake" } };
+            if (form)
+            {
+                list.Add(new[] { "E", "Feed" });
+            }
+            if (hasSkin)
+            {
+                list.Add(new[] { "R", "Skin" });
+            }
+            else if (!form)
+            {
+                list.Add(new[] { "R", "View" });
+            }
+            list.Add(new[] { "Shift", "Sprint" });
+            list.Add(new[] { "G", "Jump" });
+            list.Add(form ? new[] { "Space", "Human" } : new[] { "Space", "Get off" });
+            if (form)
+            {
+                list.Add(new[] { "X", "Form" });
+            }
+            string[][] cells = list.ToArray();
             // one small row just above the item belt
             float cellW = 78f, cellH = 20f, gap = 3f;
             float panelW = cells.Length * (cellW + gap) + gap, panelH = cellH + 2f * gap;
             var c = new CuiElementContainer();
             c.Add(new CuiPanel
             {
-                Image = { Color = "0.05 0.06 0.04 0.7" },
+                Image = { Color = "0 0 0 0.35" },
                 RectTransform = { AnchorMin = "0.5 0", AnchorMax = "0.5 0", OffsetMin = Pt(-panelW * 0.5f, 100f), OffsetMax = Pt(panelW * 0.5f, 100f + panelH) }
             }, "Overlay", KeysUi);
             for (int i = 0; i < cells.Length; i++)
@@ -206,7 +222,7 @@ namespace Oxide.Plugins
                 string cell = KeysUi + ".c" + i;
                 c.Add(new CuiPanel
                 {
-                    Image = { Color = "0.16 0.19 0.12 0.9" },
+                    Image = { Color = "0 0 0 0.45" },
                     RectTransform = { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = Pt(cx, gap), OffsetMax = Pt(cx + cellW, gap + cellH) }
                 }, KeysUi, cell);
                 c.Add(new CuiPanel
@@ -322,6 +338,60 @@ namespace Oxide.Plugins
             TellRaw(player, "Night vision on.");
         }
 
+        // Night vision of an animal form comes by itself: at night the goggles the player carries go onto the hidden head, by day (and when the form
+        // ends) they go back into the inventory. No key.
+        private readonly HashSet<ulong> autoNv = new HashSet<ulong>();
+        private float nextNvCheck;
+
+        internal void AutoNightVision()
+        {
+            if (Time.time < nextNvCheck || (Drivers.Count == 0 && autoNv.Count == 0))
+            {
+                return;
+            }
+            nextNvCheck = Time.time + 2f;
+            bool night = IsNight();
+            var wanted = new HashSet<ulong>();
+            foreach (Driver d in Drivers.Values.ToList())
+            {
+                if (d == null || !d.Alive || d.Kind != ControlKind.Form || d.Player == null || !d.Player.IsConnected || !night)
+                {
+                    continue;
+                }
+                BasePlayer p = d.Player;
+                ItemContainer wear = p.inventory.containerWear;
+                if (wear == null)
+                {
+                    continue;
+                }
+                if (wear.itemList.Any(i => i.info.shortname == "nightvisiongoggles"))
+                {
+                    wanted.Add(p.userID);
+                    continue;
+                }
+                Item goggles = PlayerItems(p).FirstOrDefault(i => i.info.shortname == "nightvisiongoggles");
+                if (goggles != null && goggles.MoveToContainer(wear))
+                {
+                    autoNv.Add(p.userID);
+                    wanted.Add(p.userID);
+                }
+            }
+            foreach (ulong id in autoNv.ToList())
+            {
+                if (wanted.Contains(id))
+                {
+                    continue;
+                }
+                autoNv.Remove(id);
+                BasePlayer p = BasePlayer.FindByID(id) ?? BasePlayer.FindSleeping(id);
+                Item on = p != null && p.inventory != null && p.inventory.containerWear != null ? p.inventory.containerWear.itemList.FirstOrDefault(i => i.info.shortname == "nightvisiongoggles") : null;
+                if (on != null && !on.MoveToContainer(p.inventory.containerMain))
+                {
+                    on.MoveToContainer(p.inventory.containerBelt);
+                }
+            }
+        }
+
         // ---------------------------------------------------------------- key binds
 
         // A game only accepts a few commands from a server, and a key bind is not one of them: the key is bound once by the player (it is kept).
@@ -337,7 +407,7 @@ namespace Oxide.Plugins
                 return;
             }
             s.HintShown = true;
-            TellRaw(player, "Beastmaster menu: /bm, or hold Ctrl and press R (empty hands, or while riding or as an animal). Night vision as an animal: G or Ctrl + G, with night vision goggles in the inventory.");
+            TellRaw(player, "Beastmaster menu: /bm, or hold Ctrl and press R (empty hands, or while riding or as an animal). Night vision as an animal comes by itself at night when you carry night vision goggles.");
         }
 
         // The server cannot rebind keys by itself, but it can ask the player's game to: the menu on F5 and the night vision on H.

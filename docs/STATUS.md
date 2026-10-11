@@ -89,6 +89,10 @@ right in front of the head with a line-of-sight check, the horse saddle seat on 
 forward|back), inventories for wild animals (kept by tag, handed to the owner when tamed, dropped at death), saddle models only on bones
 the game knows by name, /bm saddle diagnostics. Details (Czech) at the top of [AUDIT.md](AUDIT.md).
 
+## Version 1.2.3 (2026-10-11)
+
+The owner's test of 1.2.2: config upgrade of changed defaults (DuckLift back to 0.6), new keys (G jump, Space off/human, X form, R hold skin window), automatic night vision, saddle-bag panel per animal, Lead in the hold-E menu, horse saddle auto-fit and tame hints, seat heights, double saddle only horse/bull/cow, seat off the spine, view clamp 85, left animals 25 m / kept, camera-aim interaction, off-mesh movement near other animals, hit reach 1.2, black UI, stamina bar aligned.
+
 ## Version 1.2.2 (2026-10-11)
 
 1.2.1 did not compile on the server (`ProtoBuf.PlayerTick` / the `OnPlayerTick` hook do not exist in this game build); the hook and the

@@ -1,3 +1,42 @@
+# Změny verze 1.2.3 (2026-10-11)
+
+Tvůj test 1.2.2.
+
+* **Starý config:** plugin si teď pamatuje, která verze config zapsala, a nové výchozí hodnoty této verze nastaví jednou sám. Týká se to povah koní (80 % klidných, 17 % plachých, 3 % agresivních), poškození koně (35, jako býk), stamina baru, sedla, otáčení jezdce, dosahu útoku, opuštěných zvířat a Ctrl (DuckLift).
+* **Ctrl:** verze 1.2.1 zapsala do configu `DuckLift = 0` a 1.2.2 to už nepřepsala. Proto kamera při Ctrl zase klesala. Teď je hodnota zpět na 0,6. Brzda zvířete je na S, takže Ctrl jako zvíře nepotřebuješ.
+* **Klávesy:**
+  * G = skok.
+  * Space = sesednout (při jízdě), nebo zpět na člověka (jako zvíře).
+  * X = forma: zpět na člověka, nebo se stát zvířetem, které jsi opustil (jen zvíře z rituálu).
+  * R = skin, podržené R = okno se skiny (barvy, fleky, plemena).
+  * S = brzda.
+* **Noční vidění:** G ho už nezapíná. V noci se brýle nasadí samy, pokud je máš v inventáři. Ve dne nebo po konci formy se vrátí do inventáře.
+* **Inventář zvířete:** otevírá se jako panel saddle bagu toho konkrétního zvířete (generic_resizable), už ne tvůj inventář.
+* **Lead:**
+  * V menu na podržení E je u ochočeného zvířete a u zvířete, které jsi opustil, Lead / Let go.
+  * Zvíře, na kterém sedíš, vodit nejde. Vedení skončí, když nasedneš.
+* **Kůň:**
+  * „All seats are occupied“ hra píše u koně bez sedla. Po ochočení se mu automaticky nasadí sedlo, které neseš (nejdřív dvojité).
+  * Když sedlo nemáš, E (nebo Ctrl + E) u tvého koně otevře jeho inventář a sedlo vložíš do slotu sedla.
+  * Divocí koně z dřívějška si jednou znovu losují povahu.
+  * U plachého nebo agresivního koně se ukáže, proč se neochočuje: uspat šipkou, pak je klidný.
+  * Při jízdě na koni funguje F (útok), R (první/třetí osoba), podržené R (skiny), G (skok) a Space (sesednout).
+* **Sedla:**
+  * Výchozí výšky jsou podle tvých čísel (ovce/beran −0,30, kráva/býk −0,20, medvědi −0,25, vlk −0,40, jelen −0,35, tygr/panter −0,35, krokodýl −0,15, prase −0,25, tele −0,35, jehně −0,40).
+  * Dvojsedlo mají jen kůň, býk a kráva.
+  * Sedadlo už není připevněné na páteř, takže se kamera netřese.
+  * Jezdec se otočí nejvýš o 85° do strany.
+* **Opuštěné zvíře:** zmizí, když jsi dál než 25 m. Když na něm jel někdo jiný (podle pravidla Riding Ownership), už nezmizí.
+* **Interakce:** dveře a bedny jdou použít i mířením kamery (zvíře může stát zády), pokud jsou těsně u zvířete a je na ně vidět.
+* **Slepice a jiná zvířata:** u jiného zvířete se tělo pohybuje mimo navigační síť. Díra v síti kolem zvířete už malé zvíře neblokuje.
+* **Útoky:** dosah za čumákem je 1,2 m a už ho nezkracuje herní rozsah útoku, který se měří od středu těla.
+* **UI:**
+  * Výzva „E Open“ a lišta kláves mají černé průhledné pozadí.
+  * Stamina bar má velikost a rozestup herních řádků a je zarovnaný s nimi vpravo. V budově s building privilege se posune o dva řádky výš.
+* **Ověření:** překlad jsem porovnal s 1.2.2. Nové herní názvy (`GetBuildingPrivilege`, `SplitItem`, `GiveItem`, `MountPointInfo.mountable`) v Rustu existují.
+
+---
+
 # Změny verze 1.2.2 (2026-10-11)
 
 Verze 1.2.1 se na serveru nepřeložila: `The type or namespace name 'PlayerTick' does not exist in the namespace 'ProtoBuf'`.
