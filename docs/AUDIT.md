@@ -1,3 +1,9 @@
+# Změny verze 1.2.11 (2026-10-11)
+
+* **Krvácení po rituálu:** zranění z rituálu (bleeding 40) už nezůstává na hráči. Smaže se při proměně, po celou dobu formy i po návratu na člověka.
+
+---
+
 # Změny verze 1.2.10 (2026-10-11)
 
 * **Reskin:** u zvířete jde změnit jen ochočené zvíře (vlastní nebo týmové). Admin to už neobchází. Za zvíře, kterým jsi, se okno otevírá jako dřív.

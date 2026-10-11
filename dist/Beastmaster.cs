@@ -20,7 +20,7 @@ using UnityEngine;
 namespace Oxide.Plugins
 {
     // ======================================== Beastmaster.cs
-    [Info("Beastmaster", "Claude", "1.2.10")]
+    [Info("Beastmaster", "Claude", "1.2.11")]
     [Description("Ride, tame, command and become animals: horses, livestock, predators and small creatures.")]
     public partial class Beastmaster : RustPlugin
     {
@@ -18177,6 +18177,11 @@ namespace Oxide.Plugins
             {
                 BasePlayer p = d.Player;
                 FormStats s = Of(p);
+                if (p.metabolism != null && p.metabolism.bleeding.value > 0f)
+                {
+                    p.metabolism.bleeding.value = 0f;           // the wound of the ritual does not stay with the human body
+                    p.metabolism.isDirty = true;
+                }
                 if (!Bm.Cfg.Form.Needs)
                 {
                     return;
@@ -18469,6 +18474,7 @@ namespace Oxide.Plugins
                 {
                     p.metabolism.calories.value = s.HumanCalories;
                     p.metabolism.hydration.value = s.HumanHydration;
+                    p.metabolism.bleeding.value = 0f;
                     p.metabolism.isDirty = true;
                 }
             }
