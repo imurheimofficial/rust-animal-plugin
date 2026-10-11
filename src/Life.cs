@@ -140,8 +140,31 @@ namespace Oxide.Plugins
                         {
                             Bm.Log(1, "Prompt: " + ex.Message);
                         }
-                        Draw(d.Player, text);
+                        Draw(d.Player, text, true);
                         shown.Add(d.Player.userID);
+                    }
+                }
+                // a player standing near a wild horse sees how far the taming is (the game itself only writes "Occupied" on a horse without a saddle)
+                if (Bm.Stable != null && Bm.Cfg.Features.Taming)
+                {
+                    foreach (HorseState s in Bm.Stable.States.Values)
+                    {
+                        if (!Valid(s.Horse) || s.Bond.Count == 0)
+                        {
+                            continue;
+                        }
+                        foreach (ulong id in s.Bond.Keys.ToList())
+                        {
+                            BasePlayer p = BasePlayer.FindByID(id);
+                            float have = 0f, need = 0f;
+                            if (p == null || !p.IsConnected || shown.Contains(id) || Bm.DriverOf(p) != null || p.isMounted
+                                || Vector3.Distance(p.transform.position, s.Horse.transform.position) > 6f || !Bm.HorseBondOf(s.Horse, p, out have, out need))
+                            {
+                                continue;
+                            }
+                            Draw(p, "Taming the horse: " + Mathf.Min(Mathf.FloorToInt(have), Mathf.RoundToInt(need)) + " / " + Mathf.RoundToInt(need) + " s - stay close to it", false);
+                            shown.Add(id);
+                        }
                     }
                 }
                 foreach (ulong id in prompts.Keys.Where(k => !shown.Contains(k)).ToList())
@@ -155,7 +178,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            private void Draw(BasePlayer p, string text)
+            private void Draw(BasePlayer p, string text, bool key)
             {
                 string old;
                 if (prompts.TryGetValue(p.userID, out old) && old == text)
@@ -176,7 +199,7 @@ namespace Oxide.Plugins
                 }, "Overlay", PromptUi);
                 c.Add(new CuiLabel
                 {
-                    Text = { Text = "<color=#e8c35a><b>E</b></color>   " + text, FontSize = 15, Align = TextAnchor.MiddleCenter, Color = "1 1 1 0.95" },
+                    Text = { Text = (key ? "<color=#e8c35a><b>E</b></color>   " : string.Empty) + text, FontSize = 15, Align = TextAnchor.MiddleCenter, Color = "1 1 1 0.95" },
                     RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }
                 }, PromptUi);
                 CuiHelper.AddUi(p, c);

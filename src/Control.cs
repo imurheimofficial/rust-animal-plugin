@@ -37,6 +37,23 @@ namespace Oxide.Plugins
             return null;
         }
 
+        // Ctrl is the brake of an animal form. The game takes the crouch of the player's own game from every tick it sends and shows it back to
+        // the player's camera (the camera of the animal form is the hidden body's eyes), so the camera sank with every press of Ctrl. The crouch
+        // is taken out of the tick before the game uses it.
+        private object OnPlayerTick(BasePlayer player, ProtoBuf.PlayerTick msg, bool wasPlayerStalled)
+        {
+            if (Drivers.Count == 0 || player == null || msg == null || msg.modelState == null || !msg.modelState.ducked)
+            {
+                return null;
+            }
+            Driver d;
+            if (Drivers.TryGetValue(player.userID, out d) && d != null && d.Kind == ControlKind.Form && d.Spectating)
+            {
+                msg.modelState.ducked = false;
+            }
+            return null;
+        }
+
         internal bool IsFormPlayer(BasePlayer player)
         {
             Driver d = DriverOf(player);
@@ -474,6 +491,7 @@ namespace Oxide.Plugins
             public bool SwappingSeats;
             public bool Spectating;
             public float FeedPoseUntil;     // the grazing or drinking pose of E at food or water, until then (0 = none)
+            private float stoppedSince;
             public bool OwnsAnimal;         // the animal was made for this form and vanishes in smoke when the form ends
             public int Gait = 1;
             public bool Alive => !released;
@@ -751,7 +769,9 @@ namespace Oxide.Plugins
                     return false;
                 }
                 Vector3 eyeLocal = seat.transform.InverseTransformPoint(seat.GetEyeOverride().position);
-                Vector3 anchorLocal = seat.mountAnchor != null ? seat.transform.InverseTransformPoint(seat.mountAnchor.position) : Vector3.zero;
+                // the horse's saddle seat is made to hang on the spine of the horse itself (its mount points are on the spine bone): it goes onto
+                // the spine as it is; any other seat is placed so that the rider's root sits on the back
+                Vector3 anchorLocal = seat.mountAnchor != null && !IsHorseSaddle(prefab) ? seat.transform.InverseTransformPoint(seat.mountAnchor.position) : Vector3.zero;
                 Quaternion rotation = Quaternion.Euler(0f, -yawOffset, 0f);
                 seatOffset = SeatOffset(rotation * eyeLocal, rotation * anchorLocal) + Vector3.up * bm.SeatLiftOf(Species);
                 seatLift = RequiredLift();
@@ -788,14 +808,19 @@ namespace Oxide.Plugins
                 Bounds b = Body.bounds;
                 if (Kind == ControlKind.Ride)
                 {
-                    // the rider's root (the seat's mount anchor) sits on the middle of the back
-                    return BackPoint(Animal) - anchor;
+                    // on the back where a horse carries its rider, moved forward or back as set for the species (/bm seat forward|back)
+                    return BackPoint(Animal) - anchor + Quaternion.Euler(0f, -yawOffset, 0f) * Vector3.forward * bm.SeatForwardOf(Species);
                 }
                 // first person: the eye just in front of the head, in the direction of travel
                 Vector3 dir = Quaternion.Euler(0f, -yawOffset, 0f) * Vector3.forward;
                 float reach = Mathf.Abs(dir.x) * b.extents.x + Mathf.Abs(dir.z) * b.extents.z;
                 Vector3 head = new Vector3(b.center.x, Mathf.Max(b.max.y * 0.9f, 0.4f), b.center.z) + dir * (reach + 0.05f);
                 return head - eye;
+            }
+
+            private static bool IsHorseSaddle(string prefab)
+            {
+                return prefab != null && prefab.IndexOf("horsesaddle", StringComparison.OrdinalIgnoreCase) >= 0;
             }
 
             // Fixes a seat (not spawned yet) to the animal: on the spine bone for riders, so that the rider moves with the back the way he does on
@@ -1100,7 +1125,7 @@ namespace Oxide.Plugins
                 if (duck != duckHeld)
                 {
                     duckHeld = duck;
-                    if (Spectating && !released)
+                    if (Spectating && !released && bm.Cfg.Camera.DuckLift > 0f)
                     {
                         ApplyPreset(false);
                     }
@@ -1265,6 +1290,14 @@ namespace Oxide.Plugins
             {
                 float scale = bm.SpeedScaleOf(Species);
                 float speed;
+                if (Horse != null && bm.Cfg.Movement.SpeedMode != "table")
+                {
+                    // the horse form: the horse's own gaits (walk, trot, canter, gallop), one more with each Shift - W alone only walks
+                    float[] gaits = bm.HorseFormGaits();
+                    speed = gait <= 0 ? 0f : gaits[Mathf.Clamp(gait, 1, 5) - 1];
+                    speed += bm.HorseGearBonus(Horse) * (gait / 5f);
+                    return Mathf.Max(0f, speed * scale * bm.ClimateSpeedFactor(Body) * bm.StatsSpeedFactor(Body));
+                }
                 if (bm.Cfg.Movement.SpeedMode == "table" || agent == null)
                 {
                     switch (gait)
@@ -1657,11 +1690,12 @@ namespace Oxide.Plugins
                     return false;
                 }
                 Quaternion rotation = Quaternion.Euler(0f, -yawOffset, 0f);
-                Vector3 anchor = seat.mountAnchor != null ? rotation * seat.transform.InverseTransformPoint(seat.mountAnchor.position) : Vector3.zero;
-                Vector3 place = BackPoint(Animal) - anchor + Vector3.up * bm.SeatLiftOf(Species);
+                Vector3 anchor = seat.mountAnchor != null && !IsHorseSaddle(prefab) ? rotation * seat.transform.InverseTransformPoint(seat.mountAnchor.position) : Vector3.zero;
+                Vector3 place = BackPoint(Animal) - anchor + Vector3.up * bm.SeatLiftOf(Species) + rotation * Vector3.forward * bm.SeatForwardOf(Species);
                 if (rear)
                 {
-                    place += rotation * Vector3.back * Mathf.Max(0.5f, Body.bounds.extents.z * 0.42f);
+                    // the second rider behind the first, as on the horse (0.4 m there), a little more on a long animal
+                    place += rotation * Vector3.back * Mathf.Clamp(Body.bounds.extents.z * 0.35f, 0.4f, 0.65f);
                 }
                 FixSeat(seat, place, rotation, true);         // on the spine too: the second rider rocks with the back as well
                 bm.OwnSeats.Add(seat);
@@ -2261,6 +2295,30 @@ namespace Oxide.Plugins
                 }
             }
 
+            // /bm seat forward|back while riding: the seat of this species moved along the back, kept for everybody
+            public void AdjustSeatForward(float delta)
+            {
+                SpeciesOverride o;
+                if (!bm.Cfg.Species.TryGetValue(Species.Id, out o))
+                {
+                    o = new SpeciesOverride();
+                    bm.Cfg.Species[Species.Id] = o;
+                }
+                o.SeatForward = (o.SeatForward ?? 0f) + delta;
+                bm.SaveConfig();
+                Vector3 along = Quaternion.Euler(0f, -yawOffset, 0f) * Vector3.forward * delta;
+                seatOffset += along;
+                if (Seat != null && !Seat.IsDestroyed)
+                {
+                    Transform parent = Seat.transform.parent;
+                    Vector3 world = Body.transform.TransformVector(along);
+                    seatBaseLocal += parent != null ? parent.InverseTransformVector(world) : world;
+                    seatLift = RequiredLift();
+                    ApplySeatLift(Seat);
+                    Seat.SendNetworkUpdate();
+                }
+            }
+
             public void SuppressCrash(float seconds)
             {
                 nextWallCrash = Mathf.Max(nextWallCrash, Time.time + seconds);
@@ -2375,6 +2433,22 @@ namespace Oxide.Plugins
                 UpdateWater();
                 SyncHealth(false);
                 DrownTick(dt);
+                // stopped for a moment: the next W walks again, each Shift adds a gait (the chosen gait is not kept for ever)
+                if (!fwd && Mathf.Abs(currentSpeed) < 0.3f)
+                {
+                    if (stoppedSince <= 0f)
+                    {
+                        stoppedSince = Time.time;
+                    }
+                    else if (Time.time - stoppedSince > 0.6f && Gait > 1)
+                    {
+                        Gait = 1;
+                    }
+                }
+                else
+                {
+                    stoppedSince = 0f;
+                }
                 if (Horse != null)
                 {
                     HorseTick(dt);

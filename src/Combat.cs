@@ -23,6 +23,7 @@ namespace Oxide.Plugins
             // the hit lands right at the nose (or, for a kick, right behind the tail) - never a metre in front of the animal
             Vector3 origin = AttackTip(animal, heading, rear, out center);
             float reach = (p.Range > 0f && p.Range < Cfg.Combat.HitReach ? p.Range : Cfg.Combat.HitReach) * k;
+            float tall = Mathf.Max(0.8f, animal.bounds.size.y * k);       // a lower or taller target in front is still in reach
             var found = new List<BaseEntity>();
             Vis.Entities(origin, reach + 2f * k, found);
             var done = new HashSet<BaseEntity>();
@@ -37,7 +38,9 @@ namespace Oxide.Plugins
                 Vector3 point = e.ClosestPoint(origin);
                 Vector3 v = point - center;
                 v.y = 0f;
-                if (Vector3.Distance(point, origin) > reach || (v.sqrMagnitude > 0.01f && Vector3.Angle(facing, v) > halfAngle))
+                Vector3 gap = point - origin;
+                float flat = new Vector2(gap.x, gap.z).magnitude;
+                if (flat > reach || Mathf.Abs(gap.y) > tall || (v.sqrMagnitude > 0.01f && Vector3.Angle(facing, v) > halfAngle))
                 {
                     continue;
                 }
@@ -116,6 +119,11 @@ namespace Oxide.Plugins
             }
             string path = FindPrefabPath("impacts/blunt/" + material + "/") ?? FindPrefabPath("impacts/blunt/generic/");
             RunEffect(path, point);
+            if (material == "flesh" && !(e is BaseCorpse))
+            {
+                // a living body bleeds where it was hit: the game's own blood impact of a bite or a cut in flesh
+                RunEffect(FindPrefabPath("impacts/slash/flesh/") ?? FindPrefabPath("impacts/stab/flesh/") ?? FindPrefabPath("fleshbloodimpact"), point);
+            }
         }
 
         private static string ShortName(BaseEntity e)

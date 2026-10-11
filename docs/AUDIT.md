@@ -1,3 +1,42 @@
+# Změny verze 1.2.1 (2026-10-11)
+
+Opravy z tvého testu verze 1.2.0. Ve hře jsem je nezkoušel. Kód jsem zkontroloval překladačem bez knihoven Rustu, jako minule.
+Některé příčiny jsem ověřil v datech hry, která jsou v repu (`docs/_data`).
+
+| Co jsi hlásil | Proč se to dělo | Jak to je teď |
+|---|---|---|
+| Kůň (hráč-kůň) zrychluje, už když držíš W. | Kůň neměl vlastní rychlosti chůze. Jeho „chůze“ byla 5,5 m/s, tedy rychlý klus až cval, takže to vypadalo, že s W zrychluje. | Kůň má svoje kroky: chůze 1,9, klus 4,3, cval 7,5, trysk 11, plný trysk 14 m/s (config Horse → FormGaits). W jen jde, každý Shift přidá jeden krok. Podkovy a ostatní vybavení koně rychlost mění. |
+| Zvíře jede sprintem jen s W. | Zvolený krok zůstával i po zastavení: po sprintu a zastavení jelo W hned zase sprintem. | Když zvíře zastaví, další W jde zase krokem. Rychlost přidává Shift. |
+| Útok na zvíře často netrefí a neteče krev. | Zásah se měřil přímou vzdáleností od čumáku (0,6 m), takže menší nebo níž stojící zvíře minul. Krev se nepouštěla, jen zvuk úderu. | Dosah je 1 m před čumákem a měří se vodorovně, s tolerancí na výšku. Při každém zásahu živého těla (útok, náraz, kůň) teče krev. Je to herní efekt zásahu do masa. |
+| Spawnutý kůň tě divně pronásleduje. | Agresivní kůň útočil pořád dokola, dokud jsi byl do 14 m, a utéct mu nešlo. | Agresivní kůň zaútočí jako beran: krátký rozběh (nejvýš 6 s), jeden náraz, proběhne a pak tě 25 s nechá být. |
+| Ctrl posouvá kameru dolů. | Hra vracela tvé přikrčení zpátky do kamery dřív, než ho plugin stihl zrušit. Navíc minulá úprava (zvednutí o 0,6 m) přidávala poskakování. | Přikrčení se ruší hned, jak tvůj tik přijde na server, dřív než ho hra použije. Zvedání je vypnuté (Camera → DuckLift = 0). |
+| Stamina lišta: pryč nápis, velikost jako herní lišty. | Lišta byla širší a měla nápis. | Jen žlutá výplň a číslo. Velikost je 192 × 24 px jako herní lišty a jde nastavit (Stamina → BarRight, BarBottom, BarWidth, BarHeight). |
+| Kůň píše „Occupied“. | Tohle píše sama hra na koni bez sedla (nemá volné místo). Plugin text hry změnit nemůže. | Pod nápisem teď vidíš, jak daleko je ochočení (viz další řádek). Jakmile má kůň sedlo, hra píše jízdu. |
+| Kůň se ochočí za 20 s, když stojíš u něj. | Bylo potřeba 300 s a pak stisknout E. | Stůj do 6 m od klidného divokého koně 20 s (Horse → BondSeconds) a je tvůj, bez klávesy. Na obrazovce běží „Taming the horse: 12 / 20 s“. Plachý kůň utíká, agresivního nejdřív uspi šipkou. |
+| Dveře šly otevřít přes okno. | E hledalo věci v kouli kolem hlavy bez kontroly, co je mezi nimi. | E platí jen pro věci přímo před hlavou (do 1,5 m, do 50°). Mezi hlavou a věcí nesmí být nic pevného (zeď, rám okna, podlaha). Platí i pro nápovědu na obrazovce. |
+| Jezdec je posunutý. | Sedadlo koně je v hře připevněné na kost páteře. Plugin dával na páteř místo, kde má jezdec kořen těla, takže seděl níž a jinde. Místo na zádech se navíc bralo u nejvyšší kosti, ta bývá u lopatek. | Sedadlo je na páteři jako u koně, kousek před středem zad. Na všech zvířatech má jezdec stejné sedadlo jako na koni a druhý jezdec sedadlo koně pro zadního jezdce. Doladíš `/bm seat up/down/forward/back` (5 cm, uloží se pro druh) nebo tlačítky Seat na stránce Controls. |
+| Saddle bag nejde dát zvířatům, nenabízí inventář. | Inventář měla jen ochočená zvířata a zvířata hráčů. Divoká a nově spawnutá ho neměla vůbec. | Inventář má každé zvíře, které nosí výbavu, i divoké: Ctrl + E, podržené E → Inventory, nebo E u zvířete, které nejde ochočit klávesou. Věci zůstanou zvířeti i po restartu. Po ochočení jsou majitele, po smrti spadnou na zem. |
+| Sedla nejsou vidět na zádech. | Sedla šla vidět jen u ochočených zvířat. A pokud hra nezná název kosti páteře, hra hráče připevnila sedlo jinam. | Sedlo se ukáže u každého zvířete se sedlem v inventáři. Připevní se na kost jen tehdy, když ji hra zná jménem, jinak na tělo. `/bm saddle` (admin, při pohledu na zvíře) napíše, kolik sedel má v inventáři, jestli je model na zádech a na čem drží. |
+
+**Po nahrání:** nahraj `dist/Beastmaster.cs`, smaž `oxide/config/Beastmaster.json` a `oxide/lang/en/Beastmaster.json`, zadej `oxide.reload Beastmaster`.
+V konzoli musí být `Beastmaster 1.2.1 ready`. Bez smazání configu zůstane staré sedadlo, starý dosah útoku a stará lišta.
+
+**Co otestovat:**
+1. Kůň: W jde krokem, Shift přidává, po zastavení zase krok.
+2. Útok zvířetem na zvíře zblízka: trefí a teče krev.
+3. Spawn divokého koně: agresivní jednou narazí a odejde, klidný se po 20 s u něj ochočí.
+4. Ctrl jako zvíře: kamera se nesmí hnout.
+5. Dveře za oknem nejdou otevřít, dveře přímo před hlavou ano.
+6. Jezdec na krávě, ovci a jelenovi:
+   * jak sedí;
+   * když je posunutý, dolaď `/bm seat forward/back/up/down`.
+7. Divoké nebo spawnuté zvíře:
+   * Ctrl + E otevře inventář;
+   * dej sedlo a podívej se na záda;
+   * když sedlo není vidět, napiš mi, co ukáže `/bm saddle`.
+
+---
+
 # Změny verze 1.2.0 (2026-10-10)
 
 Tahle verze řeší všechno z tvého testu verze 1.1.0 a tři doplňky, které jsi poslal během práce: inventář jako u koně

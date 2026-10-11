@@ -184,10 +184,60 @@ namespace Oxide.Plugins
             GearRecord g;
             if (!FormGears.TryGetValue(d.Player.userID, out g) || g == null)
             {
-                g = new GearRecord();
+                g = WildGearOf(d.Body, false);
+                if (g != null)
+                {
+                    Data.WildGears.Remove(d.Body.skinID);      // the player became a wild animal that carried things: they are the form's now
+                    WildIndex.Remove(d.Body.skinID);
+                }
+                else
+                {
+                    g = new GearRecord();
+                }
                 FormGears[d.Player.userID] = g;
             }
             return g;
+        }
+
+        // The inventory of a wild animal (not tamed, not a player's), kept by the tag in the animal's skin id so that it survives a restart. It
+        // becomes the owner's when the animal is tamed. Created only when somebody opens it.
+        internal readonly Dictionary<ulong, BaseNPC2> WildIndex = new Dictionary<ulong, BaseNPC2>();
+
+        internal GearRecord WildGearOf(BaseEntity animal, bool create)
+        {
+            BaseNPC2 npc = animal as BaseNPC2;
+            if (npc == null || npc.IsDead())
+            {
+                return null;
+            }
+            SpeciesDef species = SpeciesOf(npc);
+            if (species == null || !species.Gear)
+            {
+                return null;
+            }
+            GearRecord g;
+            if (npc.skinID >= TagBase && Data.WildGears.TryGetValue(npc.skinID, out g) && g != null)
+            {
+                WildIndex[npc.skinID] = npc;
+                return g;
+            }
+            if (!create || (npc.skinID >= TagBase && Data.Tamed.ContainsKey(npc.skinID)))
+            {
+                return null;
+            }
+            if (npc.skinID < TagBase)
+            {
+                npc.skinID = NewTag();
+            }
+            g = new GearRecord();
+            Data.WildGears[npc.skinID] = g;
+            WildIndex[npc.skinID] = npc;
+            return g;
+        }
+
+        internal static bool GearEmpty(GearRecord g)
+        {
+            return g == null || (g.Saddle <= 0 && g.Shoes <= 0 && !g.HasBag && g.Armor <= 0 && (g.Bag == null || g.Bag.Count == 0));
         }
 
         // The inventory of an animal: a player's form, an animal a player has left, a tamed animal. Null = it has none (wild animals, horses).
@@ -212,7 +262,7 @@ namespace Oxide.Plugins
             {
                 return lf.Gear;
             }
-            return null;
+            return d == null ? WildGearOf(animal, false) : null;
         }
 
         internal int SaddleOf(BaseEntity animal)
@@ -227,10 +277,19 @@ namespace Oxide.Plugins
         }
 
         // Why a player may not open the inventory of an animal; null = he may.
-        internal string InventoryProblem(BasePlayer player, BaseEntity animal, out GearRecord gear)
+        // create: a wild animal gets its inventory now (false: only asked whether it could be opened).
+        internal string InventoryProblem(BasePlayer player, BaseEntity animal, out GearRecord gear, bool create = true)
         {
             gear = GearOf(animal);
             SpeciesDef species = SpeciesOf(animal);
+            if (gear == null && species != null && species.Gear && DriverOfAnimal(animal) == null)
+            {
+                gear = WildGearOf(animal, create);
+                if (gear == null && !create && animal is BaseNPC2 && RecordOf(animal) == null)
+                {
+                    return null;                     // a wild animal: it gets an inventory as soon as somebody opens it
+                }
+            }
             if (gear == null || species == null || !species.Gear)
             {
                 return "This animal has no inventory.";
@@ -734,6 +793,53 @@ namespace Oxide.Plugins
             return bonus;
         }
 
+        // The horse form drives the horse itself, so the speed of its own equipment is added here (the same numbers as for the other animals).
+        internal float HorseGearBonus(RidableHorse horse)
+        {
+            if (horse == null || horse.equipmentInventory == null)
+            {
+                return 0f;
+            }
+            float bonus = 0f;
+            foreach (Item it in horse.equipmentInventory.itemList)
+            {
+                string n = it.info.shortname;
+                int armor = ArmorIndex(n);
+                if (n == "horse.shoes.advanced") bonus += Cfg.Movement.ShoesAdvanced;
+                else if (n == "horse.shoes.basic") bonus += Cfg.Movement.ShoesBasic;
+                else if (n == "horse.saddlebag") bonus += Cfg.Movement.SaddleBag;
+                else if (armor == 1) bonus += Cfg.Movement.ArmorWood;
+                else if (armor > 1) bonus += Cfg.Movement.ArmorRoadsign;
+            }
+            return bonus;
+        }
+
+        private string horseGaitsText;
+        private float[] horseGaits;
+
+        internal float[] HorseFormGaits()
+        {
+            string text = Cfg.Horse.FormGaits ?? string.Empty;
+            if (horseGaits != null && horseGaitsText == text)
+            {
+                return horseGaits;
+            }
+            float[] fallback = { 1.9f, 4.3f, 7.5f, 11f, 14f };
+            float[] values = new float[5];
+            string[] parts = text.Split(new[] { ' ', ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+            float last = 0f;
+            for (int i = 0; i < 5; i++)
+            {
+                float v;
+                values[i] = i < parts.Length && float.TryParse(parts[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v) && v > 0f ? v : fallback[i];
+                values[i] = Mathf.Max(values[i], last);          // never slower with a higher gait
+                last = values[i];
+            }
+            horseGaitsText = text;
+            horseGaits = values;
+            return values;
+        }
+
         private float ArmorProtection(GearRecord g)
         {
             if (g == null || g.Armor <= 0)
@@ -795,6 +901,12 @@ namespace Oxide.Plugins
                     RefreshSaddle(npc);
                 }
             }
+        }
+
+        internal bool HasSaddleModel(BaseEntity animal)
+        {
+            SaddleVisual v;
+            return animal != null && animal.net != null && saddles.TryGetValue(animal.net.ID.Value, out v) && Valid(v.Entity);
         }
 
         internal bool IsSaddleModel(BaseEntity e)
@@ -1032,6 +1144,19 @@ namespace Oxide.Plugins
                         Bm.RefreshSaddle(npc);
                     }
                 }
+                foreach (KeyValuePair<ulong, BaseNPC2> pair in Bm.WildIndex.ToList())
+                {
+                    BaseNPC2 npc = pair.Value;
+                    if (!Valid(npc) || npc.IsDead() || npc.skinID != pair.Key)
+                    {
+                        Bm.WildIndex.Remove(pair.Key);
+                        continue;
+                    }
+                    if (wanted.Add(npc.net.ID.Value))
+                    {
+                        Bm.RefreshSaddle(npc);
+                    }
+                }
                 foreach (ulong id in Bm.saddles.Keys.ToList())
                 {
                     if (!wanted.Contains(id))
@@ -1046,11 +1171,12 @@ namespace Oxide.Plugins
                 }
             }
 
-            // A dying animal takes its saddle model with it (the inventory itself is dropped by its owner's rules).
+            // A dying animal takes its saddle model with it; a wild animal drops what it carried (the others by their owners' rules).
             public override void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
             {
                 if (entity is BaseNPC2)
                 {
+                    DropWild(entity);
                     Bm.RemoveSaddle(entity);
                 }
             }
@@ -1059,8 +1185,54 @@ namespace Oxide.Plugins
             {
                 if (entity is BaseNPC2)
                 {
+                    DropWild(entity);
                     Bm.RemoveSaddle(entity);
                 }
+            }
+
+            private void DropWild(BaseNetworkable entity)
+            {
+                BaseEntity e = entity as BaseEntity;
+                GearRecord g;
+                if (e == null || e.skinID < TagBase || !Bm.Data.WildGears.TryGetValue(e.skinID, out g))
+                {
+                    return;
+                }
+                Bm.Data.WildGears.Remove(e.skinID);
+                Bm.WildIndex.Remove(e.skinID);
+                if (e.transform != null)
+                {
+                    Bm.DropGearRecord(g, e.transform.position + Vector3.up * 0.6f);
+                }
+            }
+
+            // After a restart: the wild animals that carry things are found again by their tags; inventories of animals that are gone are dropped.
+            public override void OnServerInitialized()
+            {
+                Bm.timer.Once(4f, () =>
+                {
+                    if (Bm.Data.WildGears.Count == 0)
+                    {
+                        return;
+                    }
+                    var found = new HashSet<ulong>();
+                    foreach (BaseNetworkable net in BaseNetworkable.serverEntities)
+                    {
+                        BaseNPC2 npc = net as BaseNPC2;
+                        if (npc != null && npc.skinID >= TagBase && Bm.Data.WildGears.ContainsKey(npc.skinID))
+                        {
+                            found.Add(npc.skinID);
+                            Bm.WildIndex[npc.skinID] = npc;
+                        }
+                    }
+                    foreach (ulong tag in Bm.Data.WildGears.Keys.ToList())
+                    {
+                        if (!found.Contains(tag))
+                        {
+                            Bm.Data.WildGears.Remove(tag);
+                        }
+                    }
+                });
             }
 
             public override void OnPlayerDisconnected(BasePlayer player, string reason)

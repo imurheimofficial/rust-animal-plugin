@@ -79,7 +79,8 @@ namespace Oxide.Plugins
             }
         }
 
-        // The door, container, corpse or thing in front of the animal's head that E would use.
+        // The door, container, corpse or thing right in front of the animal's head that E would use. It has to be close to the head (not a
+        // door further in behind a window), in front of it, and nothing solid may stand between the head and it (no doors through walls).
         internal BaseEntity InteractTarget(Driver d)
         {
             if (!Cfg.Form.Doors && !Cfg.Form.Looting)
@@ -87,11 +88,14 @@ namespace Oxide.Plugins
                 return null;
             }
             Vector3 head = d.HeadPosition();
-            Vector3 dir = Quaternion.Euler(10f, d.Heading, 0f) * Vector3.forward;
+            Vector3 flatDir = Quaternion.Euler(0f, d.Heading, 0f) * Vector3.forward;
+            float headHeight = Mathf.Max(0.3f, head.y - d.Body.transform.position.y);
+            const float reach = 1.5f;
             var found = new List<BaseEntity>();
-            Vis.Entities(head + dir * 1.1f, 2.4f, found);
+            Vis.Entities(head + flatDir * (reach * 0.5f), reach + 0.5f, found);
             BaseEntity best = null;
             float bestScore = float.MaxValue;
+            int blockers = LayerMask.GetMask("Construction", "Deployed", "World", "Terrain", "Default", "Tree");
             foreach (BaseEntity e in found)
             {
                 if (!Valid(e) || e == d.Body || e == d.Player)
@@ -103,18 +107,31 @@ namespace Oxide.Plugins
                 {
                     continue;
                 }
-                Vector3 to = e.ClosestPoint(head) - head;
-                float dist = to.magnitude;
-                if (dist > 2.6f)
+                Vector3 point = e.ClosestPoint(head);
+                Vector3 to = point - head;
+                float flat = new Vector2(to.x, to.z).magnitude;
+                if (flat > reach || to.y > 0.8f || to.y < -(headHeight + 0.3f))
                 {
-                    continue;
+                    continue;                                  // too far from the head (or high above it, or below the ground)
                 }
-                float angle = Vector3.Angle(dir, to);
-                if (angle > 65f)
+                Vector3 flatTo = new Vector3(to.x, 0f, to.z);
+                float angle = flatTo.sqrMagnitude < 0.0025f ? 0f : Vector3.Angle(flatDir, flatTo);
+                if (angle > 50f)
                 {
-                    continue;
+                    continue;                                  // beside or behind the head
                 }
-                float score = angle * 0.04f + dist;
+                // nothing solid between the head and the thing: a wall, a window frame, a floor
+                Vector3 from = head - flatDir * 0.25f;
+                RaycastHit hit;
+                if (Physics.Linecast(from, point, out hit, blockers, QueryTriggerInteraction.Ignore))
+                {
+                    BaseEntity blocker = hit.GetEntity();
+                    if (blocker != e && (blocker == null || (blocker.GetParentEntity() != e && blocker != d.Body)) && Vector3.Distance(hit.point, point) > 0.15f)
+                    {
+                        continue;
+                    }
+                }
+                float score = angle * 0.03f + flat;
                 if (score < bestScore)
                 {
                     bestScore = score;

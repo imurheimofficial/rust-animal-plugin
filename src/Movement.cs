@@ -317,6 +317,7 @@ namespace Oxide.Plugins
                     target.Hurt(new HitInfo(d.Body, target, Rust.DamageType.Blunt, damage * 0.8f, target.transform.position));
                 }
                 BumpSound(target.transform.position + Vector3.up, "generic");
+                HitSound(target, target.ClosestPoint(d.Body.transform.position + Vector3.up));      // the thud and the blood of the hit
                 if (d.Animal != null)
                 {
                     // the charge clip of the species (a head-butt): the old "hurt" clip was the knock-down of the cow, bull and the big cats,

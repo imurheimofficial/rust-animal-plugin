@@ -572,7 +572,13 @@ namespace Oxide.Plugins
                 Position = new V3(entity.transform.position),
                 Health = entity is BaseCombatEntity ? ((BaseCombatEntity)entity).health : 0f
             };
-            if (saddled)
+            GearRecord wild;
+            if (Data.WildGears.TryGetValue(tag, out wild) && wild != null)
+            {
+                rec.Gear = wild;                         // what it already carried as a wild animal is the owner's now
+                Data.WildGears.Remove(tag);
+            }
+            if (saddled && rec.Gear.Saddle <= 0)
             {
                 rec.Gear.Saddle = 1;
             }
@@ -620,6 +626,7 @@ namespace Oxide.Plugins
         private static readonly string[] SeatCandidates =
         {
             "assets/prefabs/vehicle/seats/horsesaddle.prefab",
+            "assets/prefabs/vehicle/seats/horsesaddlerear.prefab",
             "assets/prefabs/vehicle/seats/snowmobilepassengerseat.prefab",
             "assets/prefabs/vehicle/seats/motorbikepassengerseat.prefab",
             "assets/prefabs/vehicle/seats/bikepassengerseat.prefab",
@@ -687,9 +694,14 @@ namespace Oxide.Plugins
                     o.SaddleTurn = null;
                     break;
                 default:
-                    reply("Saddle of the " + sp.Display.ToLowerInvariant() + ": lift " + (o.SaddleLift ?? 0f).ToString("0.00", CultureInfo.InvariantCulture) + " m, scale " + (o.SaddleScale ?? 1f).ToString("0.00", CultureInfo.InvariantCulture)
-                        + ", turn " + (string.IsNullOrEmpty(o.SaddleTurn) ? "0 0 0" : o.SaddleTurn) + ". Change it with /bm saddle lift <m> | scale <factor> | turn <x> <y> <z> | reset (saved for the species).");
-                    return;
+                    {
+                        BaseNPC2 npc = target as BaseNPC2;
+                        Transform bone = npc != null ? BackBone(npc) : null;
+                        reply("Saddle of the " + sp.Display.ToLowerInvariant() + ": lift " + (o.SaddleLift ?? 0f).ToString("0.00", CultureInfo.InvariantCulture) + " m, scale " + (o.SaddleScale ?? 1f).ToString("0.00", CultureInfo.InvariantCulture)
+                            + ", turn " + (string.IsNullOrEmpty(o.SaddleTurn) ? "0 0 0" : o.SaddleTurn) + "; saddle in its inventory: " + SaddleOf(target) + ", model on the back: " + (HasSaddleModel(target) ? "yes" : "no")
+                            + ", fixed to " + (bone != null ? "the bone " + bone.name : "the body") + ".\nChange it with /bm saddle lift <m> | scale <factor> | turn <x> <y> <z> | reset (saved for the species).");
+                        return;
+                    }
             }
             SaveConfig();
             RefreshSaddlesOf(sp);
@@ -721,16 +733,23 @@ namespace Oxide.Plugins
                 reply(L("NoPermission"));
                 return;
             }
-            if (args.Length > 0 && (args[0] == "up" || args[0] == "down"))
+            if (args.Length > 0 && (args[0] == "up" || args[0] == "down" || args[0] == "forward" || args[0] == "back"))
             {
                 Driver rider = DriverOf(player);
                 if (rider == null || rider.Seat == null || rider.Kind != ControlKind.Ride)
                 {
-                    reply("Sit on an animal first, then /bm seat up or down.");
+                    reply("Sit on an animal first, then /bm seat up | down | forward | back.");
                     return;
                 }
-                rider.AdjustSeat(args[0] == "up" ? 0.1f : -0.1f);
-                reply("Seat of the " + rider.Species.Display.ToLowerInvariant() + ": " + SeatLiftOf(rider.Species).ToString("0.00") + " m (saved).");
+                if (args[0] == "up" || args[0] == "down")
+                {
+                    rider.AdjustSeat(args[0] == "up" ? 0.05f : -0.05f);
+                }
+                else
+                {
+                    rider.AdjustSeatForward(args[0] == "forward" ? 0.05f : -0.05f);
+                }
+                reply("Seat of the " + rider.Species.Display.ToLowerInvariant() + ": height " + SeatLiftOf(rider.Species).ToString("0.00") + " m, forward " + SeatForwardOf(rider.Species).ToString("0.00") + " m (saved for the species).");
                 return;
             }
             if (args.Length == 0)

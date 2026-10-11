@@ -347,7 +347,7 @@ namespace Oxide.Plugins
         {
             return "<b>Keys as an animal (third person) and while riding</b>\n"
                 + "W/A/S/D  move\n"
-                + "Shift  go faster - each press climbs one gait: walk, jog, run, sprint, full sprint\n"
+                + "Shift  go faster - each press climbs one gait: walk, jog, run, sprint, full sprint. W alone walks; after a stop it walks again (the horse: walk, trot, canter, gallop, full gallop)\n"
                 + "Ctrl  brake (with A or D at a run: the stop-and-turn)\n"
                 + "S while running  turn around 180 degrees (a slide for bulls and rams)\n"
                 + "Space  jump - over fences and onto raised surfaces: floors, roofs, crates, rocks (cooldown " + Cfg.Movement.JumpCooldown + " s)\n"
@@ -394,7 +394,7 @@ namespace Oxide.Plugins
         private string HelpGear(BasePlayer p)
         {
             return "<b>Inventory (like the horse's)</b> " + OnOff(Cfg.Features.Gear) + "\n\n"
-                + "Every animal that can be ridden has the horse's inventory. E at your animal opens it while it has no saddle, Ctrl + E always (hold E for all choices); as an animal yourself: Ctrl + E.\n"
+                + "Every animal that can be ridden has the horse's inventory, a wild one too (it stays with the animal when it is tamed). E at your animal opens it while it has no saddle, Ctrl + E always (hold E for all choices); as an animal yourself: Ctrl + E.\n"
                 + "slot 1  saddle - single, or double for horse, bull, cow, ram, sheep and stag (the saddle is seen on the back)\n"
                 + "slot 2  horseshoes - basic +" + Cfg.Movement.ShoesBasic + " m/s, high quality +" + Cfg.Movement.ShoesAdvanced + " m/s\n"
                 + "slot 3  saddle bag - " + Cfg.Gear.BagSlots + " storage slots, " + Cfg.Movement.SaddleBag + " m/s\n"
@@ -408,7 +408,8 @@ namespace Oxide.Plugins
         private string HelpTaming(BasePlayer p)
         {
             return "<b>Taming</b> " + OnOff(Cfg.Features.Taming) + "   (you can own " + Cfg.Taming.MaxOwned + " animals)\n\n"
-                + "<b>Bond - horse, cow, bull, sheep, ram</b>\nStay near it and be gentle: it needs " + Cfg.Taming.BondSeconds + " s of familiarity. Then press E on it to claim it. It trusts someone else more? Wait until the other player leaves.\n\n"
+                + "<b>Bond - horse</b>\nStand within 6 m of a calm wild horse for " + Cfg.Horse.BondSeconds + " s: it is yours, no key needed (the screen shows how far it is). A shy horse runs away and an aggressive one attacks: put it to sleep with an Incapacitate Dart first, it wakes up calm.\n\n"
+                + "<b>Bond - cow, bull, sheep, ram</b>\nStay near it and be gentle: it needs " + Cfg.Taming.BondSeconds + " s of familiarity. Then press E on it to claim it. It trusts someone else more? Wait until the other player leaves.\n\n"
                 + "<b>Torch - wolf</b>\nChase the wolf with a lit torch for " + Cfg.Taming.WolfChaseSeconds + " s (within " + Cfg.Taming.TorchRange + " m). It stops fleeing, howls and follows you.\n\n"
                 + "<b>Predators - bears, boar, panther, tiger</b>\nPhase 1: hit it with an Incapacitate Dart from a Blowpipe - slowed by " + Mathf.RoundToInt(Cfg.Taming.DartSlow * 100f) + " % for " + Cfg.Taming.DartSlowSeconds + " s.\n"
                 + "Phase 2: let it run into a Bear Trap (" + Cfg.Taming.TrapDamage + " damage, it is held).\nPhase 3: use " + Cfg.Taming.SyringesNeeded + " Medical Syringes on it (E). It calms down, steps out and follows you after " + Cfg.Taming.NeutralSeconds + " s.\n\n"
@@ -509,7 +510,8 @@ namespace Oxide.Plugins
                 + "<b>I cannot mount.</b> The animal must be tamed, fitted with a saddle and within " + Cfg.Riding.MountDistance + " m; you need the permission beastmaster.ride.\n\n"
                 + "<b>The animal does not follow.</b> Its state may be wait or guard: /bm cmd follow. Followers further than " + (Cfg.Taming.TeleportDistance > 0f ? Cfg.Taming.TeleportDistance + " m are moved next to you." : "that stay behind.") + "\n\n"
                 + "<b>The camera feels wrong.</b> As an animal: /bm cam up or down, or the other preset (/bm preset b). Riding: G or R switches between first and third person.\n\n"
-                + "<b>The rider sits too high or too low.</b> An admin sits on that species and types /bm seat up or /bm seat down (10 cm per step, kept for the species).\n\n"
+                + "<b>The rider sits too high, too low, too far forward or back.</b> An admin sits on that species and types /bm seat up | down | forward | back (5 cm per step, kept for the species), or uses the Seat buttons on the Controls page.\n\n"
+                + "<b>The saddle on the back sits wrong.</b> An admin looks at the animal and types /bm saddle (it tells what it found) and /bm saddle lift | scale | turn to fit it.\n\n"
                 + "<b>The animal has no attack.</b> Rabbits, squirrels, frogs and crabs have no attack; F plays their call.\n\n"
                 + "<b>How do I get back?</b> X returns you to human form. If you logged out as an animal, you wake up as the animal.\n\n"
                 + "<b>F5 does nothing.</b> A server cannot bind keys in your game. Use Ctrl + R or /bm, or type bind f5 bm.menu once in the F1 console (the game keeps it).\n\n"
@@ -551,7 +553,7 @@ namespace Oxide.Plugins
         {
             switch (s.Tame)
             {
-                case TameFlow.Bond: return "bond - stay near it for " + Cfg.Taming.BondSeconds + " s, then E";
+                case TameFlow.Bond: return s.Id == "horse" ? "bond - stand near a calm horse for " + Cfg.Horse.BondSeconds + " s" : "bond - stay near it for " + Cfg.Taming.BondSeconds + " s, then E";
                 case TameFlow.Torch: return "chase it with a lit torch for " + Cfg.Taming.WolfChaseSeconds + " s";
                 case TameFlow.Predator: return "dart, bear trap, " + Cfg.Taming.SyringesNeeded + " syringes";
                 case TameFlow.SleepFeed: return "dart, then " + Cfg.Taming.FoodNeeded + " " + Cfg.Taming.StagFood + " and a saddle";
@@ -769,8 +771,10 @@ namespace Oxide.Plugins
             UiButton(c, parent, "first person", "bm.ui view first", 0.48f, 0.35f, 0.66f, 0.41f, view == "first" ? ColNavOn : ColBtn);
             if (d != null && d.Kind == ControlKind.Ride && IsAdmin(player))
             {
-                UiButton(c, parent, "Seat up", "bm.ui seat up", 0.68f, 0.35f, 0.82f, 0.41f, ColBtn, 12);
-                UiButton(c, parent, "Seat down", "bm.ui seat down", 0.83f, 0.35f, 0.985f, 0.41f, ColBtn, 12);
+                UiButton(c, parent, "Seat up", "bm.ui seat up", 0.68f, 0.35f, 0.76f, 0.41f, ColBtn, 11);
+                UiButton(c, parent, "Seat down", "bm.ui seat down", 0.765f, 0.35f, 0.845f, 0.41f, ColBtn, 11);
+                UiButton(c, parent, "Seat fwd", "bm.ui seat forward", 0.85f, 0.35f, 0.915f, 0.41f, ColBtn, 11);
+                UiButton(c, parent, "Seat back", "bm.ui seat back", 0.92f, 0.35f, 0.985f, 0.41f, ColBtn, 11);
             }
             UiLabel(c, parent, "Animal camera:", 13, 0.03f, 0.26f, 0.28f, 0.33f, TextAnchor.MiddleLeft);
             string[] presets = { "A", "B" };
@@ -1099,7 +1103,7 @@ namespace Oxide.Plugins
                     BeastButton(player, args);
                     return;
                 case "seat":
-                    if (arg1 == "up" || arg1 == "down")
+                    if (arg1 == "up" || arg1 == "down" || arg1 == "forward" || arg1 == "back")
                     {
                         SeatCommand(player, new[] { arg1 }, text => TellRaw(player, text));
                     }

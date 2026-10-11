@@ -199,6 +199,12 @@ namespace Oxide.Plugins
             return s != null && Cfg.Species.TryGetValue(s.Id, out o) && o.SeatLift.HasValue ? o.SeatLift.Value : 0f;
         }
 
+        internal float SeatForwardOf(SpeciesDef s)
+        {
+            SpeciesOverride o;
+            return s != null && Cfg.Species.TryGetValue(s.Id, out o) && o.SeatForward.HasValue ? o.SeatForward.Value : 0f;
+        }
+
         internal bool SpeciesEnabled(SpeciesDef s)
         {
             if (s == null || !s.Available)

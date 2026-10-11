@@ -141,6 +141,12 @@ namespace Oxide.Plugins
             {
                 StopFollower(npc);
                 Unpark(npc, "tame");
+                if (rec.Gear != null && !GearEmpty(rec.Gear))
+                {
+                    CloseInventoriesOf(rec.Gear);
+                    Data.WildGears[rec.Tag] = rec.Gear;        // a released animal keeps what it carries, as a wild animal
+                    WildIndex[rec.Tag] = npc;
+                }
             }
             Data.Tamed.Remove(rec.Tag);
             TagIndex.Remove(rec.Tag);
@@ -155,7 +161,7 @@ namespace Oxide.Plugins
                 }
                 return;
             }
-            if (!Data.Spawned.Contains(entity.skinID))
+            if (!Data.Spawned.Contains(entity.skinID) && !Data.WildGears.ContainsKey(entity.skinID))
             {
                 entity.skinID = 0UL;
             }
@@ -541,6 +547,11 @@ namespace Oxide.Plugins
                 }
                 return;
             }
+            if (crouch && species.Gear && Cfg.Features.Gear)
+            {
+                OpenInventory(player, animal);                            // Ctrl + E: the inventory of a wild animal too
+                return;
+            }
             if (species.Ride == RideTier.Restricted)
             {
                 if (!crouch)
@@ -549,7 +560,10 @@ namespace Oxide.Plugins
                 }
                 return;
             }
-            TryClaim(player, animal, species);
+            if (!TryClaim(player, animal, species) && species.Gear && Cfg.Features.Gear && !crouch)
+            {
+                OpenInventory(player, animal);                            // nothing to tame with E: its inventory
+            }
         }
 
         private bool RideBypass(BasePlayer player)
@@ -632,7 +646,7 @@ namespace Oxide.Plugins
                 return list;
             }
             GearRecord ignored;
-            bool inventory = Cfg.Features.Gear && species.Gear && InventoryProblem(player, animal, out ignored) == null;
+            bool inventory = Cfg.Features.Gear && species.Gear && InventoryProblem(player, animal, out ignored, false) == null;
             Driver host = DriverOfAnimal(animal);
             if (host != null)
             {
@@ -693,6 +707,10 @@ namespace Oxide.Plugins
                     list.Add(new[] { "wait", rec.State == "wait" ? "Wait (now)" : "Wait" });
                     list.Add(new[] { "guard", rec.State == "guard" ? "Guard (now)" : "Guard" });
                 }
+            }
+            else if (rec == null && inventory)
+            {
+                list.Add(new[] { "inventory", "Inventory" });            // a wild animal has the horse's inventory too
             }
             return list;
         }

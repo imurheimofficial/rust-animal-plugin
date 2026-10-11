@@ -79,3 +79,12 @@ uncertain and the test plan is at the top of [AUDIT.md](AUDIT.md). In short:
 - Transformation: no forced network resubscription (the world no longer reloads), stable effects, horse form fixed, sexes enforced.
 - Animal life: E prompts, dung, rare eggs, no visible rope when an animal form leads, wild animals do not jump, normal loot.
 - New: `Life.cs` (prompts, dung, eggs, ropes, wild jumps), `/bm bag`, `/bm saddle`, config sections Stamina and Life.
+
+## Version 1.2.1 (2026-10-11) - the owner's test of 1.2.0
+
+Horse form gaits (walk 1.9 ... full gallop 14 m/s, Shift climbs), gait back to walk after a stop, hits measured flat with 1 m reach and
+blood on every hit, bounded charges of aggressive horses, horses tamed by standing 20 s near them (with an on-screen progress line),
+the crouch taken out of an animal form's ticks (no camera dip), a stamina bar of the game's size without a label, interactions only
+right in front of the head with a line-of-sight check, the horse saddle seat on the spine like the horse's own (with /bm seat
+forward|back), inventories for wild animals (kept by tag, handed to the owner when tamed, dropped at death), saddle models only on bones
+the game knows by name, /bm saddle diagnostics. Details (Czech) at the top of [AUDIT.md](AUDIT.md).

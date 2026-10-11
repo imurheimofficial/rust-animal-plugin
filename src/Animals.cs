@@ -523,49 +523,58 @@ namespace Oxide.Plugins
 
         // ---------------------------------------------------------------- shape helpers
 
-        // The middle of the animal's back in its local space: the highest spine bone in the middle part of the body,
-        // or the bounds when the model has no spine bones.
+        // Where a rider sits and where the saddle lies, in the animal's local space: on the spine, a little in front of the middle of the back
+        // (where the horse carries its rider, just behind the withers), or on the bounds when the model has no spine bones.
         internal static Vector3 BackPoint(BaseNPC2 animal)
         {
+            Transform bone;
+            return SeatSpot(animal, out bone);
+        }
+
+        // The spine bone the saddle and the rider are fixed to, so that they move with the back the way the horse's rider does. Only a bone the
+        // game knows by name (StringPool): the players' games find the bone by that name, an unknown one would put the thing somewhere else.
+        internal static Transform BackBone(BaseNPC2 animal)
+        {
+            Transform bone;
+            SeatSpot(animal, out bone);
+            return bone != null && StringPool.Get(bone.name) != 0u ? bone : null;
+        }
+
+        private static Vector3 SeatSpot(BaseNPC2 animal, out Transform bone)
+        {
+            bone = null;
             Bounds b = animal.bounds;
-            Transform bone = BackBone(animal);
-            if (bone == null)
+            if (animal.model == null || animal.model.boneTransforms == null)
             {
                 return new Vector3(0f, b.max.y * 0.8f, b.center.z);
             }
-            Vector3 local = animal.transform.InverseTransformPoint(bone.position);
-            return new Vector3(0f, local.y, local.z);
-        }
-
-        // The spine bone in the middle of the back that sits highest: the saddle and the rider are fixed to it, so they move with the back
-        // when the animal walks and runs, the way the horse's rider does.
-        internal static Transform BackBone(BaseNPC2 animal)
-        {
-            if (animal == null || animal.model == null || animal.model.boneTransforms == null)
+            var spine = new List<KeyValuePair<Transform, Vector3>>();
+            foreach (Transform t in animal.model.boneTransforms)
             {
-                return null;
-            }
-            Bounds b = animal.bounds;
-            Transform best = null;
-            float bestY = float.MinValue;
-            foreach (Transform bone in animal.model.boneTransforms)
-            {
-                if (bone == null || bone.name.IndexOf("spine", StringComparison.OrdinalIgnoreCase) < 0)
+                if (t != null && t.name.IndexOf("spine", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    continue;
-                }
-                Vector3 local = animal.transform.InverseTransformPoint(bone.position);
-                if (Mathf.Abs(local.z - b.center.z) > b.extents.z * 0.6f)
-                {
-                    continue;
-                }
-                if (local.y > bestY)
-                {
-                    bestY = local.y;
-                    best = bone;
+                    spine.Add(new KeyValuePair<Transform, Vector3>(t, animal.transform.InverseTransformPoint(t.position)));
                 }
             }
-            return best;
+            if (spine.Count == 0)
+            {
+                return new Vector3(0f, b.max.y * 0.8f, b.center.z);
+            }
+            float minZ = spine.Min(p => p.Value.z), maxZ = spine.Max(p => p.Value.z);
+            float z = Mathf.Lerp(minZ, maxZ, 0.55f);
+            KeyValuePair<Transform, Vector3> nearest = spine.OrderBy(p => Mathf.Abs(p.Value.z - z)).First();
+            bone = nearest.Key;
+            // the height of the back there: the spine between its neighbours, never below the bone the seat hangs on
+            float y = nearest.Value.y;
+            float span = Mathf.Max(0.05f, (maxZ - minZ) * 0.25f);
+            foreach (KeyValuePair<Transform, Vector3> p in spine)
+            {
+                if (Mathf.Abs(p.Value.z - z) <= span)
+                {
+                    y = Mathf.Max(y, p.Value.y);
+                }
+            }
+            return new Vector3(0f, y, z);
         }
 
         // The animal the player looks at (inside a cone), nearest first.

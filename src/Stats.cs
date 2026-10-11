@@ -463,15 +463,21 @@ namespace Oxide.Plugins
                 {
                     st = new BarState { Rider = rider, At = now };
                     bars[p.userID] = st;
+                    // the size of one of the game's own bars; a rider gets the animal's health as a second bar above it
+                    StaminaCfg sc = Bm.Cfg.Stamina;
+                    float w = Mathf.Max(60f, sc.BarWidth), h = Mathf.Max(10f, sc.BarHeight), gap = 4f;
+                    float right = -Mathf.Max(0f, sc.BarRight), bottom = Mathf.Max(0f, sc.BarBottom);
+                    float top = bottom + (rider ? h * 2f + gap : h);
                     c.Add(new CuiPanel
                     {
                         Image = { Color = "0 0 0 0" },
-                        RectTransform = { AnchorMin = "1 0", AnchorMax = "1 0", OffsetMin = "-311 150", OffsetMax = rider ? "-29 212" : "-29 178" }
+                        RectTransform = { AnchorMin = "1 0", AnchorMax = "1 0", OffsetMin = Pt(right - w, bottom), OffsetMax = Pt(right, top) }
                     }, "Overlay", Hud);
-                    AddBar(c, "stamina", "STAMINA", StaminaColor, stamina, rider ? 0.55f : 0f, 1f);
+                    float split = rider ? h / (h * 2f + gap) : 1f;
+                    AddBar(c, "stamina", StaminaColor, stamina, 0f, split);
                     if (rider)
                     {
-                        AddBar(c, "health", (d.Species != null ? d.Species.Display.ToUpperInvariant() : "ANIMAL") + " HEALTH", HealthColor, health, 0f, 0.45f);
+                        AddBar(c, "health", HealthColor, health, 1f - split, 1f);
                     }
                     CuiHelper.DestroyUi(p, Hud);
                     CuiHelper.AddUi(p, c);
@@ -490,7 +496,7 @@ namespace Oxide.Plugins
                 return true;
             }
 
-            private static void AddBar(CuiElementContainer c, string id, string label, string color, int value, float y0, float y1)
+            private static void AddBar(CuiElementContainer c, string id, string color, int value, float y0, float y1)
             {
                 string name = Hud + "." + id;
                 c.Add(new CuiElement
@@ -509,13 +515,7 @@ namespace Oxide.Plugins
                 {
                     Name = name + ".num",
                     Parent = name,
-                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 16, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.03 0", AnchorMax = "0.5 1" } }
-                });
-                c.Add(new CuiElement
-                {
-                    Name = name + ".label",
-                    Parent = name,
-                    Components = { new CuiTextComponent { Text = label, FontSize = 11, Align = TextAnchor.MiddleRight, Color = "1 1 1 0.8" }, new CuiRectTransformComponent { AnchorMin = "0.3 0", AnchorMax = "0.97 1" } }
+                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 14, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.04 0", AnchorMax = "0.6 1" } }
                 });
             }
 
@@ -532,7 +532,7 @@ namespace Oxide.Plugins
                 {
                     Name = name + ".num",
                     Update = true,
-                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 16, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.03 0", AnchorMax = "0.5 1" } }
+                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 14, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.04 0", AnchorMax = "0.6 1" } }
                 });
             }
 

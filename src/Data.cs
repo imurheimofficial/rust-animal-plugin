@@ -22,6 +22,7 @@ namespace Oxide.Plugins
             public HashSet<ulong> Spawned = new HashSet<ulong>();          // tags of animals made by the spawn tool (bm.clear removes them)
             public Dictionary<ulong, HorseInfo> Horses = new Dictionary<ulong, HorseInfo>();     // horses the plugin manages, by tag
             public Dictionary<ulong, BossInfo> Bosses = new Dictionary<ulong, BossInfo>();      // boss animals, by tag
+            public Dictionary<ulong, GearRecord> WildGears = new Dictionary<ulong, GearRecord>(); // inventories of wild animals, by tag
         }
 
         internal partial class BossInfo

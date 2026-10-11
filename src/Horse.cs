@@ -235,6 +235,8 @@ namespace Oxide.Plugins
             public BasePlayer LastLeader;
             public float StopRequested;              // the leader asked to let go (so the rope breaking is no accident)
             public BasePlayer Tether;                // keeps following this leader on an invisible tether (the vanilla rope broke at 7 m)
+            public float ChargeSince;                // an aggressive horse has been after a player since then
+            public float CalmUntil;                  // after a charge an aggressive horse leaves players alone until then
             public readonly Dictionary<ulong, float> Bond = new Dictionary<ulong, float>();
             public bool Asleep(float now) { return SleepUntil > now; }
         }
@@ -571,11 +573,31 @@ namespace Oxide.Plugins
                     RpcGroup(h, "CLIENT_Stand");
                     return;
                 }
-                if (temper == "aggressive" && near != null && nearDist < Bm.Cfg.Horse.AggressionRadius && !near.InSafeZone())
+                if (s.Mode == "charge" && now < s.PassUntil)
                 {
+                    s.Drive.StopDistance = 1f;
+                    s.Drive.MoveTo(s.PassTo, Bm.Cfg.Horse.FleeSpeed * s.SpeedMult);     // runs on past its victim after the hit
+                    return;
+                }
+                if (temper == "aggressive" && near != null && nearDist < Bm.Cfg.Horse.AggressionRadius && !near.InSafeZone() && now >= s.CalmUntil)
+                {
+                    // like a ram: a short charge, then it leaves the player alone for a while (it does not hunt him across the map)
+                    if (s.ChargeSince <= 0f)
+                    {
+                        s.ChargeSince = now;
+                    }
+                    if (now - s.ChargeSince > Mathf.Max(1f, Bm.Cfg.Horse.ChaseSeconds))
+                    {
+                        s.ChargeSince = 0f;
+                        s.CalmUntil = now + Mathf.Max(0f, Bm.Cfg.Horse.CalmAfterCharge);
+                        s.Drive.Stop();
+                        s.Mode = "idle";
+                        return;
+                    }
                     Charge(s, near, now);
                     return;
                 }
+                s.ChargeSince = 0f;
                 if (s.Mode == "flee" || s.Mode == "charge" || (s.Mode == "wander" && !s.Drive.Busy))
                 {
                     s.Drive.Stop();
@@ -689,7 +711,19 @@ namespace Oxide.Plugins
                     float d = Vector3.Distance(p.transform.position, pos);
                     if (d < 6f)
                     {
-                        s.Bond[p.userID] = Mathf.Min(have + dt, 900f);
+                        have = Mathf.Min(have + dt, 900f);
+                        s.Bond[p.userID] = have;
+                        // a calm horse that a player has stood next to long enough is his: no key, no saddle needed for that
+                        if (have >= Mathf.Max(1f, Bm.Cfg.Horse.BondSeconds) && Bm.Has(p, PermTame) && !p.isMounted && Bm.DriverOf(p) == null
+                            && s.ScaredUntil <= Time.time && !s.Asleep(Time.time) && Bm.RecordOf(s.Horse) == null)
+                        {
+                            if (Bm.TameAnimal(s.Horse, p) != null)
+                            {
+                                s.Bond.Clear();
+                                Bm.TellRaw(p, "The horse trusts you now - it is yours. Put a saddle into its inventory (hold E at it) to ride it.");
+                            }
+                            return;
+                        }
                     }
                     else if (have > 0f && d > 15f)
                     {
@@ -746,6 +780,7 @@ namespace Oxide.Plugins
                     float damage = s.Damage > 0f ? s.Damage : Bm.Cfg.Horse.AttackDamage;
                     target.Hurt(new HitInfo(h, target, Rust.DamageType.Blunt, damage * Bm.Cfg.Combat.DamageScale, touch));
                     Bm.BumpSound(touch, "generic");
+                    Bm.HitSound(target, touch);
                     Bm.BossHit(h, target);
                     BasePlayer victim = target as BasePlayer;
                     if (victim != null && !victim.IsDead() && !victim.isMounted)
@@ -754,6 +789,8 @@ namespace Oxide.Plugins
                     }
                     s.PassTo = GroundAt(h.transform.position + fwd.normalized * 12f);
                     s.PassUntil = now + 1.4f;
+                    s.ChargeSince = 0f;
+                    s.CalmUntil = s.PassUntil + Mathf.Max(0f, Bm.Cfg.Horse.CalmAfterCharge);   // one hit, then it leaves the victim alone
                     return;
                 }
                 s.Drive.StopDistance = 0.2f;
@@ -919,14 +956,15 @@ namespace Oxide.Plugins
                 float have;
                 s.Bond.TryGetValue(player.userID, out have);
                 float best = s.Bond.Count > 0 ? s.Bond.Values.Max() : 0f;
-                if (best > have + 1f && best >= Bm.Cfg.Taming.BondSeconds * 0.5f)
+                float needed = Mathf.Max(1f, Bm.Cfg.Horse.BondSeconds);
+                if (best > have + 1f && best >= needed * 0.5f)
                 {
                     Bm.Tell(player, "BondTooEarly");
                     return true;
                 }
-                if (have < Bm.Cfg.Taming.BondSeconds)
+                if (have < needed)
                 {
-                    Bm.Tell(player, "BondProgress", Mathf.RoundToInt(have), Mathf.RoundToInt(Bm.Cfg.Taming.BondSeconds));
+                    Bm.TellRaw(player, "It is getting used to you: " + Mathf.RoundToInt(have) + " / " + Mathf.RoundToInt(needed) + " s. Stay close to it (within 6 m) and it is yours.");
                     return true;
                 }
                 Bm.TameAnimal(s.Horse, player);
@@ -1409,6 +1447,19 @@ namespace Oxide.Plugins
                 return false;
             }
             return TryBossSaddle(player, horse) || Stable.Claim(player, s);
+        }
+
+        // Seconds a player has stood near a wild horse, and how many it needs (for the taming prompt). False = nothing to show.
+        internal bool HorseBondOf(RidableHorse horse, BasePlayer player, out float have, out float need)
+        {
+            have = 0f;
+            need = Mathf.Max(1f, Cfg.Horse.BondSeconds);
+            HorseState s = Stable != null ? Stable.StateOf(horse) : null;
+            if (s == null || RecordOf(horse) != null || !Cfg.Features.Taming || (s.Info.Temperament == "aggressive" && !s.Info.Calmed))
+            {
+                return false;
+            }
+            return s.Bond.TryGetValue(player.userID, out have) && have > 0.5f;
         }
 
         internal string HorseLabel(RidableHorse horse)
