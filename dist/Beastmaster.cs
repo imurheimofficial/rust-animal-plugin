@@ -20,7 +20,7 @@ using UnityEngine;
 namespace Oxide.Plugins
 {
     // ======================================== Beastmaster.cs
-    [Info("Beastmaster", "Claude", "1.2.5")]
+    [Info("Beastmaster", "Claude", "1.2.6")]
     [Description("Ride, tame, command and become animals: horses, livestock, predators and small creatures.")]
     public partial class Beastmaster : RustPlugin
     {
@@ -246,6 +246,16 @@ namespace Oxide.Plugins
                 Cfg.Form.LeftDespawnDistance = fresh.Form.LeftDespawnDistance;
                 Cfg.Camera.DuckLift = fresh.Camera.DuckLift;                  // 1.2.1 wrote 0 into the file: Ctrl lowered the camera again
                 PrintWarning("Config from " + (string.IsNullOrEmpty(Cfg.WrittenBy) ? "an older version" : Cfg.WrittenBy) + ": the 1.2.3 defaults for horse temperaments, horse damage, stamina bar, rider seat, view clamp, hit reach, left animals and the Ctrl camera lift were applied.");
+            }
+            if (VersionBefore(Cfg.WrittenBy, 1, 2, 6))
+            {
+                Cfg.Stamina.BarRight = fresh.Stamina.BarRight;
+                Cfg.Stamina.BarBottom = fresh.Stamina.BarBottom;
+                Cfg.Stamina.BarWidth = fresh.Stamina.BarWidth;
+                Cfg.Stamina.BarHeight = fresh.Stamina.BarHeight;
+                Cfg.Stamina.BarPitch = fresh.Stamina.BarPitch;
+                Cfg.Riding.SeatOnSpine = fresh.Riding.SeatOnSpine;
+                PrintWarning("Config from " + (string.IsNullOrEmpty(Cfg.WrittenBy) ? "an older version" : Cfg.WrittenBy) + ": the 1.2.6 defaults for the animal bars and the rider seat on the spine were applied.");
             }
             Cfg.WrittenBy = Version.ToString();
         }
@@ -1353,13 +1363,16 @@ namespace Oxide.Plugins
                 {
                     continue;
                 }
-                Vector3 to = npc.WorldSpaceBounds().ToBounds().center - eye;
-                float dist = to.magnitude;
+                Bounds bounds = npc.WorldSpaceBounds().ToBounds();
+                Vector3 to = bounds.center - eye;
+                // the animal counts when the crosshair is on any part of its body, not only on its middle
+                Vector3 edge = bounds.ClosestPoint(eye + dir * Mathf.Max(0.5f, to.magnitude)) - eye;
+                float dist = Mathf.Min(to.magnitude, edge.magnitude);
                 if (dist > range)
                 {
                     continue;
                 }
-                float angle = Vector3.Angle(dir, to);
+                float angle = Mathf.Min(Vector3.Angle(dir, to), Vector3.Angle(dir, edge));
                 if (angle > maxAngle)
                 {
                     continue;
@@ -3646,7 +3659,7 @@ namespace Oxide.Plugins
             [JsonProperty("Who may ride an owned animal (owner, team, friends, clan, anyone)")] public string Ownership = "team";
             [JsonProperty("Seat used for riders on non-horse animals (the horse's saddle seat: the rider sits the way he sits on a horse)")] public string SeatPrefab = "assets/prefabs/vehicle/seats/horsesaddle.prefab";
             [JsonProperty("Seat of the second rider (double saddle)")] public string RearSeatPrefab = "assets/prefabs/vehicle/seats/horsesaddlerear.prefab";
-            [JsonProperty("The rider's seat is fixed to the animal's spine (moves with the back, but the camera shakes)")] public bool SeatOnSpine = false;
+            [JsonProperty("The rider's seat is fixed to the animal's spine, so the rider stays on its back like on the horse (false: fixed to the body, the camera shakes less but the rider slides on the back)")] public bool SeatOnSpine = true;
             [JsonProperty("A rider can turn his head this far to each side (degrees; the horse's saddle seat itself allows 120; 0 = no limit)")] public float ViewClamp = 85f;
             [JsonProperty("Maximum distance to mount (m)")] public float MountDistance = 3.5f;
             [JsonProperty("Block riding in safe zones")] public bool BlockInSafeZone = false;
@@ -3768,11 +3781,11 @@ namespace Oxide.Plugins
             [JsonProperty("Out of breath below this stamina (a trot at most, no jumps)")] public float ExhaustedBelow = 5f;
             [JsonProperty("Stamina needed to run again after being out of breath")] public float RecoverTo = 25f;
             [JsonProperty("Show the stamina bar (and the animal's health while riding) above the game's own bars")] public bool ShowBar = true;
-            [JsonProperty("The bar: distance from the right edge, from the bottom, width and height (the units of the game's own bars)")] public float BarRight = 19f;
-            public float BarBottom = 96f;
-            public float BarWidth = 188f;
+            [JsonProperty("The animal's bars stand beside the game's own bars (those are 19 from the right edge and 188 wide): distance of the animals' right edge from the screen's right edge, from the bottom, width, height, and the distance between two rows (units of the game's own bars)")] public float BarRight = 215f;
+            public float BarBottom = 12f;
+            public float BarWidth = 150f;
             public float BarHeight = 20f;
-            [JsonProperty("The bar goes this much higher inside building privilege, where the game shows two more rows")] public float BarRaiseInBase = 56f;
+            public float BarPitch = 28f;
         }
 
         internal partial class LifeCfg
@@ -8031,6 +8044,7 @@ namespace Oxide.Plugins
             public bool Done;
             public float Opened;
             public Func<VirtualBox, Item, int, bool> Accept;
+            public Func<VirtualBox, Item, int, int> Retarget;       // where an item that does not fit the slot it was dropped on goes instead (-1 = nowhere)
             public Action<VirtualBox, Item> Added;
             public Action<VirtualBox> Closed;
         }
@@ -8087,6 +8101,7 @@ namespace Oxide.Plugins
             catch
             {
             }
+            EndLooting(player);                           // a panel still open (the game's or ours) is closed first
             bool opened;
             using (new VanillaScope(player))             // an animal form (a spectator) may open it too
             {
@@ -8102,6 +8117,34 @@ namespace Oxide.Plugins
             player.inventory.loot.SendImmediate();
             Driver.SendPlayerRpc(player, Driver.ClientRpcString, "RPC_OpenLootPanel", "generic_resizable");
             return vb;
+        }
+
+        // Closes the loot panel the player has open now (by name: the method is the game's own PlayerLoot.Clear).
+        private static MethodInfo lootClear;
+        private static bool lootClearLooked;
+
+        private static void EndLooting(BasePlayer player)
+        {
+            try
+            {
+                var loot = player.inventory.loot;
+                if (loot.entitySource == null)
+                {
+                    return;
+                }
+                if (!lootClearLooked)
+                {
+                    lootClearLooked = true;
+                    lootClear = loot.GetType().GetMethod("Clear", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                }
+                if (lootClear != null)
+                {
+                    lootClear.Invoke(loot, null);
+                }
+            }
+            catch
+            {
+            }
         }
 
         // Ends a panel: the owner of the box decides about the contents, then the box disappears.
@@ -8434,6 +8477,7 @@ namespace Oxide.Plugins
             VirtualBox vb = OpenBox(player, "inventory", GearFixedSlots + MaxStorage, contents, ctx, InventoryAccept, null, InventoryClosed);
             if (vb != null)
             {
+                vb.Retarget = InventoryTarget;
                 openGears.Add(gear);
                 Tell(player, "GearOpen", species.Display, Cfg.Gear.BagSlots, Cfg.Gear.WoodArmorSlots);
             }
@@ -8455,6 +8499,36 @@ namespace Oxide.Plugins
             return list;
         }
 
+        // Storage slots the open panel has now (the saddle bag and the wooden armour make them).
+        private int StorageCapacity(VirtualBox vb)
+        {
+            Item bag = vb.Box.inventory.GetSlot(SlotBag);
+            Item armor = vb.Box.inventory.GetSlot(SlotArmor);
+            return (bag != null && bag.info.shortname == "horse.saddlebag" ? Cfg.Gear.BagSlots : 0)
+                + (armor != null && ArmorIndex(armor.info.shortname) == 1 ? Cfg.Gear.WoodArmorSlots : 0);
+        }
+
+        // Where an item goes when it was dropped on a slot it does not fit, or with a double click or a shift click (no slot at all): a saddle,
+        // horseshoes, a bag or armour to their own slot, everything else to the first free storage slot. -1 = nowhere (no bag, no room).
+        private int InventoryTarget(VirtualBox vb, Item item, int requested)
+        {
+            string name = item.info.shortname;
+            int own = name.StartsWith("horse.saddle.") ? SlotSaddle : name.StartsWith("horse.shoes.") ? SlotShoes : name == "horse.saddlebag" ? SlotBag : ArmorIndex(name) > 0 ? SlotArmor : -1;
+            if (own >= 0 && vb.Box.inventory.GetSlot(own) == null && InventoryAccept(vb, item, own))
+            {
+                return own;
+            }
+            int capacity = Mathf.Min(StorageCapacity(vb), MaxStorage);
+            for (int slot = GearFixedSlots; slot < GearFixedSlots + capacity; slot++)
+            {
+                if (vb.Box.inventory.GetSlot(slot) == null && InventoryAccept(vb, item, slot))
+                {
+                    return slot;
+                }
+            }
+            return -1;
+        }
+
         private bool InventoryAccept(VirtualBox vb, Item item, int slot)
         {
             InventoryContext ctx = vb.Data as InventoryContext;
@@ -8473,9 +8547,7 @@ namespace Oxide.Plugins
                     {
                         Item bag = vb.Box.inventory.GetSlot(SlotBag);
                         Item armor = vb.Box.inventory.GetSlot(SlotArmor);
-                        int capacity = (bag != null && bag.info.shortname == "horse.saddlebag" ? Cfg.Gear.BagSlots : 0)
-                            + (armor != null && ArmorIndex(armor.info.shortname) == 1 ? Cfg.Gear.WoodArmorSlots : 0);
-                        return slot - GearFixedSlots < capacity && item != bag && item != armor;
+                        return slot - GearFixedSlots < StorageCapacity(vb) && item != bag && item != armor;
                     }
             }
         }
@@ -9119,6 +9191,25 @@ namespace Oxide.Plugins
                 VirtualBox vb;
                 if (container != null && Bm.Boxes.TryGetValue(container, out vb) && !vb.Filling && vb.Accept != null && !vb.Accept(vb, item, targetPos))
                 {
+                    // dropped on a wrong slot, or a double click / shift click: the item is put on the right slot a moment later
+                    int slot = vb.Retarget != null && !vb.Done ? vb.Retarget(vb, item, targetPos) : -1;
+                    if (slot >= 0)
+                    {
+                        Bm.NextTick(() =>
+                        {
+                            try
+                            {
+                                if (!vb.Done && item != null && item.info != null && !container.itemList.Contains(item) && container.GetSlot(slot) == null)
+                                {
+                                    item.MoveToContainer(container, slot, true);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Bm.Log(1, "Moving an item to slot " + (slot + 1) + " failed: " + ex.Message);
+                            }
+                        });
+                    }
                     return ItemContainer.CanAcceptResult.CannotAccept;
                 }
                 return null;
@@ -14936,18 +15027,26 @@ namespace Oxide.Plugins
                 list.Add(new[] { "X", "Form" });
             }
             string[][] cells = list.ToArray();
-            // one small row just above the item belt
-            float cellW = 78f, cellH = 20f, gap = 3f;
-            float panelW = cells.Length * (cellW + gap) + gap, panelH = cellH + 2f * gap;
+            // one small row just above the item belt; each cell is as wide as its key and its word, the cells close together
+            float cellH = 20f, gap = 2f;
+            var widths = new float[cells.Length];
+            float panelW = gap;
+            for (int i = 0; i < cells.Length; i++)
+            {
+                widths[i] = 8f + 6f * cells[i][0].Length + 6f + 5.6f * cells[i][1].Length + 4f;
+                panelW += widths[i] + gap;
+            }
+            float panelH = cellH + 2f * gap;
             var c = new CuiElementContainer();
             c.Add(new CuiPanel
             {
                 Image = { Color = "0 0 0 0.35" },
                 RectTransform = { AnchorMin = "0.5 0", AnchorMax = "0.5 0", OffsetMin = Pt(-panelW * 0.5f, 100f), OffsetMax = Pt(panelW * 0.5f, 100f + panelH) }
             }, "Overlay", KeysUi);
+            float cx = gap;
             for (int i = 0; i < cells.Length; i++)
             {
-                float cx = gap + i * (cellW + gap);
+                float cellW = widths[i];
                 string key = cells[i][0];
                 float cap = 8f + 6f * key.Length;
                 string cell = KeysUi + ".c" + i;
@@ -14971,6 +15070,7 @@ namespace Oxide.Plugins
                     Text = { Text = cells[i][1], FontSize = 11, Align = TextAnchor.MiddleLeft, Color = "0.94 0.95 0.9 1" },
                     RectTransform = { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = Pt(cap + 5, 0), OffsetMax = Pt(cellW - 2, cellH) }
                 }, cell);
+                cx += cellW + gap;
             }
             CuiHelper.DestroyUi(player, KeysUi);
             CuiHelper.AddUi(player, c);
@@ -17214,58 +17314,25 @@ namespace Oxide.Plugins
             // The stamina gets a bar above the game's own bars, the way the horse shows its own; a rider also sees the health of the animal (an
             // animal form sees its health in the game's own health bar). Drawn once, then only updated, so that nothing flickers.
 
+            // The animal's bars stand in a column right beside the game's own bars, row for row: food, water, health and above them the stamina.
+            // A form sees all four (the animal's health, hunger and thirst), a rider the stamina of the animal. The place never changes.
             private sealed class BarState
             {
-                public int Stamina = -1;
-                public int Health = -1;
-                public bool Rider;
+                public int[] Values = { -1, -1, -1, -1 };      // food, water, health, stamina
+                public int Mask;
                 public float At;
-                public bool InBase;
-                public float BaseCheckAt;
             }
 
             private readonly Dictionary<ulong, BarState> bars = new Dictionary<ulong, BarState>();
 
-            // Inside building privilege (the game shows its privilege rows then)? The method is looked up by name: its parameters differ
-            // between game builds. Not found: false.
-            private static MethodInfo privilegeMethod;
-            private static object[] privilegeArgs;
-            private static bool privilegeLooked;
-
-            private static bool InBuildingPrivilege(BasePlayer p)
+            private static readonly string[] BarIds = { "food", "water", "health", "stamina" };
+            private static readonly string[] BarColors =
             {
-                if (!privilegeLooked)
-                {
-                    privilegeLooked = true;
-                    privilegeMethod = typeof(BasePlayer).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                        .Where(m => m.Name == "GetBuildingPrivilege" && m.GetParameters().All(x => x.IsOptional))
-                        .OrderBy(m => m.GetParameters().Length)
-                        .FirstOrDefault();
-                    if (privilegeMethod != null)
-                    {
-                        privilegeArgs = privilegeMethod.GetParameters()
-                            .Select(x => x.DefaultValue != null && x.DefaultValue != System.DBNull.Value && x.DefaultValue != System.Reflection.Missing.Value ? x.DefaultValue
-                                : x.ParameterType.IsValueType ? Activator.CreateInstance(x.ParameterType) : null)
-                            .ToArray();
-                    }
-                }
-                if (privilegeMethod == null || p == null)
-                {
-                    return false;
-                }
-                try
-                {
-                    return privilegeMethod.Invoke(p, privilegeArgs) != null;
-                }
-                catch
-                {
-                    privilegeMethod = null;
-                    return false;
-                }
-            }
-
-            private const string StaminaColor = "0.86 0.76 0.24 0.85";
-            private const string HealthColor = "0.47 0.69 0.24 0.85";
+                "0.93 0.52 0.16 0.85",       // food: orange
+                "0.25 0.56 0.86 0.85",       // water: blue
+                "0.47 0.69 0.24 0.85",       // health: green
+                "0.86 0.76 0.24 0.85",       // stamina: yellow
+            };
 
             // True = the bars of this player are up.
             private bool DrawBars(Driver d, float now)
@@ -17275,61 +17342,66 @@ namespace Oxide.Plugins
                 {
                     return false;
                 }
-                bool rider = d.Kind != ControlKind.Form;
-                int stamina = Mathf.RoundToInt(Mathf.Clamp(StaminaOf(d), 0f, 100f));
-                int health = rider ? Mathf.RoundToInt(Mathf.Clamp01(d.Body.health / Mathf.Max(1f, d.Body.MaxHealth())) * 100f) : 0;
+                bool form = d.Kind == ControlKind.Form;
+                FormStats needs;
+                bool hasNeeds = form && Bm.Cfg.Form.Needs && stats.TryGetValue(p.userID, out needs) && needs != null;
+                var values = new int[4];
+                values[3] = Mathf.RoundToInt(Mathf.Clamp(StaminaOf(d), 0f, 100f));
+                int mask = 8;
+                if (form)
+                {
+                    values[2] = Mathf.RoundToInt(Mathf.Clamp01(d.Body.health / Mathf.Max(1f, d.Body.MaxHealth())) * 100f);
+                    mask |= 4;
+                    if (hasNeeds)
+                    {
+                        FormStats fs = stats[p.userID];
+                        values[0] = Mathf.RoundToInt(Mathf.Clamp(fs.Hunger, 0f, 100f));
+                        values[1] = Mathf.RoundToInt(Mathf.Clamp(fs.Thirst, 0f, 100f));
+                        mask |= 3;
+                    }
+                }
                 BarState st;
-                bool had = bars.TryGetValue(p.userID, out st);
-                bool inBase = had && st.InBase;
-                if (!had || now >= st.BaseCheckAt)
-                {
-                    // inside building privilege the game shows two more rows (privilege, upkeep) above its bars: the bar moves up past them
-                    inBase = InBuildingPrivilege(p);
-                }
-                bool fresh = !had || st.Rider != rider || st.InBase != inBase || now - st.At >= 30f;
-                if (had && now >= st.BaseCheckAt)
-                {
-                    st.BaseCheckAt = now + 1.5f;
-                }
-                if (!fresh && st.Stamina == stamina && st.Health == health)
+                bool fresh = !bars.TryGetValue(p.userID, out st) || st.Mask != mask || now - st.At >= 30f;
+                if (!fresh && st.Values.SequenceEqual(values))
                 {
                     return true;
                 }
                 var c = new CuiElementContainer();
                 if (fresh)
                 {
-                    st = new BarState { Rider = rider, At = now, InBase = inBase, BaseCheckAt = now + 1.5f };
+                    st = new BarState { Mask = mask, At = now };
                     bars[p.userID] = st;
-                    // the size and the row spacing of the game's own bars, right above them; a rider gets the animal's health as a second bar above it
                     StaminaCfg sc = Bm.Cfg.Stamina;
-                    float w = Mathf.Max(60f, sc.BarWidth), h = Mathf.Max(10f, sc.BarHeight), gap = 8f;
-                    float right = -Mathf.Max(0f, sc.BarRight), bottom = Mathf.Max(0f, sc.BarBottom) + (inBase ? Mathf.Max(0f, sc.BarRaiseInBase) : 0f);
-                    float top = bottom + (rider ? h * 2f + gap : h);
+                    float w = Mathf.Max(60f, sc.BarWidth), h = Mathf.Max(10f, sc.BarHeight), pitch = Mathf.Max(h + 2f, sc.BarPitch);
+                    float right = -Mathf.Max(0f, sc.BarRight), bottom = Mathf.Max(0f, sc.BarBottom);
+                    float total = pitch * 3f + h;
                     c.Add(new CuiPanel
                     {
                         Image = { Color = "0 0 0 0" },
-                        RectTransform = { AnchorMin = "1 0", AnchorMax = "1 0", OffsetMin = Pt(right - w, bottom), OffsetMax = Pt(right, top) }
+                        RectTransform = { AnchorMin = "1 0", AnchorMax = "1 0", OffsetMin = Pt(right - w, bottom), OffsetMax = Pt(right, bottom + total) }
                     }, "Overlay", Hud);
-                    float split = rider ? h / (h * 2f + gap) : 1f;
-                    AddBar(c, "stamina", StaminaColor, stamina, 0f, split);
-                    if (rider)
+                    for (int row = 0; row < 4; row++)
                     {
-                        AddBar(c, "health", HealthColor, health, 1f - split, 1f);
+                        if ((mask & (1 << row)) != 0)
+                        {
+                            AddBar(c, BarIds[row], BarColors[row], values[row], row * pitch / total, (row * pitch + h) / total);
+                        }
                     }
                     CuiHelper.DestroyUi(p, Hud);
                     CuiHelper.AddUi(p, c);
                 }
                 else
                 {
-                    UpdateBar(c, "stamina", StaminaColor, stamina);
-                    if (rider)
+                    for (int row = 0; row < 4; row++)
                     {
-                        UpdateBar(c, "health", HealthColor, health);
+                        if ((mask & (1 << row)) != 0 && st.Values[row] != values[row])
+                        {
+                            UpdateBar(c, BarIds[row], BarColors[row], values[row]);
+                        }
                     }
                     CuiHelper.AddUi(p, c);
                 }
-                st.Stamina = stamina;
-                st.Health = health;
+                st.Values = values;
                 return true;
             }
 
@@ -17352,7 +17424,7 @@ namespace Oxide.Plugins
                 {
                     Name = name + ".num",
                     Parent = name,
-                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 13, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.04 0", AnchorMax = "0.6 1" } }
+                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 13, Align = TextAnchor.MiddleRight, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.5 0", AnchorMax = "0.97 1" } }
                 });
             }
 
@@ -17369,7 +17441,7 @@ namespace Oxide.Plugins
                 {
                     Name = name + ".num",
                     Update = true,
-                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 13, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.04 0", AnchorMax = "0.6 1" } }
+                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 13, Align = TextAnchor.MiddleRight, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.5 0", AnchorMax = "0.97 1" } }
                 });
             }
 
@@ -18002,6 +18074,7 @@ namespace Oxide.Plugins
         }
 
         private readonly Dictionary<ulong, UsePress> usePresses = new Dictionary<ulong, UsePress>();
+        private readonly HashSet<ulong> useDown = new HashSet<ulong>();
         private const float UseHoldTime = 0.45f;
 
         private bool UseAllowed(BasePlayer player)
@@ -18417,20 +18490,34 @@ namespace Oxide.Plugins
             {
                 title += "  <size=12>(" + rec.Name + ")</size>";
             }
+            // a compact list: fixed sizes, the buttons right under each other (not stretched over a share of the screen)
+            const float width = 170f, buttonHeight = 26f, gap = 3f, titleHeight = 24f, pad = 7f;
             float rows = choices.Count + 1;
-            float height = 0.045f * rows + 0.06f;
+            float height = pad * 2f + titleHeight + rows * buttonHeight + (rows - 1f) * gap;
             var c = new CuiElementContainer();
-            c.Add(new CuiPanel { Image = { Color = "0.08 0.09 0.07 0.92" }, RectTransform = { AnchorMin = Pt(0.42f, 0.5f - height / 2f), AnchorMax = Pt(0.58f, 0.5f + height / 2f) }, CursorEnabled = true }, "Overlay", BeastUi);
-            float step = 1f / (rows + 1.3f);
-            UiLabel(c, BeastUi, "<b>" + title + "</b>", 14, 0.04f, 1f - step * 1.2f, 0.96f, 0.98f, TextAnchor.MiddleCenter);
-            string id = animal.net.ID.Value.ToString(CultureInfo.InvariantCulture);
-            for (int i = 0; i < choices.Count; i++)
+            c.Add(new CuiPanel
             {
-                float top = 1f - step * (1.3f + i);
-                UiButton(c, BeastUi, choices[i][1], "bm.ui beast " + id + " " + choices[i][0], 0.06f, top - step * 0.86f, 0.94f, top, choices[i][0] == "ride" || choices[i][0] == "behind" ? ColOn : ColBtn, 13);
+                Image = { Color = "0.08 0.09 0.07 0.92" },
+                RectTransform = { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = Pt(-width / 2f, -height / 2f), OffsetMax = Pt(width / 2f, height / 2f) },
+                CursorEnabled = true
+            }, "Overlay", BeastUi);
+            c.Add(new CuiLabel
+            {
+                Text = { Text = "<b>" + title + "</b>", FontSize = 14, Align = TextAnchor.MiddleCenter, Color = "0.92 0.93 0.88 1" },
+                RectTransform = { AnchorMin = "0 1", AnchorMax = "1 1", OffsetMin = Pt(pad, -(pad + titleHeight)), OffsetMax = Pt(-pad, -pad) }
+            }, BeastUi);
+            string id = animal.net.ID.Value.ToString(CultureInfo.InvariantCulture);
+            for (int i = 0; i <= choices.Count; i++)
+            {
+                bool close = i == choices.Count;
+                float top = -(pad + titleHeight + i * (buttonHeight + gap));
+                c.Add(new CuiButton
+                {
+                    Button = { Command = close ? "bm.ui beast 0 close" : "bm.ui beast " + id + " " + choices[i][0], Color = close ? ColOff : choices[i][0] == "ride" || choices[i][0] == "behind" ? ColOn : ColBtn },
+                    RectTransform = { AnchorMin = "0 1", AnchorMax = "1 1", OffsetMin = Pt(pad, top - buttonHeight), OffsetMax = Pt(-pad, top) },
+                    Text = { Text = close ? "Close" : choices[i][1], FontSize = 13, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" }
+                }, BeastUi);
             }
-            float last = 1f - step * (1.3f + choices.Count);
-            UiButton(c, BeastUi, "Close", "bm.ui beast 0 close", 0.30f, last - step * 0.86f, 0.70f, last, ColOff, 12);
             CuiHelper.AddUi(player, c);
             beastMenus[player.userID] = new BeastMenu { Target = animal, Until = Time.time + 12f };
         }
@@ -18615,16 +18702,21 @@ namespace Oxide.Plugins
 
             public override object OnPlayerInput(BasePlayer player, InputState input)
             {
-                if (input.WasJustPressed(BUTTON.USE))
+                // the press, the hold and the release of E are tracked here (the game's "just pressed" can be missed when inputs arrive together)
+                bool down = input.IsDown(BUTTON.USE);
+                bool was = Bm.useDown.Contains(player.userID);
+                if (down && !was)
                 {
+                    Bm.useDown.Add(player.userID);
                     Bm.UsePressed(player);
                 }
-                else if (input.IsDown(BUTTON.USE))
+                else if (down)
                 {
                     Bm.UseHeld(player);
                 }
-                if (input.WasJustReleased(BUTTON.USE))
+                else if (was)
                 {
+                    Bm.useDown.Remove(player.userID);
                     Bm.UseReleased(player);
                 }
                 if (!Bm.Cfg.Features.Commands)

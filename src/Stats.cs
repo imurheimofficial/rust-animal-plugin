@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using Oxide.Game.Rust.Cui;
 using Rust.Ai.Gen2;
 using UnityEngine;
@@ -429,58 +428,25 @@ namespace Oxide.Plugins
             // The stamina gets a bar above the game's own bars, the way the horse shows its own; a rider also sees the health of the animal (an
             // animal form sees its health in the game's own health bar). Drawn once, then only updated, so that nothing flickers.
 
+            // The animal's bars stand in a column right beside the game's own bars, row for row: food, water, health and above them the stamina.
+            // A form sees all four (the animal's health, hunger and thirst), a rider the stamina of the animal. The place never changes.
             private sealed class BarState
             {
-                public int Stamina = -1;
-                public int Health = -1;
-                public bool Rider;
+                public int[] Values = { -1, -1, -1, -1 };      // food, water, health, stamina
+                public int Mask;
                 public float At;
-                public bool InBase;
-                public float BaseCheckAt;
             }
 
             private readonly Dictionary<ulong, BarState> bars = new Dictionary<ulong, BarState>();
 
-            // Inside building privilege (the game shows its privilege rows then)? The method is looked up by name: its parameters differ
-            // between game builds. Not found: false.
-            private static MethodInfo privilegeMethod;
-            private static object[] privilegeArgs;
-            private static bool privilegeLooked;
-
-            private static bool InBuildingPrivilege(BasePlayer p)
+            private static readonly string[] BarIds = { "food", "water", "health", "stamina" };
+            private static readonly string[] BarColors =
             {
-                if (!privilegeLooked)
-                {
-                    privilegeLooked = true;
-                    privilegeMethod = typeof(BasePlayer).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                        .Where(m => m.Name == "GetBuildingPrivilege" && m.GetParameters().All(x => x.IsOptional))
-                        .OrderBy(m => m.GetParameters().Length)
-                        .FirstOrDefault();
-                    if (privilegeMethod != null)
-                    {
-                        privilegeArgs = privilegeMethod.GetParameters()
-                            .Select(x => x.DefaultValue != null && x.DefaultValue != System.DBNull.Value && x.DefaultValue != System.Reflection.Missing.Value ? x.DefaultValue
-                                : x.ParameterType.IsValueType ? Activator.CreateInstance(x.ParameterType) : null)
-                            .ToArray();
-                    }
-                }
-                if (privilegeMethod == null || p == null)
-                {
-                    return false;
-                }
-                try
-                {
-                    return privilegeMethod.Invoke(p, privilegeArgs) != null;
-                }
-                catch
-                {
-                    privilegeMethod = null;
-                    return false;
-                }
-            }
-
-            private const string StaminaColor = "0.86 0.76 0.24 0.85";
-            private const string HealthColor = "0.47 0.69 0.24 0.85";
+                "0.93 0.52 0.16 0.85",       // food: orange
+                "0.25 0.56 0.86 0.85",       // water: blue
+                "0.47 0.69 0.24 0.85",       // health: green
+                "0.86 0.76 0.24 0.85",       // stamina: yellow
+            };
 
             // True = the bars of this player are up.
             private bool DrawBars(Driver d, float now)
@@ -490,61 +456,66 @@ namespace Oxide.Plugins
                 {
                     return false;
                 }
-                bool rider = d.Kind != ControlKind.Form;
-                int stamina = Mathf.RoundToInt(Mathf.Clamp(StaminaOf(d), 0f, 100f));
-                int health = rider ? Mathf.RoundToInt(Mathf.Clamp01(d.Body.health / Mathf.Max(1f, d.Body.MaxHealth())) * 100f) : 0;
+                bool form = d.Kind == ControlKind.Form;
+                FormStats needs;
+                bool hasNeeds = form && Bm.Cfg.Form.Needs && stats.TryGetValue(p.userID, out needs) && needs != null;
+                var values = new int[4];
+                values[3] = Mathf.RoundToInt(Mathf.Clamp(StaminaOf(d), 0f, 100f));
+                int mask = 8;
+                if (form)
+                {
+                    values[2] = Mathf.RoundToInt(Mathf.Clamp01(d.Body.health / Mathf.Max(1f, d.Body.MaxHealth())) * 100f);
+                    mask |= 4;
+                    if (hasNeeds)
+                    {
+                        FormStats fs = stats[p.userID];
+                        values[0] = Mathf.RoundToInt(Mathf.Clamp(fs.Hunger, 0f, 100f));
+                        values[1] = Mathf.RoundToInt(Mathf.Clamp(fs.Thirst, 0f, 100f));
+                        mask |= 3;
+                    }
+                }
                 BarState st;
-                bool had = bars.TryGetValue(p.userID, out st);
-                bool inBase = had && st.InBase;
-                if (!had || now >= st.BaseCheckAt)
-                {
-                    // inside building privilege the game shows two more rows (privilege, upkeep) above its bars: the bar moves up past them
-                    inBase = InBuildingPrivilege(p);
-                }
-                bool fresh = !had || st.Rider != rider || st.InBase != inBase || now - st.At >= 30f;
-                if (had && now >= st.BaseCheckAt)
-                {
-                    st.BaseCheckAt = now + 1.5f;
-                }
-                if (!fresh && st.Stamina == stamina && st.Health == health)
+                bool fresh = !bars.TryGetValue(p.userID, out st) || st.Mask != mask || now - st.At >= 30f;
+                if (!fresh && st.Values.SequenceEqual(values))
                 {
                     return true;
                 }
                 var c = new CuiElementContainer();
                 if (fresh)
                 {
-                    st = new BarState { Rider = rider, At = now, InBase = inBase, BaseCheckAt = now + 1.5f };
+                    st = new BarState { Mask = mask, At = now };
                     bars[p.userID] = st;
-                    // the size and the row spacing of the game's own bars, right above them; a rider gets the animal's health as a second bar above it
                     StaminaCfg sc = Bm.Cfg.Stamina;
-                    float w = Mathf.Max(60f, sc.BarWidth), h = Mathf.Max(10f, sc.BarHeight), gap = 8f;
-                    float right = -Mathf.Max(0f, sc.BarRight), bottom = Mathf.Max(0f, sc.BarBottom) + (inBase ? Mathf.Max(0f, sc.BarRaiseInBase) : 0f);
-                    float top = bottom + (rider ? h * 2f + gap : h);
+                    float w = Mathf.Max(60f, sc.BarWidth), h = Mathf.Max(10f, sc.BarHeight), pitch = Mathf.Max(h + 2f, sc.BarPitch);
+                    float right = -Mathf.Max(0f, sc.BarRight), bottom = Mathf.Max(0f, sc.BarBottom);
+                    float total = pitch * 3f + h;
                     c.Add(new CuiPanel
                     {
                         Image = { Color = "0 0 0 0" },
-                        RectTransform = { AnchorMin = "1 0", AnchorMax = "1 0", OffsetMin = Pt(right - w, bottom), OffsetMax = Pt(right, top) }
+                        RectTransform = { AnchorMin = "1 0", AnchorMax = "1 0", OffsetMin = Pt(right - w, bottom), OffsetMax = Pt(right, bottom + total) }
                     }, "Overlay", Hud);
-                    float split = rider ? h / (h * 2f + gap) : 1f;
-                    AddBar(c, "stamina", StaminaColor, stamina, 0f, split);
-                    if (rider)
+                    for (int row = 0; row < 4; row++)
                     {
-                        AddBar(c, "health", HealthColor, health, 1f - split, 1f);
+                        if ((mask & (1 << row)) != 0)
+                        {
+                            AddBar(c, BarIds[row], BarColors[row], values[row], row * pitch / total, (row * pitch + h) / total);
+                        }
                     }
                     CuiHelper.DestroyUi(p, Hud);
                     CuiHelper.AddUi(p, c);
                 }
                 else
                 {
-                    UpdateBar(c, "stamina", StaminaColor, stamina);
-                    if (rider)
+                    for (int row = 0; row < 4; row++)
                     {
-                        UpdateBar(c, "health", HealthColor, health);
+                        if ((mask & (1 << row)) != 0 && st.Values[row] != values[row])
+                        {
+                            UpdateBar(c, BarIds[row], BarColors[row], values[row]);
+                        }
                     }
                     CuiHelper.AddUi(p, c);
                 }
-                st.Stamina = stamina;
-                st.Health = health;
+                st.Values = values;
                 return true;
             }
 
@@ -567,7 +538,7 @@ namespace Oxide.Plugins
                 {
                     Name = name + ".num",
                     Parent = name,
-                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 13, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.04 0", AnchorMax = "0.6 1" } }
+                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 13, Align = TextAnchor.MiddleRight, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.5 0", AnchorMax = "0.97 1" } }
                 });
             }
 
@@ -584,7 +555,7 @@ namespace Oxide.Plugins
                 {
                     Name = name + ".num",
                     Update = true,
-                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 13, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.04 0", AnchorMax = "0.6 1" } }
+                    Components = { new CuiTextComponent { Text = value.ToString(), FontSize = 13, Align = TextAnchor.MiddleRight, Color = "1 1 1 1" }, new CuiRectTransformComponent { AnchorMin = "0.5 0", AnchorMax = "0.97 1" } }
                 });
             }
 

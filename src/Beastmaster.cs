@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Beastmaster", "Claude", "1.2.5")]
+    [Info("Beastmaster", "Claude", "1.2.6")]
     [Description("Ride, tame, command and become animals: horses, livestock, predators and small creatures.")]
     public partial class Beastmaster : RustPlugin
     {
@@ -236,6 +236,16 @@ namespace Oxide.Plugins
                 Cfg.Form.LeftDespawnDistance = fresh.Form.LeftDespawnDistance;
                 Cfg.Camera.DuckLift = fresh.Camera.DuckLift;                  // 1.2.1 wrote 0 into the file: Ctrl lowered the camera again
                 PrintWarning("Config from " + (string.IsNullOrEmpty(Cfg.WrittenBy) ? "an older version" : Cfg.WrittenBy) + ": the 1.2.3 defaults for horse temperaments, horse damage, stamina bar, rider seat, view clamp, hit reach, left animals and the Ctrl camera lift were applied.");
+            }
+            if (VersionBefore(Cfg.WrittenBy, 1, 2, 6))
+            {
+                Cfg.Stamina.BarRight = fresh.Stamina.BarRight;
+                Cfg.Stamina.BarBottom = fresh.Stamina.BarBottom;
+                Cfg.Stamina.BarWidth = fresh.Stamina.BarWidth;
+                Cfg.Stamina.BarHeight = fresh.Stamina.BarHeight;
+                Cfg.Stamina.BarPitch = fresh.Stamina.BarPitch;
+                Cfg.Riding.SeatOnSpine = fresh.Riding.SeatOnSpine;
+                PrintWarning("Config from " + (string.IsNullOrEmpty(Cfg.WrittenBy) ? "an older version" : Cfg.WrittenBy) + ": the 1.2.6 defaults for the animal bars and the rider seat on the spine were applied.");
             }
             Cfg.WrittenBy = Version.ToString();
         }

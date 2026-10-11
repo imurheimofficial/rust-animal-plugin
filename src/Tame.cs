@@ -379,6 +379,7 @@ namespace Oxide.Plugins
         }
 
         private readonly Dictionary<ulong, UsePress> usePresses = new Dictionary<ulong, UsePress>();
+        private readonly HashSet<ulong> useDown = new HashSet<ulong>();
         private const float UseHoldTime = 0.45f;
 
         private bool UseAllowed(BasePlayer player)
@@ -794,20 +795,34 @@ namespace Oxide.Plugins
             {
                 title += "  <size=12>(" + rec.Name + ")</size>";
             }
+            // a compact list: fixed sizes, the buttons right under each other (not stretched over a share of the screen)
+            const float width = 170f, buttonHeight = 26f, gap = 3f, titleHeight = 24f, pad = 7f;
             float rows = choices.Count + 1;
-            float height = 0.045f * rows + 0.06f;
+            float height = pad * 2f + titleHeight + rows * buttonHeight + (rows - 1f) * gap;
             var c = new CuiElementContainer();
-            c.Add(new CuiPanel { Image = { Color = "0.08 0.09 0.07 0.92" }, RectTransform = { AnchorMin = Pt(0.42f, 0.5f - height / 2f), AnchorMax = Pt(0.58f, 0.5f + height / 2f) }, CursorEnabled = true }, "Overlay", BeastUi);
-            float step = 1f / (rows + 1.3f);
-            UiLabel(c, BeastUi, "<b>" + title + "</b>", 14, 0.04f, 1f - step * 1.2f, 0.96f, 0.98f, TextAnchor.MiddleCenter);
-            string id = animal.net.ID.Value.ToString(CultureInfo.InvariantCulture);
-            for (int i = 0; i < choices.Count; i++)
+            c.Add(new CuiPanel
             {
-                float top = 1f - step * (1.3f + i);
-                UiButton(c, BeastUi, choices[i][1], "bm.ui beast " + id + " " + choices[i][0], 0.06f, top - step * 0.86f, 0.94f, top, choices[i][0] == "ride" || choices[i][0] == "behind" ? ColOn : ColBtn, 13);
+                Image = { Color = "0.08 0.09 0.07 0.92" },
+                RectTransform = { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = Pt(-width / 2f, -height / 2f), OffsetMax = Pt(width / 2f, height / 2f) },
+                CursorEnabled = true
+            }, "Overlay", BeastUi);
+            c.Add(new CuiLabel
+            {
+                Text = { Text = "<b>" + title + "</b>", FontSize = 14, Align = TextAnchor.MiddleCenter, Color = "0.92 0.93 0.88 1" },
+                RectTransform = { AnchorMin = "0 1", AnchorMax = "1 1", OffsetMin = Pt(pad, -(pad + titleHeight)), OffsetMax = Pt(-pad, -pad) }
+            }, BeastUi);
+            string id = animal.net.ID.Value.ToString(CultureInfo.InvariantCulture);
+            for (int i = 0; i <= choices.Count; i++)
+            {
+                bool close = i == choices.Count;
+                float top = -(pad + titleHeight + i * (buttonHeight + gap));
+                c.Add(new CuiButton
+                {
+                    Button = { Command = close ? "bm.ui beast 0 close" : "bm.ui beast " + id + " " + choices[i][0], Color = close ? ColOff : choices[i][0] == "ride" || choices[i][0] == "behind" ? ColOn : ColBtn },
+                    RectTransform = { AnchorMin = "0 1", AnchorMax = "1 1", OffsetMin = Pt(pad, top - buttonHeight), OffsetMax = Pt(-pad, top) },
+                    Text = { Text = close ? "Close" : choices[i][1], FontSize = 13, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" }
+                }, BeastUi);
             }
-            float last = 1f - step * (1.3f + choices.Count);
-            UiButton(c, BeastUi, "Close", "bm.ui beast 0 close", 0.30f, last - step * 0.86f, 0.70f, last, ColOff, 12);
             CuiHelper.AddUi(player, c);
             beastMenus[player.userID] = new BeastMenu { Target = animal, Until = Time.time + 12f };
         }
@@ -992,16 +1007,21 @@ namespace Oxide.Plugins
 
             public override object OnPlayerInput(BasePlayer player, InputState input)
             {
-                if (input.WasJustPressed(BUTTON.USE))
+                // the press, the hold and the release of E are tracked here (the game's "just pressed" can be missed when inputs arrive together)
+                bool down = input.IsDown(BUTTON.USE);
+                bool was = Bm.useDown.Contains(player.userID);
+                if (down && !was)
                 {
+                    Bm.useDown.Add(player.userID);
                     Bm.UsePressed(player);
                 }
-                else if (input.IsDown(BUTTON.USE))
+                else if (down)
                 {
                     Bm.UseHeld(player);
                 }
-                if (input.WasJustReleased(BUTTON.USE))
+                else if (was)
                 {
+                    Bm.useDown.Remove(player.userID);
                     Bm.UseReleased(player);
                 }
                 if (!Bm.Cfg.Features.Commands)

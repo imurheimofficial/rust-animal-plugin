@@ -205,18 +205,26 @@ namespace Oxide.Plugins
                 list.Add(new[] { "X", "Form" });
             }
             string[][] cells = list.ToArray();
-            // one small row just above the item belt
-            float cellW = 78f, cellH = 20f, gap = 3f;
-            float panelW = cells.Length * (cellW + gap) + gap, panelH = cellH + 2f * gap;
+            // one small row just above the item belt; each cell is as wide as its key and its word, the cells close together
+            float cellH = 20f, gap = 2f;
+            var widths = new float[cells.Length];
+            float panelW = gap;
+            for (int i = 0; i < cells.Length; i++)
+            {
+                widths[i] = 8f + 6f * cells[i][0].Length + 6f + 5.6f * cells[i][1].Length + 4f;
+                panelW += widths[i] + gap;
+            }
+            float panelH = cellH + 2f * gap;
             var c = new CuiElementContainer();
             c.Add(new CuiPanel
             {
                 Image = { Color = "0 0 0 0.35" },
                 RectTransform = { AnchorMin = "0.5 0", AnchorMax = "0.5 0", OffsetMin = Pt(-panelW * 0.5f, 100f), OffsetMax = Pt(panelW * 0.5f, 100f + panelH) }
             }, "Overlay", KeysUi);
+            float cx = gap;
             for (int i = 0; i < cells.Length; i++)
             {
-                float cx = gap + i * (cellW + gap);
+                float cellW = widths[i];
                 string key = cells[i][0];
                 float cap = 8f + 6f * key.Length;
                 string cell = KeysUi + ".c" + i;
@@ -240,6 +248,7 @@ namespace Oxide.Plugins
                     Text = { Text = cells[i][1], FontSize = 11, Align = TextAnchor.MiddleLeft, Color = "0.94 0.95 0.9 1" },
                     RectTransform = { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = Pt(cap + 5, 0), OffsetMax = Pt(cellW - 2, cellH) }
                 }, cell);
+                cx += cellW + gap;
             }
             CuiHelper.DestroyUi(player, KeysUi);
             CuiHelper.AddUi(player, c);

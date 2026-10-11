@@ -25,6 +25,7 @@ namespace Oxide.Plugins
             public bool Done;
             public float Opened;
             public Func<VirtualBox, Item, int, bool> Accept;
+            public Func<VirtualBox, Item, int, int> Retarget;       // where an item that does not fit the slot it was dropped on goes instead (-1 = nowhere)
             public Action<VirtualBox, Item> Added;
             public Action<VirtualBox> Closed;
         }
@@ -81,6 +82,7 @@ namespace Oxide.Plugins
             catch
             {
             }
+            EndLooting(player);                           // a panel still open (the game's or ours) is closed first
             bool opened;
             using (new VanillaScope(player))             // an animal form (a spectator) may open it too
             {
@@ -96,6 +98,34 @@ namespace Oxide.Plugins
             player.inventory.loot.SendImmediate();
             Driver.SendPlayerRpc(player, Driver.ClientRpcString, "RPC_OpenLootPanel", "generic_resizable");
             return vb;
+        }
+
+        // Closes the loot panel the player has open now (by name: the method is the game's own PlayerLoot.Clear).
+        private static MethodInfo lootClear;
+        private static bool lootClearLooked;
+
+        private static void EndLooting(BasePlayer player)
+        {
+            try
+            {
+                var loot = player.inventory.loot;
+                if (loot.entitySource == null)
+                {
+                    return;
+                }
+                if (!lootClearLooked)
+                {
+                    lootClearLooked = true;
+                    lootClear = loot.GetType().GetMethod("Clear", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                }
+                if (lootClear != null)
+                {
+                    lootClear.Invoke(loot, null);
+                }
+            }
+            catch
+            {
+            }
         }
 
         // Ends a panel: the owner of the box decides about the contents, then the box disappears.
@@ -428,6 +458,7 @@ namespace Oxide.Plugins
             VirtualBox vb = OpenBox(player, "inventory", GearFixedSlots + MaxStorage, contents, ctx, InventoryAccept, null, InventoryClosed);
             if (vb != null)
             {
+                vb.Retarget = InventoryTarget;
                 openGears.Add(gear);
                 Tell(player, "GearOpen", species.Display, Cfg.Gear.BagSlots, Cfg.Gear.WoodArmorSlots);
             }
@@ -449,6 +480,36 @@ namespace Oxide.Plugins
             return list;
         }
 
+        // Storage slots the open panel has now (the saddle bag and the wooden armour make them).
+        private int StorageCapacity(VirtualBox vb)
+        {
+            Item bag = vb.Box.inventory.GetSlot(SlotBag);
+            Item armor = vb.Box.inventory.GetSlot(SlotArmor);
+            return (bag != null && bag.info.shortname == "horse.saddlebag" ? Cfg.Gear.BagSlots : 0)
+                + (armor != null && ArmorIndex(armor.info.shortname) == 1 ? Cfg.Gear.WoodArmorSlots : 0);
+        }
+
+        // Where an item goes when it was dropped on a slot it does not fit, or with a double click or a shift click (no slot at all): a saddle,
+        // horseshoes, a bag or armour to their own slot, everything else to the first free storage slot. -1 = nowhere (no bag, no room).
+        private int InventoryTarget(VirtualBox vb, Item item, int requested)
+        {
+            string name = item.info.shortname;
+            int own = name.StartsWith("horse.saddle.") ? SlotSaddle : name.StartsWith("horse.shoes.") ? SlotShoes : name == "horse.saddlebag" ? SlotBag : ArmorIndex(name) > 0 ? SlotArmor : -1;
+            if (own >= 0 && vb.Box.inventory.GetSlot(own) == null && InventoryAccept(vb, item, own))
+            {
+                return own;
+            }
+            int capacity = Mathf.Min(StorageCapacity(vb), MaxStorage);
+            for (int slot = GearFixedSlots; slot < GearFixedSlots + capacity; slot++)
+            {
+                if (vb.Box.inventory.GetSlot(slot) == null && InventoryAccept(vb, item, slot))
+                {
+                    return slot;
+                }
+            }
+            return -1;
+        }
+
         private bool InventoryAccept(VirtualBox vb, Item item, int slot)
         {
             InventoryContext ctx = vb.Data as InventoryContext;
@@ -467,9 +528,7 @@ namespace Oxide.Plugins
                     {
                         Item bag = vb.Box.inventory.GetSlot(SlotBag);
                         Item armor = vb.Box.inventory.GetSlot(SlotArmor);
-                        int capacity = (bag != null && bag.info.shortname == "horse.saddlebag" ? Cfg.Gear.BagSlots : 0)
-                            + (armor != null && ArmorIndex(armor.info.shortname) == 1 ? Cfg.Gear.WoodArmorSlots : 0);
-                        return slot - GearFixedSlots < capacity && item != bag && item != armor;
+                        return slot - GearFixedSlots < StorageCapacity(vb) && item != bag && item != armor;
                     }
             }
         }
@@ -1113,6 +1172,25 @@ namespace Oxide.Plugins
                 VirtualBox vb;
                 if (container != null && Bm.Boxes.TryGetValue(container, out vb) && !vb.Filling && vb.Accept != null && !vb.Accept(vb, item, targetPos))
                 {
+                    // dropped on a wrong slot, or a double click / shift click: the item is put on the right slot a moment later
+                    int slot = vb.Retarget != null && !vb.Done ? vb.Retarget(vb, item, targetPos) : -1;
+                    if (slot >= 0)
+                    {
+                        Bm.NextTick(() =>
+                        {
+                            try
+                            {
+                                if (!vb.Done && item != null && item.info != null && !container.itemList.Contains(item) && container.GetSlot(slot) == null)
+                                {
+                                    item.MoveToContainer(container, slot, true);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Bm.Log(1, "Moving an item to slot " + (slot + 1) + " failed: " + ex.Message);
+                            }
+                        });
+                    }
                     return ItemContainer.CanAcceptResult.CannotAccept;
                 }
                 return null;

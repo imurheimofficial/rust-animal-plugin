@@ -1,3 +1,26 @@
+# Změny verze 1.2.6 (2026-10-11)
+
+Tvůj test 1.2.5.
+
+* **Staty zvířete:**
+  * Stojí v pevném sloupci hned vlevo od tvých statů, řádek po řádku: nahoře stamina (žlutá), pod ní health (zelená), voda (modrá) a dole jídlo (oranžová). Číslo je vpravo uvnitř baru.
+  * Forma vidí všechny čtyři. Jezdec vidí jen staminu zvířete.
+  * Nic se už neposouvá: posun podle building privilege jsem zrušil.
+  * Rozměry jsou v configu (Stamina: BarRight, BarBottom, BarWidth, BarHeight, BarPitch).
+* **Sedadlo:** je zase pevně na páteři zvířete jako dřív (SeatOnSpine = true), takže jezdec zůstává na hřbetě a nesklouzává. Cena: kamera sleduje pohyb hřbetu. Chceš-li méně třesu a víc posouvání, je to v configu (Riding → SeatOnSpine).
+* **Inventář zvířete:**
+  * Nalezená příčina: panel odmítal všechno, co nepřišlo na přesný slot. Dvojklik, shift-klik i přetažení na špatný slot selhaly a věc zůstala u hráče, proto to vypadalo, že je inventář sdílený.
+  * Teď se sedlo, podkovy, brašna a brnění samy dají na svůj slot a ostatní věci na první volné místo ve skladu.
+  * Sklad má místo jen s nasazenou brašnou (nebo dřevěným brněním).
+  * Před otevřením se zavře jiný otevřený panel.
+  * Co do panelu dáš, hráč už nemá. Zápis se uloží zavřením panelu.
+* **Nabídka na podržení E:**
+  * Stisk a podržení E se sleduje samostatně, takže se nemůže minout.
+  * Míření na zvíře stačí na kterékoli části těla, ne jen uprostřed.
+  * Tlačítka nabídky jsou malá, těsně pod sebou. Lišta kláves je užší, každá buňka má šířku podle textu.
+
+---
+
 # Změny verze 1.2.5 (2026-10-11)
 
 Verze 1.2.4 se nepřeložila: `'BasePlayer.PlayerFlags' does not contain a definition for 'HasBuildingPrivilege'`.

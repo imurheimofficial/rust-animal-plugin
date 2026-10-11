@@ -592,13 +592,16 @@ namespace Oxide.Plugins
                 {
                     continue;
                 }
-                Vector3 to = npc.WorldSpaceBounds().ToBounds().center - eye;
-                float dist = to.magnitude;
+                Bounds bounds = npc.WorldSpaceBounds().ToBounds();
+                Vector3 to = bounds.center - eye;
+                // the animal counts when the crosshair is on any part of its body, not only on its middle
+                Vector3 edge = bounds.ClosestPoint(eye + dir * Mathf.Max(0.5f, to.magnitude)) - eye;
+                float dist = Mathf.Min(to.magnitude, edge.magnitude);
                 if (dist > range)
                 {
                     continue;
                 }
-                float angle = Vector3.Angle(dir, to);
+                float angle = Mathf.Min(Vector3.Angle(dir, to), Vector3.Angle(dir, edge));
                 if (angle > maxAngle)
                 {
                     continue;
